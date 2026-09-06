@@ -1,9 +1,12 @@
 from flask import Blueprint, request, jsonify
 import jwt
 import datetime
+# Asumo que usaste flask_jwt_extended para tu Login
+from flask_jwt_extended import jwt_required, get_jwt_identity 
+
 
 from database import db
-from models.usuario_models import Usuario 
+from models.usuario_models import Usuario, Paciente, Enfermero
 
 usuario_bp = Blueprint('usuario_bp', __name__)
 SECRET_KEY = "clave_secreta_enfered"
@@ -68,3 +71,32 @@ def registrar_usuario():
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": "Error al guardar el usuario", "detalle": str(e)}), 500
+
+
+
+  # Vista perfil de paciente (Pablo)
+ 
+    
+@usuario_bp.route('/perfil/paciente', methods=['GET'])
+@jwt_required()
+
+def obtener_perfil_paciente():
+    # 1. Obtenemos el ID del usuario desde tu JWT
+    usuario_id = get_jwt_identity()
+
+    # 2. Buscamos al usuario y a su perfil de paciente en la BD
+    usuario = Usuario.query.get(usuario_id)
+    paciente = Paciente.query.filter_by(usuario_id=usuario_id).first()
+
+    if not usuario or usuario.rol != 'paciente':
+        return jsonify({"error": "Perfil no encontrado o acceso denegado"}), 404
+
+    if not paciente:   
+        return jsonify({"error": "Datos de paciente incompletos"}), 404
+
+    # 3. Devolvemos la info combinada para que tu React la consuma
+    datos_completos = usuario.to_dict()
+    datos_completos.update(paciente.to_dict())
+
+    return jsonify(datos_completos), 200
+    
