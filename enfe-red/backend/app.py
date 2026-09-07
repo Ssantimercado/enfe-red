@@ -11,7 +11,7 @@ app = Flask(__name__)
 CORS(app)
 
 # Configuración de base de datos y JWT
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///test.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:root@localhost/enfe_red'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['JWT_SECRET_KEY'] = 'clave_secreta_enfered'  # Requerido para firmar los tokens JWT
 
