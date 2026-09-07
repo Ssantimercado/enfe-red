@@ -26,11 +26,11 @@ def login():
         return jsonify({"error": "Credenciales incorrectas"}), 401
 
     token = create_access_token(
-        identity=usuario.id,
+        identity=str(usuario.id),
         additional_claims={"rol": usuario.rol}
     )
 
-    return jsonify({"mensaje": "Login exitoso", "token": token}), 200
+    return jsonify({"mensaje": "Login exitoso", "token": token, "rol": usuario.rol}), 200
 
 
 # ==========================================
@@ -63,7 +63,7 @@ def registrar_usuario():
 
     try:
         db.session.add(nuevo_usuario)
-        db.session.flush()  # Para obtener el id de nuevo_usuario antes de commitear
+        db.session.flush()
 
         if rol == 'paciente':
             nuevo_perfil = Paciente(
@@ -99,7 +99,7 @@ def registrar_usuario():
 @usuario_bp.route('/perfil/paciente', methods=['GET'])
 @jwt_required()
 def obtener_perfil_paciente():
-    usuario_id = get_jwt_identity()
+    usuario_id = int(get_jwt_identity())
 
     usuario = Usuario.query.get(usuario_id)
     if not usuario or usuario.rol != 'paciente':
@@ -129,7 +129,7 @@ def obtener_perfil_paciente():
 @usuario_bp.route('/perfil/enfermero', methods=['GET'])
 @jwt_required()
 def obtener_perfil_enfermero():
-    usuario_id = get_jwt_identity()
+    usuario_id = int(get_jwt_identity())
 
     usuario = Usuario.query.get(usuario_id)
     if not usuario or usuario.rol != 'enfermero':
@@ -177,3 +177,69 @@ def ver_perfil_enfermero(id):
         datos_completos.update(enfermero.to_dict())
 
     return jsonify(datos_completos), 200
+
+
+# ==========================================
+# 6. EDITAR "MI PERFIL" - PACIENTE (Renzo)
+# ==========================================
+@usuario_bp.route('/perfil/paciente', methods=['PUT'])
+@jwt_required()
+def actualizar_perfil_paciente():
+    usuario_id = int(get_jwt_identity())
+    data = request.get_json()
+
+    usuario = Usuario.query.get(usuario_id)
+    if not usuario or usuario.rol != 'paciente':
+        return jsonify({"error": "Perfil no encontrado o acceso denegado"}), 404
+
+    paciente = Paciente.query.filter_by(usuario_id=usuario_id).first()
+    if not paciente:
+        paciente = Paciente(usuario_id=usuario_id)
+        db.session.add(paciente)
+
+    paciente.nombre = data.get('nombre', paciente.nombre)
+    paciente.apellido = data.get('apellido', paciente.apellido)
+    paciente.telefono = data.get('telefono', paciente.telefono)
+    paciente.direccion = data.get('direccion', paciente.direccion)
+    paciente.historial_medico = data.get('historial_medico', paciente.historial_medico)
+
+    try:
+        db.session.commit()
+        datos_completos = usuario.to_dict()
+        datos_completos.update(paciente.to_dict())
+        return jsonify(datos_completos), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": "Error al actualizar", "detalle": str(e)}), 500
+
+
+# ==========================================
+# 7. EDITAR "MI PERFIL" - ENFERMERO (Renzo)
+# ==========================================
+@usuario_bp.route('/perfil/enfermero', methods=['PUT'])
+@jwt_required()
+def actualizar_perfil_enfermero():
+    usuario_id = int(get_jwt_identity())
+    data = request.get_json()
+
+    usuario = Usuario.query.get(usuario_id)
+    if not usuario or usuario.rol != 'enfermero':
+        return jsonify({"error": "Perfil no encontrado o acceso denegado"}), 404
+
+    enfermero = Enfermero.query.filter_by(usuario_id=usuario_id).first()
+    if not enfermero:
+        enfermero = Enfermero(usuario_id=usuario_id, matricula=data.get('matricula', ''))
+        db.session.add(enfermero)
+
+    enfermero.nombre = data.get('nombre', enfermero.nombre)
+    enfermero.apellido = data.get('apellido', enfermero.apellido)
+    enfermero.especialidad = data.get('especialidad', enfermero.especialidad)
+
+    try:
+        db.session.commit()
+        datos_completos = usuario.to_dict()
+        datos_completos.update(enfermero.to_dict())
+        return jsonify(datos_completos), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": "Error al actualizar", "detalle": str(e)}), 500
