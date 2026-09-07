@@ -1,18 +1,19 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom'; // 1. Importamos el hook de navegación
 
 const Login = () => {
-  // Estados para manejar lo que se escribe en los inputs
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  
+  // 2. Inicializamos el navegador
+  const navigate = useNavigate(); 
 
-  // Función que se ejecuta al darle al botón "Iniciar Sesión"
   const handleSubmit = async (e) => {
-    e.preventDefault(); // Evita que la página recargue
+    e.preventDefault(); 
     setError('');
 
     try {
-        // Hacemos la petición a tu backend en Flask (puerto 5000)
         const response = await fetch('http://localhost:5000/api/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -21,16 +22,17 @@ const Login = () => {
 
         const data = await response.json();
 
-        // Si Flask nos devuelve un error (ej. credenciales incorrectas)
         if (!response.ok) {
             throw new Error(data.error || 'Error al iniciar sesión');
         }
 
-        // Si todo sale bien, guardamos el token y limpiamos el formulario
         localStorage.setItem('token', data.token);
         alert('¡Login exitoso! Token guardado en tu navegador.');
         setEmail('');
         setPassword('');
+        
+        // Opcional: Redirigir al perfil del paciente después de un login exitoso
+        // navigate('/perfil/paciente'); 
 
     } catch (err) {
         setError(err.message);
@@ -41,7 +43,6 @@ const Login = () => {
     <div style={{ maxWidth: '400px', margin: '50px auto', fontFamily: 'sans-serif' }}>
       <h2 style={{ textAlign: 'center', color: '#2c3e50' }}>Ingresar a ENFE-RED</h2>
       
-      {/* Caja de error visual por si ponen mal la clave */}
       {error && (
         <div style={{ backgroundColor: '#ffcccc', padding: '10px', borderRadius: '5px', marginBottom: '15px', color: '#cc0000', textAlign: 'center' }}>
           {error}
@@ -78,6 +79,27 @@ const Login = () => {
         >
           Iniciar Sesión
         </button>
+        
+        {/* Reemplazá el botón anterior por este bloque */}
+          <div style={{ textAlign: 'center', marginTop: '15px' }}>
+            <span style={{ color: '#7f8c8d', fontSize: '14px' }}>¿No tenés cuenta? </span>
+            <button 
+              type="button" 
+              onClick={() => navigate('/registro')} 
+              style={{ 
+                background: 'none', 
+                border: 'none', 
+                color: '#3498db', 
+                fontWeight: 'bold', 
+                cursor: 'pointer', 
+                padding: '0', 
+                fontSize: '14px',
+                textDecoration: 'underline' 
+              }}
+              >
+                Crear cuenta
+              </button>
+              </div>
         
       </form>
     </div>
