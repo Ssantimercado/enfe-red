@@ -1,0 +1,89 @@
+body {
+  margin: 0;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: #f0f8ff;
+  color: #333;
+}
+
+.App {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  padding: 20px;
+}
+
+.perfil-container {
+  background-color: #ffffff;
+  width: 100%;
+  max-width: 550px;
+  border-radius: 15px;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.08);
+  overflow: hidden;
+  border: 1px solid #d1e9ff;
+}
+
+.perfil-header {
+  background-color: #e3f2fd;
+  padding: 35px 20px;
+  text-align: center;
+  border-bottom: 1px solid #bbdefb;
+}
+
+.perfil-foto {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  border: 4px solid #ffffff;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+  object-fit: cover;
+  margin-bottom: 15px;
+}
+
+.perfil-nombre {
+  margin: 0;
+  font-size: 1.6rem;
+  color: #1565c0;
+}
+
+.perfil-edad {
+  margin: 5px 0 0;
+  color: #546e7a;
+  font-size: 1rem;
+}
+
+.perfil-body {
+  padding: 25px;
+}
+
+.perfil-seccion {
+  margin-bottom: 20px;
+}
+
+.perfil-seccion h2 {
+  font-size: 1.1rem;
+  color: #1976d2;
+  margin-bottom: 10px;
+  border-bottom: 2px solid #e3f2fd;
+  padding-bottom: 5px;
+}
+
+.perfil-lista {
+  padding-left: 20px;
+  margin: 0;
+  color: #424242;
+}
+
+.perfil-dato {
+  margin: 0;
+  color: #424242;
+}
+
+.certificado-verificado {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+  padding: 10px 15px;
+  border-radius: 8px;
+  font-weight: bold;
+  border: 1px solid #c8e6c9;
+}
