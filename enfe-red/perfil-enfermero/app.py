@@ -1,34 +1,73 @@
+import os
 from flask import Flask, jsonify
-from flask_cors import CORS # Necesario para que React pueda llamar a esta API
+from flask_sqlalchemy import SQLAlchemy
+from flask_cors import CORS
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = Flask(__name__)
-CORS(app) # Habilita CORS para todas las rutas
+CORS(app)  # Permite peticiones desde React
 
-# Datos simulados del enfermero (en producción, esto vendría de Supabase)
-perfil_enfermero = {
-    "id": 1,
-    "foto_url": "https://randomuser.me/api/portraits/men/32.jpg", # Foto de ejemplo
-    "nombre_completo": "Juan Carlos García López",
-    "edad": 34,
-    "titulos": [
-        "Licenciado en Enfermería (Universidad de Buenos Aires)",
-        "Especialidad en Cuidados Intensivos (2018)",
-        "Diplomado en Liderazgo en Salud (2021)"
-    ],
-    "direccion": "Calle Falsa 123, Maipú, Mendoza, Argentina",
-    "certificado_profesional_verificado": True
-}
+# Configuración de PostgreSQL / Supabase
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['JSON_AS_ASCII'] = False
 
-@app.route('/', methods=['GET'])
-def home():
+db = SQLAlchemy(app)
+
+# Modelo ORM - Usuarios
+class Usuario(db.Model):
+    __tablename__ = 'usuarios'
+    
+    id = db.Column(db.BigInteger, primary_key=True)
+    email = db.Column(db.String)
+    password_hash = db.Column(db.String)
+    tipo_usuario = db.Column(db.String)
+    nombre = db.Column(db.String)
+    apellido = db.Column(db.String)
+    telefono = db.Column(db.String)
+    fecha_registro = db.Column(db.DateTime)
+    activo = db.Column(db.Boolean, default=True)
+
+# Modelo ORM - Enfermeros
+class Enfermero(db.Model):
+    __tablename__ = 'enfermeros'
+    
+    id = db.Column(db.BigInteger, primary_key=True)
+    usuario_id = db.Column(db.BigInteger, db.ForeignKey('usuarios.id'))
+    matricula_profesional = db.Column(db.String)
+    especialidad = db.Column(db.String)
+    experiencia_anios = db.Column(db.Integer)
+    descripcion = db.Column(db.Text)
+    direccion = db.Column(db.String)
+    ciudad = db.Column(db.String)
+    disponible = db.Column(db.Boolean, default=True)
+
+    # Relación con el usuario
+    usuario = db.relationship('Usuario', backref='perfil_enfermero')
+
+@app.route('/api/perfil/<int:id>', methods=['GET'])
+def get_perfil(id):
+    enfermero = Enfermero.query.get(id)
+    if not enfermero:
+        return jsonify({'error': 'Enfermero no encontrado'}), 404
+        
     return jsonify({
-        "mensaje": "API de Enfer-Red funcionando correctamente",
-        "endpoint_perfil": "http://127.0.0.1:5000/api/perfil/1"
+        'id': enfermero.id,
+        'usuario_id': enfermero.usuario_id,
+        'nombre': enfermero.usuario.nombre if enfermero.usuario else None,
+        'apellido': enfermero.usuario.apellido if enfermero.usuario else None,
+        'email': enfermero.usuario.email if enfermero.usuario else None,
+        'telefono': enfermero.usuario.telefono if enfermero.usuario else None,
+        'matricula_profesional': enfermero.matricula_profesional,
+        'especialidad': enfermero.especialidad,
+        'experiencia_anios': enfermero.experiencia_anios,
+        'descripcion': enfermero.descripcion,
+        'direccion': enfermero.direccion,
+        'ciudad': enfermero.ciudad,
+        'disponible': enfermero.disponible
     })
-
-@app.route('/api/perfil/1', methods=['GET'])
-def obtener_perfil():
-    return jsonify(perfil_enfermero)
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
