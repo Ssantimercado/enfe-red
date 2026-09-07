@@ -9,7 +9,7 @@ usuario_bp = Blueprint('usuario_bp', __name__)
 
 
 # ==========================================
-# 1. RUTA DE LOGIN (Pablo)
+# 1. RUTA DE LOGIN (Pablo) 
 # ==========================================
 @usuario_bp.route('/login', methods=['POST'])
 def login():
@@ -99,6 +99,7 @@ def registrar_usuario():
 @usuario_bp.route('/perfil/paciente', methods=['GET'])
 @jwt_required()
 def obtener_perfil_paciente():
+    # 5. Extraemos el ID exactamente como lo guardamos en el login
     usuario_id = get_jwt_identity()
 
     usuario = Usuario.query.get(usuario_id)
@@ -107,8 +108,9 @@ def obtener_perfil_paciente():
 
     paciente = Paciente.query.filter_by(usuario_id=usuario_id).first()
 
+    # 6. Indentación corregida definitivamente
     datos_completos = usuario.to_dict()
-
+        
     if not paciente:
         datos_completos.update({
             "nombre": "Falta configurar",
@@ -177,3 +179,4 @@ def ver_perfil_enfermero(id):
         datos_completos.update(enfermero.to_dict())
 
     return jsonify(datos_completos), 200
+
