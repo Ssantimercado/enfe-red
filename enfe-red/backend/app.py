@@ -1,21 +1,34 @@
-from flask import Flask
+from flask import Flask, jsonify
 from flask_cors import CORS
+from flask_jwt_extended import JWTManager
 from database import db
 from routes.usuario_routes import usuario_bp
 
 app = Flask(__name__)
-# Esto permite que tu React en localhost:5173 se conecte sin problemas
+
+# Permite peticiones desde el frontend en React
 CORS(app) 
 
-# Configuración falsa de MySQL por ahora (para que no tire error al arrancar)
+# Configuración de base de datos y JWT
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///test.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['JWT_SECRET_KEY'] = 'clave_secreta_enfered'  # Requerido para firmar los tokens JWT
 
+# Inicialización de extensiones
 db.init_app(app)
+jwt = JWTManager(app)
 
-# Registramos tus rutas de login
-app.register_blueprint(usuario_bp)
+# Ruta raíz para verificar que el servidor está corriendo (soluciona el 404 al entrar a /)
+@app.route('/', methods=['GET'])
+def health_check():
+    return jsonify({"mensaje": "API de EnfeRed funcionando correctamente"}), 200
+
+# Registro de rutas con prefijo /api
+app.register_blueprint(usuario_bp, url_prefix='/api')
+
+# Creación automática de tablas si no existen
+with app.app_context():
+    db.create_all()
 
 if __name__ == '__main__':
-    # Arrancamos el servidor en el puerto 5000
     app.run(debug=True, port=5000)
