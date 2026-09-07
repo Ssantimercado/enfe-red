@@ -2,12 +2,13 @@ from flask import Flask, jsonify
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 from database import db
+from extensions import bcrypt
 from routes.usuario_routes import usuario_bp
 
 app = Flask(__name__)
 
 # Permite peticiones desde el frontend en React
-CORS(app) 
+CORS(app)
 
 # Configuración de base de datos y JWT
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///test.db'
@@ -17,6 +18,7 @@ app.config['JWT_SECRET_KEY'] = 'clave_secreta_enfered'  # Requerido para firmar 
 # Inicialización de extensiones
 db.init_app(app)
 jwt = JWTManager(app)
+bcrypt.init_app(app)
 
 # Ruta raíz para verificar que el servidor está corriendo (soluciona el 404 al entrar a /)
 @app.route('/', methods=['GET'])

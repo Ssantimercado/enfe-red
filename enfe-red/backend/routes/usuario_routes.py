@@ -1,15 +1,12 @@
 from flask import Blueprint, request, jsonify
-import jwt
-import datetime
-# Asumo que usaste flask_jwt_extended para tu Login
-from flask_jwt_extended import jwt_required, get_jwt_identity 
-
+from flask_jwt_extended import jwt_required, get_jwt_identity, create_access_token
 
 from database import db
+from extensions import bcrypt
 from models.usuario_models import Usuario, Paciente, Enfermero
 
 usuario_bp = Blueprint('usuario_bp', __name__)
-SECRET_KEY = "clave_secreta_enfered"
+
 
 # ==========================================
 # 1. RUTA DE LOGIN (Pablo)
@@ -23,16 +20,17 @@ def login():
     if not email or not password:
         return jsonify({"error": "Faltan datos"}), 400
 
-    if email == "pablo@test.com" and password == "123456":
-        token = jwt.encode({
-            'user_id': 1,
-            'rol': 'enfermero',
-            'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=2)
-        }, SECRET_KEY, algorithm="HS256")
+    usuario = Usuario.query.filter_by(email=email).first()
 
-        return jsonify({"mensaje": "Login exitoso", "token": token}), 200
-    else:
+    if not usuario or not bcrypt.check_password_hash(usuario.password_hash, password):
         return jsonify({"error": "Credenciales incorrectas"}), 401
+
+    token = create_access_token(
+        identity=usuario.id,
+        additional_claims={"rol": usuario.rol}
+    )
+
+    return jsonify({"mensaje": "Login exitoso", "token": token}), 200
 
 
 # ==========================================
@@ -41,31 +39,53 @@ def login():
 @usuario_bp.route('/registro', methods=['POST'])
 def registrar_usuario():
     data = request.get_json()
-    
-    # Extraer campos que vienen del formulario en React
+
     nombre = data.get('nombre')
+    apellido = data.get('apellido', '')
     email = data.get('email')
     password = data.get('password')
-    rol = data.get('rol', 'paciente') # Rol por defecto si no viene
+    rol = data.get('rol', 'paciente')
 
     if not nombre or not email or not password:
         return jsonify({"error": "Todos los campos son obligatorios"}), 400
 
-    # Verificar si el email ya existe en la base de datos
     usuario_existente = Usuario.query.filter_by(email=email).first()
     if usuario_existente:
         return jsonify({"error": "El email ya está registrado"}), 400
 
-    # Crear nuevo usuario e insertarlo en MySQL mediante SQLAlchemy
+    password_hash = bcrypt.generate_password_hash(password).decode('utf-8')
+
     nuevo_usuario = Usuario(
-        nombre=nombre,
         email=email,
-        password=password, # Idealmente hasheado si ya usan werkzeug.security
+        password_hash=password_hash,
         rol=rol
     )
 
     try:
         db.session.add(nuevo_usuario)
+        db.session.flush()  # Para obtener el id de nuevo_usuario antes de commitear
+
+        if rol == 'paciente':
+            nuevo_perfil = Paciente(
+                usuario_id=nuevo_usuario.id,
+                nombre=nombre,
+                apellido=apellido
+            )
+        elif rol == 'enfermero':
+            matricula = data.get('matricula', '')
+            especialidad = data.get('especialidad', '')
+            nuevo_perfil = Enfermero(
+                usuario_id=nuevo_usuario.id,
+                nombre=nombre,
+                apellido=apellido,
+                matricula=matricula,
+                especialidad=especialidad
+            )
+        else:
+            db.session.rollback()
+            return jsonify({"error": "Rol inválido"}), 400
+
+        db.session.add(nuevo_perfil)
         db.session.commit()
         return jsonify({"mensaje": "Usuario registrado exitosamente"}), 201
     except Exception as e:
@@ -73,29 +93,21 @@ def registrar_usuario():
         return jsonify({"error": "Error al guardar el usuario", "detalle": str(e)}), 500
 
 
-
-  # Vista perfil de paciente (Pablo)
- 
-    
+# ==========================================
+# 3. VISTA "MI PERFIL" DE PACIENTE (Pablo)
+# ==========================================
 @usuario_bp.route('/perfil/paciente', methods=['GET'])
 @jwt_required()
-
 def obtener_perfil_paciente():
-    # 1. Obtenemos el ID del usuario desde tu JWT
     usuario_id = get_jwt_identity()
 
-    # 2. Buscamos al usuario y a su perfil de paciente en la BD
     usuario = Usuario.query.get(usuario_id)
     if not usuario or usuario.rol != 'paciente':
         return jsonify({"error": "Perfil no encontrado o acceso denegado"}), 404
-    
+
     paciente = Paciente.query.filter_by(usuario_id=usuario_id).first()
 
-   
-    
-    # 3. Devolvemos la info combinada para que tu React la consuma
     datos_completos = usuario.to_dict()
-        
 
     if not paciente:
         datos_completos.update({
@@ -106,12 +118,62 @@ def obtener_perfil_paciente():
             "historial_medico": "Sin datos"
         })
     else:
-        # Si el paciente existe, combinamos los datos reales
         datos_completos.update(paciente.to_dict())
-    
+
     return jsonify(datos_completos), 200
 
-    
 
-    
-    
+# ==========================================
+# 4. VISTA "MI PERFIL" DE ENFERMERO (propio usuario logueado)
+# ==========================================
+@usuario_bp.route('/perfil/enfermero', methods=['GET'])
+@jwt_required()
+def obtener_perfil_enfermero():
+    usuario_id = get_jwt_identity()
+
+    usuario = Usuario.query.get(usuario_id)
+    if not usuario or usuario.rol != 'enfermero':
+        return jsonify({"error": "Perfil no encontrado o acceso denegado"}), 404
+
+    enfermero = Enfermero.query.filter_by(usuario_id=usuario_id).first()
+
+    datos_completos = usuario.to_dict()
+
+    if not enfermero:
+        datos_completos.update({
+            "nombre": "Falta configurar",
+            "apellido": "",
+            "matricula": "No registrada",
+            "especialidad": "No especificada"
+        })
+    else:
+        datos_completos.update(enfermero.to_dict())
+
+    return jsonify(datos_completos), 200
+
+
+# ==========================================
+# 5. VISTA PERFIL DE ENFERMERO PÚBLICO (Santiago - SCRUM visualización)
+# ==========================================
+@usuario_bp.route('/usuarios/<int:id>', methods=['GET'])
+def ver_perfil_enfermero(id):
+    usuario = Usuario.query.get(id)
+
+    if not usuario or usuario.rol != 'enfermero':
+        return jsonify({"error": "Perfil de enfermero no encontrado"}), 404
+
+    enfermero = Enfermero.query.filter_by(usuario_id=id).first()
+
+    datos_completos = usuario.to_dict()
+
+    if not enfermero:
+        datos_completos.update({
+            "nombre": "Falta configurar",
+            "apellido": "",
+            "matricula": "No registrada",
+            "especialidad": "No especificada"
+        })
+    else:
+        datos_completos.update(enfermero.to_dict())
+
+    return jsonify(datos_completos), 200
