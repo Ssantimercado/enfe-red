@@ -86,17 +86,32 @@ def obtener_perfil_paciente():
 
     # 2. Buscamos al usuario y a su perfil de paciente en la BD
     usuario = Usuario.query.get(usuario_id)
-    paciente = Paciente.query.filter_by(usuario_id=usuario_id).first()
-
     if not usuario or usuario.rol != 'paciente':
         return jsonify({"error": "Perfil no encontrado o acceso denegado"}), 404
+    
+    paciente = Paciente.query.filter_by(usuario_id=usuario_id).first()
 
-    if not paciente:   
-        return jsonify({"error": "Datos de paciente incompletos"}), 404
-
+   
+    
     # 3. Devolvemos la info combinada para que tu React la consuma
     datos_completos = usuario.to_dict()
-    datos_completos.update(paciente.to_dict())
+        
 
+    if not paciente:
+        datos_completos.update({
+            "nombre": "Falta configurar",
+            "apellido": "",
+            "direccion": "No registrada",
+            "telefono": "No registrado",
+            "historial_medico": "Sin datos"
+        })
+    else:
+        # Si el paciente existe, combinamos los datos reales
+        datos_completos.update(paciente.to_dict())
+    
     return jsonify(datos_completos), 200
+
+    
+
+    
     
