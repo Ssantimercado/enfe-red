@@ -30,6 +30,8 @@ const Login = () => {
         alert('¡Login exitoso! Token guardado en tu navegador.');
         setEmail('');
         setPassword('');
+
+        navigate('/home');
         
         // Opcional: Redirigir al perfil del paciente después de un login exitoso
         // navigate('/perfil/paciente'); 

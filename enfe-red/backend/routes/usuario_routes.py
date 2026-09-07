@@ -20,11 +20,13 @@ def login():
     if not email or not password:
         return jsonify({"error": "Faltan datos"}), 400
 
+    # Buscamos el usuario real en la base de datos
     usuario = Usuario.query.filter_by(email=email).first()
 
+    # Usamos bcrypt.check_password_hash para validar la contraseña
     if not usuario or not bcrypt.check_password_hash(usuario.password_hash, password):
         return jsonify({"error": "Credenciales incorrectas"}), 401
-
+    
     token = create_access_token(
         identity=str(usuario.id),
         additional_claims={"rol": usuario.rol}
@@ -243,3 +245,26 @@ def actualizar_perfil_enfermero():
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": "Error al actualizar", "detalle": str(e)}), 500
+
+# ==========================================
+# 8. LISTA DE ENFERMEROS (Para la cartilla del paciente)
+# ==========================================
+@usuario_bp.route('/enfermeros', methods=['GET', 'OPTIONS'])
+@jwt_required()
+def obtener_todos_los_enfermeros():
+    # Si es una petición OPTIONS de CORS (preflight), la dejamos pasar
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+
+    enfermeros = Enfermero.query.all()
+    
+    lista = []
+    for enf in enfermeros:
+        lista.append({
+            "usuario_id": enf.usuario_id,
+            "nombre": enf.nombre,
+            "apellido": enf.apellido,
+            "especialidad": enf.especialidad
+        })
+        
+    return jsonify(lista), 200

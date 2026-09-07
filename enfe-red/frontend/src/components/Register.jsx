@@ -5,7 +5,7 @@ const Register = () => {
     nombre: '',
     email: '',
     password: '',
-    rol: 'Paciente'
+    rol: 'paciente'
   });
   const [mensaje, setMensaje] = useState('');
   const [error, setError] = useState('');
@@ -35,9 +35,12 @@ const Register = () => {
 
       if (response.ok) {
         setMensaje(data.mensaje);
-        setFormData({ nombre: '', email: '', password: '', rol: 'Paciente' });
+        setFormData({ nombre: '', email: '', password: '', rol: 'paciente' });
+        setTimeout(() => {
+          navigate('/login'); // Redirige al login después de 1.5 segundos
+        }, 1500);
       } else {
-        setError(data.mensaje || 'Error al registrar usuario');
+        setError(data.error || 'Error al registrar usuario');
       }
     } catch (err) {
       setError('No se pudo conectar con el servidor backend');
@@ -84,8 +87,8 @@ const Register = () => {
         <div>
           <label>Rol:</label>
           <select name="rol" value={formData.rol} onChange={handleChange}>
-            <option value="Paciente">Paciente</option>
-            <option value="Enfermero">Enfermero</option>
+            <option value="paciente">Paciente</option>
+            <option value="enfermero">Enfermero</option>
           </select>
         </div>
         <button type="submit" style={{ marginTop: '1rem' }}>Registrarse</button>
