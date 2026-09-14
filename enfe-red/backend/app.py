@@ -2,24 +2,28 @@ import os
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import bcrypt
-import pymysql
-
-load_dotenv()
+from flask_jwt_extended import JWTManager
+from database import db
+from extensions import bcrypt
+from routes.usuario_routes import usuario_bp
 
 app = Flask(__name__)
 CORS(app)
 
-def get_db_connection():
-    return pymysql.connect(
-        host=os.getenv('DB_HOST', 'localhost'),
-        user=os.getenv('DB_USER', 'root'),
-        password=os.getenv('DB_PASSWORD', 'Leoncio0'),
-        database=os.getenv('DB_NAME', 'enfered_db'),
-        cursorclass=pymysql.cursors.DictCursor
-    )
+# Permite peticiones desde el frontend en React
+CORS(app)
 
-# 1. Ruta base para probar en el navegador (GET)
+# Configuración de base de datos y JWT
+app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:root@localhost/enfe_red'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['JWT_SECRET_KEY'] = 'clave_secreta_enfered'  # Requerido para firmar los tokens JWT
+
+# Inicialización de extensiones
+db.init_app(app)
+jwt = JWTManager(app)
+bcrypt.init_app(app)
+
+# Ruta raíz para verificar que el servidor está corriendo (soluciona el 404 al entrar a /)
 @app.route('/', methods=['GET'])
 def home():
     return jsonify({'mensaje': 'Servidor corriendo correctamente'}), 200
