@@ -20,13 +20,11 @@ def login():
     if not email or not password:
         return jsonify({"error": "Faltan datos"}), 400
 
-    # Buscamos el usuario real en la base de datos
     usuario = Usuario.query.filter_by(email=email).first()
 
-    # Usamos bcrypt.check_password_hash para validar la contraseña
     if not usuario or not bcrypt.check_password_hash(usuario.password_hash, password):
         return jsonify({"error": "Credenciales incorrectas"}), 401
-    
+
     token = create_access_token(
         identity=str(usuario.id),
         additional_claims={"rol": usuario.rol}
@@ -135,136 +133,3 @@ def obtener_perfil_enfermero():
 
     usuario = Usuario.query.get(usuario_id)
     if not usuario or usuario.rol != 'enfermero':
-        return jsonify({"error": "Perfil no encontrado o acceso denegado"}), 404
-
-    enfermero = Enfermero.query.filter_by(usuario_id=usuario_id).first()
-
-    datos_completos = usuario.to_dict()
-
-    if not enfermero:
-        datos_completos.update({
-            "nombre": "Falta configurar",
-            "apellido": "",
-            "matricula": "No registrada",
-            "especialidad": "No especificada"
-        })
-    else:
-        datos_completos.update(enfermero.to_dict())
-
-    return jsonify(datos_completos), 200
-
-
-# ==========================================
-# 5. VISTA PERFIL DE ENFERMERO PÚBLICO (Santiago - SCRUM visualización)
-# ==========================================
-@usuario_bp.route('/usuarios/<int:id>', methods=['GET'])
-def ver_perfil_enfermero(id):
-    usuario = Usuario.query.get(id)
-
-    if not usuario or usuario.rol != 'enfermero':
-        return jsonify({"error": "Perfil de enfermero no encontrado"}), 404
-
-    enfermero = Enfermero.query.filter_by(usuario_id=id).first()
-
-    datos_completos = usuario.to_dict()
-
-    if not enfermero:
-        datos_completos.update({
-            "nombre": "Falta configurar",
-            "apellido": "",
-            "matricula": "No registrada",
-            "especialidad": "No especificada"
-        })
-    else:
-        datos_completos.update(enfermero.to_dict())
-
-    return jsonify(datos_completos), 200
-
-
-# ==========================================
-# 6. EDITAR "MI PERFIL" - PACIENTE (Renzo)
-# ==========================================
-@usuario_bp.route('/perfil/paciente', methods=['PUT'])
-@jwt_required()
-def actualizar_perfil_paciente():
-    usuario_id = int(get_jwt_identity())
-    data = request.get_json()
-
-    usuario = Usuario.query.get(usuario_id)
-    if not usuario or usuario.rol != 'paciente':
-        return jsonify({"error": "Perfil no encontrado o acceso denegado"}), 404
-
-    paciente = Paciente.query.filter_by(usuario_id=usuario_id).first()
-    if not paciente:
-        paciente = Paciente(usuario_id=usuario_id)
-        db.session.add(paciente)
-
-    paciente.nombre = data.get('nombre', paciente.nombre)
-    paciente.apellido = data.get('apellido', paciente.apellido)
-    paciente.telefono = data.get('telefono', paciente.telefono)
-    paciente.direccion = data.get('direccion', paciente.direccion)
-    paciente.historial_medico = data.get('historial_medico', paciente.historial_medico)
-
-    try:
-        db.session.commit()
-        datos_completos = usuario.to_dict()
-        datos_completos.update(paciente.to_dict())
-        return jsonify(datos_completos), 200
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"error": "Error al actualizar", "detalle": str(e)}), 500
-
-
-# ==========================================
-# 7. EDITAR "MI PERFIL" - ENFERMERO (Renzo)
-# ==========================================
-@usuario_bp.route('/perfil/enfermero', methods=['PUT'])
-@jwt_required()
-def actualizar_perfil_enfermero():
-    usuario_id = int(get_jwt_identity())
-    data = request.get_json()
-
-    usuario = Usuario.query.get(usuario_id)
-    if not usuario or usuario.rol != 'enfermero':
-        return jsonify({"error": "Perfil no encontrado o acceso denegado"}), 404
-
-    enfermero = Enfermero.query.filter_by(usuario_id=usuario_id).first()
-    if not enfermero:
-        enfermero = Enfermero(usuario_id=usuario_id, matricula=data.get('matricula', ''))
-        db.session.add(enfermero)
-
-    enfermero.nombre = data.get('nombre', enfermero.nombre)
-    enfermero.apellido = data.get('apellido', enfermero.apellido)
-    enfermero.especialidad = data.get('especialidad', enfermero.especialidad)
-
-    try:
-        db.session.commit()
-        datos_completos = usuario.to_dict()
-        datos_completos.update(enfermero.to_dict())
-        return jsonify(datos_completos), 200
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"error": "Error al actualizar", "detalle": str(e)}), 500
-
-# ==========================================
-# 8. LISTA DE ENFERMEROS (Para la cartilla del paciente)
-# ==========================================
-@usuario_bp.route('/enfermeros', methods=['GET', 'OPTIONS'])
-@jwt_required()
-def obtener_todos_los_enfermeros():
-    # Si es una petición OPTIONS de CORS (preflight), la dejamos pasar
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-
-    enfermeros = Enfermero.query.all()
-    
-    lista = []
-    for enf in enfermeros:
-        lista.append({
-            "usuario_id": enf.usuario_id,
-            "nombre": enf.nombre,
-            "apellido": enf.apellido,
-            "especialidad": enf.especialidad
-        })
-        
-    return jsonify(lista), 200
