@@ -1,42 +1,82 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
+// Plantilla base para los días de la semana
+const diasBase = [
+  { dia_semana: 'Lunes', activo: false, hora_inicio: '08:00', hora_fin: '18:00' },
+  { dia_semana: 'Martes', activo: false, hora_inicio: '08:00', hora_fin: '18:00' },
+  { dia_semana: 'Miércoles', activo: false, hora_inicio: '08:00', hora_fin: '18:00' },
+  { dia_semana: 'Jueves', activo: false, hora_inicio: '08:00', hora_fin: '18:00' },
+  { dia_semana: 'Viernes', activo: false, hora_inicio: '08:00', hora_fin: '18:00' },
+  { dia_semana: 'Sábado', activo: false, hora_inicio: '09:00', hora_fin: '14:00' },
+  { dia_semana: 'Domingo', activo: false, hora_inicio: '09:00', hora_fin: '14:00' }
+];
+
 const PerfilEnfermero = () => {
+  // Estados del Perfil
   const [datosEnfermero, setDatosEnfermero] = useState(null);
   const [editando, setEditando] = useState(false);
   const [form, setForm] = useState({});
   const [error, setError] = useState("");
   const [mensaje, setMensaje] = useState("");
 
+  // Estados de los Horarios
+  const [horarios, setHorarios] = useState(diasBase);
+  const [mensajeHorarios, setMensajeHorarios] = useState("");
+  const [guardandoHorarios, setGuardandoHorarios] = useState(false);
+
   const navigate = useNavigate();
   const token = localStorage.getItem("token");
 
-  const cargarPerfil = async () => {
-    if (!token) {
-      setError("Acceso denegado. Iniciá sesión primero.");
-      return;
-    }
-    try {
-      const response = await fetch(
-        "http://localhost:5000/api/perfil/enfermero",
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
-      if (!response.ok)
-        throw new Error("Error al obtener los datos del enfermero");
-      const data = await response.json();
-      setDatosEnfermero(data);
-      setForm(data);
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-
+  // ==========================================
+  // 1. CARGA DE DATOS AL INICIAR
+  // ==========================================
   useEffect(() => {
-    cargarPerfil();
-  }, []);
+    const cargarDatos = async () => {
+      if (!token) {
+        setError("Acceso denegado. Iniciá sesión primero.");
+        return;
+      }
+      
+      // Cargar Perfil
+      try {
+        const resPerfil = await fetch("http://localhost:5000/api/perfil/enfermero", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!resPerfil.ok) throw new Error("Error al obtener los datos del enfermero");
+        const dataPerfil = await resPerfil.json();
+        setDatosEnfermero(dataPerfil);
+        setForm(dataPerfil);
+      } catch (err) {
+        setError(err.message);
+      }
 
+      // Cargar Horarios
+      try {
+        const resHorarios = await fetch("http://localhost:5000/api/perfil/enfermero/horarios", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (resHorarios.ok) {
+          const dataHorarios = await resHorarios.json();
+          if (dataHorarios && dataHorarios.length > 0) {
+            const horariosCargados = diasBase.map(base => {
+              const encontrado = dataHorarios.find(d => d.dia_semana === base.dia_semana);
+              return encontrado ? { ...base, ...encontrado } : base;
+            });
+            setHorarios(horariosCargados);
+          }
+        }
+      } catch (err) {
+        console.log("Aún no hay horarios guardados o el endpoint no está listo.");
+      }
+    };
+
+    cargarDatos();
+  }, [token]);
+
+  // ==========================================
+  // 2. MANEJO DEL PERFIL PROFESIONAL
+  // ==========================================
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
@@ -44,17 +84,14 @@ const PerfilEnfermero = () => {
   const handleGuardar = async () => {
     try {
       setError("");
-      const response = await fetch(
-        "http://localhost:5000/api/perfil/enfermero",
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(form),
-        }
-      );
+      const response = await fetch("http://localhost:5000/api/perfil/enfermero", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(form),
+      });
       if (!response.ok) throw new Error("Error al guardar los cambios");
       
       const data = await response.json();
@@ -68,6 +105,45 @@ const PerfilEnfermero = () => {
     }
   };
 
+  // ==========================================
+  // 3. MANEJO DE LA DISPONIBILIDAD
+  // ==========================================
+  const handleHorarioChange = (index, campo, valor) => {
+    const nuevosHorarios = [...horarios];
+    nuevosHorarios[index][campo] = valor;
+    setHorarios(nuevosHorarios);
+  };
+
+  const handleGuardarHorarios = async () => {
+    setGuardandoHorarios(true);
+    setMensajeHorarios("");
+    try {
+      const response = await fetch("http://localhost:5000/api/perfil/enfermero/horarios", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ horarios: horarios }),
+      });
+      
+      if (!response.ok) {
+        if(response.status === 404) throw new Error("La ruta del backend aún no existe (Falta Renzo)");
+        throw new Error("Error al guardar los horarios en la base de datos");
+      }
+      
+      setMensajeHorarios("✅ ¡Tus horarios se guardaron con éxito!");
+    } catch (err) {
+      setMensajeHorarios(`⚠️ Simulación local (Aviso: ${err.message})`);
+    } finally {
+      setGuardandoHorarios(false);
+      setTimeout(() => setMensajeHorarios(""), 4000);
+    }
+  };
+
+  // ==========================================
+  // RENDERIZADOS CONDICIONALES
+  // ==========================================
   if (!datosEnfermero && !error) return (
     <div style={{ display: 'flex', justifyContent: 'center', marginTop: '100px', fontFamily: "'Segoe UI', Roboto, sans-serif" }}>
       <h3 style={{ color: '#2ecc71', fontWeight: '600' }}>⏳ Cargando tu perfil profesional...</h3>
@@ -88,11 +164,12 @@ const PerfilEnfermero = () => {
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f8fafc', padding: '40px 20px', fontFamily: "'Segoe UI', Roboto, Helvetica, Arial, sans-serif" }}>
       
-      <div style={{ maxWidth: '600px', margin: '0 auto' }}>
+      <div style={{ maxWidth: '650px', margin: '0 auto' }}>
         
+        {/* Cabecera general */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' }}>
           <h2 style={{ color: '#2c3e50', margin: 0, fontSize: '28px', fontWeight: '800' }}>
-            Perfil <span style={{ color: '#2ecc71' }}>Profesional</span>
+            Panel <span style={{ color: '#2ecc71' }}>Profesional</span>
           </h2>
           <button 
             onClick={() => navigate('/home')}
@@ -107,13 +184,11 @@ const PerfilEnfermero = () => {
             ✅ {mensaje}
           </div>
         )}
-        {error && (
-          <div style={{ backgroundColor: '#fee2e2', color: '#ef4444', padding: '12px', borderRadius: '8px', border: '1px solid #f87171', marginBottom: '20px', textAlign: 'center', fontWeight: '600' }}>
-            ❌ {error}
-          </div>
-        )}
 
-        <div style={{ backgroundColor: '#ffffff', padding: '35px', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', border: '1px solid #f1f5f9' }}>
+        {/* ==========================================
+            TARJETA 1: PERFIL PROFESIONAL
+            ========================================== */}
+        <div style={{ backgroundColor: '#ffffff', padding: '35px', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', border: '1px solid #f1f5f9', marginBottom: '30px' }}>
           
           {editando ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -169,7 +244,6 @@ const PerfilEnfermero = () => {
 
               <div style={{ backgroundColor: '#f8fafc', padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '25px' }}>
                 <h3 style={{ margin: '0 0 15px 0', color: '#334155', fontSize: '18px' }}>Información Registrada</h3>
-                
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #e2e8f0', paddingBottom: '10px' }}>
                     <span style={{ color: '#64748b', fontWeight: '600' }}>Matrícula:</span>
@@ -193,6 +267,81 @@ const PerfilEnfermero = () => {
             </div>
           )}
         </div>
+
+        {/* ==========================================
+            TARJETA 2: GESTIÓN DE DISPONIBILIDAD
+            ========================================== */}
+        <div style={{ backgroundColor: '#ffffff', padding: '35px', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', border: '1px solid #f1f5f9' }}>
+          
+          <div style={{ borderBottom: '2px solid #f1f5f9', paddingBottom: '15px', marginBottom: '20px' }}>
+            <h3 style={{ color: '#1e293b', margin: 0, fontSize: '20px' }}>🕒 Mi Disponibilidad Horaria</h3>
+            <p style={{ color: '#64748b', margin: '5px 0 0 0', fontSize: '14px' }}>Marcá los días que trabajás y definí tu horario</p>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {horarios.map((dia, index) => (
+              <div 
+                key={dia.dia_semana} 
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'space-between', 
+                  padding: '16px', 
+                  backgroundColor: dia.activo ? '#f0fdf4' : '#f8fafc', 
+                  borderRadius: '12px', 
+                  border: `1px solid ${dia.activo ? '#bbf7d0' : '#e2e8f0'}`,
+                  transition: 'all 0.3s ease'
+                }}
+              >
+                {/* Switch y Día */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', width: '140px' }}>
+                  <input 
+                    type="checkbox" 
+                    checked={dia.activo} 
+                    onChange={(e) => handleHorarioChange(index, 'activo', e.target.checked)} 
+                    style={{ width: '20px', height: '20px', cursor: 'pointer', accentColor: '#2ecc71' }} 
+                  />
+                  <span style={{ fontWeight: '700', fontSize: '15px', color: dia.activo ? '#166534' : '#64748b' }}>
+                    {dia.dia_semana}
+                  </span>
+                </div>
+
+                {/* Controles de Hora (Se apagan si el día no está activo) */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', opacity: dia.activo ? 1 : 0.4, pointerEvents: dia.activo ? 'auto' : 'none' }}>
+                  <input 
+                    type="time" 
+                    value={dia.hora_inicio} 
+                    onChange={(e) => handleHorarioChange(index, 'hora_inicio', e.target.value)} 
+                    style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', color: '#1e293b', fontWeight: '600', backgroundColor: '#ffffff', colorScheme: 'light' }} 
+                  />
+                  <span style={{ color: '#64748b', fontWeight: 'bold' }}>a</span>
+                  <input 
+                    type="time" 
+                    value={dia.hora_fin} 
+                    onChange={(e) => handleHorarioChange(index, 'hora_fin', e.target.value)} 
+                    style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', color: '#1e293b', fontWeight: '600', backgroundColor: '#ffffff', colorScheme: 'light' }} 
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <button 
+            onClick={handleGuardarHorarios} 
+            disabled={guardandoHorarios}
+            style={{ width: '100%', padding: '16px', backgroundColor: '#2ecc71', color: 'white', border: 'none', borderRadius: '8px', cursor: guardandoHorarios ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: '16px', marginTop: '25px', boxShadow: '0 4px 6px rgba(46, 204, 113, 0.2)' }}
+          >
+            {guardandoHorarios ? "⏳ Guardando..." : "💾 Guardar Horarios"}
+          </button>
+
+          {mensajeHorarios && (
+            <div style={{ marginTop: '15px', color: mensajeHorarios.includes('✅') ? '#166534' : '#b45309', backgroundColor: mensajeHorarios.includes('✅') ? '#dcfce7' : '#fef3c7', padding: '10px', borderRadius: '8px', textAlign: 'center', fontWeight: 'bold', fontSize: '14px' }}>
+              {mensajeHorarios}
+            </div>
+          )}
+
+        </div>
+
       </div>
     </div>
   );

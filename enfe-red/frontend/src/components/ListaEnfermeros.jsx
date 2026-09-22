@@ -82,7 +82,7 @@ const ListaEnfermeros = () => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             {enfermeros.map((enf) => (
               <div 
-                key={enf.usuario_id} 
+                key={enf.id} // <-- CORREGIDO ACÁ
                 style={{ 
                   backgroundColor: '#ffffff', 
                   padding: '22px 25px', 
@@ -114,7 +114,7 @@ const ListaEnfermeros = () => {
                 
                 {/* Botón de acción pro */}
                 <button 
-                  onClick={() => navigate(`/perfil/${enf.usuario_id}`)}
+                  onClick={() => navigate(`/perfil/${enf.id}`)} // <-- CORREGIDO ACÁ
                   style={{ padding: '12px 20px', backgroundColor: '#3498db', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 6px rgba(52, 152, 219, 0.2)', fontSize: '14px', flexShrink: 0 }}
                 >
                   Ver Perfil
