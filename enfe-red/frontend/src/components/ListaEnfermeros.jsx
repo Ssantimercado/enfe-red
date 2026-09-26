@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import MapaEnfermeros from './MapaEnfermeros';
 
 const ListaEnfermeros = () => {
   const [enfermeros, setEnfermeros] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
+  const [enfermeroSeleccionado, setEnfermeroSeleccionado] = useState(null);
   
   const navigate = useNavigate();
 
@@ -56,7 +58,7 @@ const ListaEnfermeros = () => {
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f8fafc', padding: '40px 20px', fontFamily: "'Segoe UI', Roboto, Helvetica, Arial, sans-serif" }}>
       
-      <div style={{ maxWidth: '750px', margin: '0 auto' }}>
+      <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
         
         {/* Cabecera con título y botón volver */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
@@ -79,10 +81,17 @@ const ListaEnfermeros = () => {
             <p style={{ color: '#64748b', fontSize: '15px', margin: 0 }}>No hay enfermeros registrados en este momento.</p>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <>
+            <MapaEnfermeros
+              enfermeros={enfermeros}
+              selectedId={enfermeroSeleccionado}
+              onSelect={setEnfermeroSeleccionado}
+            />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '24px' }}>
             {enfermeros.map((enf) => (
               <div 
                 key={enf.usuario_id} 
+                onClick={() => setEnfermeroSeleccionado(enf.usuario_id)}
                 style={{ 
                   backgroundColor: '#ffffff', 
                   padding: '22px 25px', 
@@ -91,7 +100,7 @@ const ListaEnfermeros = () => {
                   display: 'flex', 
                   justifyContent: 'space-between', 
                   alignItems: 'center', 
-                  border: '1px solid #f1f5f9',
+                  border: String(enfermeroSeleccionado) === String(enf.usuario_id) ? '2px solid #3498db' : '1px solid #f1f5f9',
                   transition: 'transform 0.2s ease, box-shadow 0.2s ease'
                 }}
               >
@@ -121,7 +130,8 @@ const ListaEnfermeros = () => {
                 </button>
               </div>
             ))}
-          </div>
+            </div>
+          </>
         )}
       </div>
     </div>

@@ -54,6 +54,39 @@ body {
   margin: 0;
 }
 
+.mapa-enfermeros {
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, .06);
+  text-align: left;
+}
+
+.mapa-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px;
+}
+
+.mapa-toolbar h2 { margin: 0 0 3px; color: #1e293b; font-size: 20px; }
+.mapa-toolbar p, .mapa-nota { margin: 0; color: #64748b; font-size: 13px; }
+.mapa-toolbar button { border: 0; border-radius: 8px; padding: 10px 14px; background: #2563eb; color: #fff; cursor: pointer; font-weight: 700; }
+.mapa-toolbar button:disabled { cursor: wait; opacity: .7; }
+.mapa-error { margin: 0; padding: 0 20px 12px; color: #b91c1c; font-size: 13px; }
+.mapa-nota { padding: 10px 20px 14px; }
+.mapa-leaflet { height: 390px; width: 100%; z-index: 0; }
+.enfermero-marker { display: grid; place-items: center; border: 3px solid #fff; border-radius: 50% 50% 50% 0; background: #0ea5e9; box-shadow: 0 2px 8px rgba(15, 23, 42, .3); transform: rotate(-45deg); }
+.enfermero-marker span { color: #fff; font-size: 18px; font-weight: 800; transform: rotate(45deg); }
+
+@media (max-width: 640px) {
+  .mapa-toolbar { align-items: flex-start; flex-direction: column; }
+  .mapa-toolbar button { width: 100%; }
+  .mapa-leaflet { height: 320px; }
+}
+
 #root {
   width: 1126px;
   max-width: 100%;
