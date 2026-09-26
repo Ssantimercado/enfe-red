@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import MapaEnfermeros from './MapaEnfermeros';
 
 const ListaEnfermeros = () => {
   const [enfermeros, setEnfermeros] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
+  const [enfermeroSeleccionado, setEnfermeroSeleccionado] = useState(null);
   
   const navigate = useNavigate();
 
@@ -27,7 +29,7 @@ const ListaEnfermeros = () => {
           setError(data.error || 'Error al cargar los enfermeros');
         }
       } catch (err) {
-        setError('Error de conexión con el servidor');
+        setError('Error de conexiÃ³n con el servidor');
       } finally {
         setCargando(false);
       }
@@ -38,14 +40,14 @@ const ListaEnfermeros = () => {
 
   if (cargando) return (
     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '70vh', fontFamily: "'Segoe UI', Roboto, sans-serif" }}>
-      <h3 style={{ color: '#3498db', fontWeight: '600' }}>⏳ Cargando cartilla de profesionales...</h3>
+      <h3 style={{ color: '#3498db', fontWeight: '600' }}>â³ Cargando cartilla de profesionales...</h3>
     </div>
   );
 
   if (error) return (
     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '70vh', fontFamily: "'Segoe UI', Roboto, sans-serif" }}>
       <div style={{ backgroundColor: '#fee2e2', padding: '20px 40px', borderRadius: '12px', border: '1px solid #f87171', color: '#ef4444', textAlign: 'center' }}>
-        <h3 style={{ margin: '0 0 15px 0' }}>⚠️ {error}</h3>
+        <h3 style={{ margin: '0 0 15px 0' }}>âš ï¸ {error}</h3>
         <button onClick={() => navigate('/home')} style={{ padding: '10px 20px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>
           Volver al Inicio
         </button>
@@ -56,21 +58,21 @@ const ListaEnfermeros = () => {
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f8fafc', padding: '40px 20px', fontFamily: "'Segoe UI', Roboto, Helvetica, Arial, sans-serif" }}>
       
-      <div style={{ maxWidth: '750px', margin: '0 auto' }}>
+      <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
         
-        {/* Cabecera con título y botón volver */}
+        {/* Cabecera con tÃ­tulo y botÃ³n volver */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
           <div>
             <h2 style={{ color: '#2c3e50', margin: '0 0 5px 0', fontSize: '28px', fontWeight: '800' }}>
               Enfermeros <span style={{ color: '#3498db' }}>Disponibles</span>
             </h2>
-            <p style={{ color: '#7f8c8d', margin: 0, fontSize: '14px' }}>Seleccioná un profesional para ver su perfil completo</p>
+            <p style={{ color: '#7f8c8d', margin: 0, fontSize: '14px' }}>SeleccionÃ¡ un profesional para ver su perfil completo</p>
           </div>
           <button 
             onClick={() => navigate('/home')}
             style={{ padding: '10px 18px', backgroundColor: '#ffffff', color: '#475569', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}
           >
-            ← Volver al Panel
+            â† Volver al Panel
           </button>
         </div>
         
@@ -79,10 +81,17 @@ const ListaEnfermeros = () => {
             <p style={{ color: '#64748b', fontSize: '15px', margin: 0 }}>No hay enfermeros registrados en este momento.</p>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <>
+            <MapaEnfermeros
+              enfermeros={enfermeros}
+              selectedId={enfermeroSeleccionado}
+              onSelect={setEnfermeroSeleccionado}
+            />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '24px' }}>
             {enfermeros.map((enf) => (
               <div 
-                key={enf.id} // <-- CORREGIDO ACÁ
+                key={enf.usuario_id}
+                onClick={() => setEnfermeroSeleccionado(enf.usuario_id)}
                 style={{ 
                   backgroundColor: '#ffffff', 
                   padding: '22px 25px', 
@@ -91,7 +100,7 @@ const ListaEnfermeros = () => {
                   display: 'flex', 
                   justifyContent: 'space-between', 
                   alignItems: 'center', 
-                  border: '1px solid #f1f5f9',
+                  border: String(enfermeroSeleccionado) === String(enf.usuario_id) ? '2px solid #3498db' : '1px solid #f1f5f9',
                   transition: 'transform 0.2s ease, box-shadow 0.2s ease'
                 }}
               >
@@ -107,21 +116,25 @@ const ListaEnfermeros = () => {
                       {enf.nombre} {enf.apellido}
                     </h3>
                     <span style={{ backgroundColor: '#dcfce7', color: '#166534', padding: '4px 12px', borderRadius: '20px', fontSize: '13px', fontWeight: '600', display: 'inline-block' }}>
-                      🩺 {enf.especialidad || 'General'}
+                      ðŸ©º {enf.especialidad || 'General'}
                     </span>
                   </div>
                 </div>
                 
-                {/* Botón de acción pro */}
+                {/* BotÃ³n de acciÃ³n pro */}
                 <button 
-                  onClick={() => navigate(`/perfil/${enf.id}`)} // <-- CORREGIDO ACÁ
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    navigate(`/perfil/${enf.usuario_id}`);
+                  }}
                   style={{ padding: '12px 20px', backgroundColor: '#3498db', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 6px rgba(52, 152, 219, 0.2)', fontSize: '14px', flexShrink: 0 }}
                 >
                   Ver Perfil
                 </button>
               </div>
             ))}
-          </div>
+            </div>
+          </>
         )}
       </div>
     </div>
