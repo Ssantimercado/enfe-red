@@ -1,17 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
-// Plantilla base para los días de la semana
-const diasBase = [
-  { dia_semana: 'Lunes', activo: false, hora_inicio: '08:00', hora_fin: '18:00' },
-  { dia_semana: 'Martes', activo: false, hora_inicio: '08:00', hora_fin: '18:00' },
-  { dia_semana: 'Miércoles', activo: false, hora_inicio: '08:00', hora_fin: '18:00' },
-  { dia_semana: 'Jueves', activo: false, hora_inicio: '08:00', hora_fin: '18:00' },
-  { dia_semana: 'Viernes', activo: false, hora_inicio: '08:00', hora_fin: '18:00' },
-  { dia_semana: 'Sábado', activo: false, hora_inicio: '09:00', hora_fin: '14:00' },
-  { dia_semana: 'Domingo', activo: false, hora_inicio: '09:00', hora_fin: '14:00' }
-];
-
 const PerfilEnfermero = () => {
   // Estados del Perfil
   const [datosEnfermero, setDatosEnfermero] = useState(null);
@@ -20,8 +9,11 @@ const PerfilEnfermero = () => {
   const [error, setError] = useState("");
   const [mensaje, setMensaje] = useState("");
 
-  // Estados de los Horarios
-  const [horarios, setHorarios] = useState(diasBase);
+  // Estados del Formulario de Horarios (Estilo de la imagen derecha)
+  const [diaSeleccionado, setDiaSeleccionado] = useState("Lunes");
+  const [estadoInicial, setEstadoInicial] = useState("Disponible");
+  const [horaDesde, setHoraDesde] = useState("08:00");
+  const [horaHasta, setHoraHasta] = useState("16:00");
   const [mensajeHorarios, setMensajeHorarios] = useState("");
   const [guardandoHorarios, setGuardandoHorarios] = useState(false);
 
@@ -49,25 +41,6 @@ const PerfilEnfermero = () => {
         setForm(dataPerfil);
       } catch (err) {
         setError(err.message);
-      }
-
-      // Cargar Horarios
-      try {
-        const resHorarios = await fetch("http://localhost:5000/api/perfil/enfermero/horarios", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (resHorarios.ok) {
-          const dataHorarios = await resHorarios.json();
-          if (dataHorarios && dataHorarios.length > 0) {
-            const horariosCargados = diasBase.map(base => {
-              const encontrado = dataHorarios.find(d => d.dia_semana === base.dia_semana);
-              return encontrado ? { ...base, ...encontrado } : base;
-            });
-            setHorarios(horariosCargados);
-          }
-        }
-      } catch (err) {
-        console.log("Aún no hay horarios guardados o el endpoint no está listo.");
       }
     };
 
@@ -106,17 +79,20 @@ const PerfilEnfermero = () => {
   };
 
   // ==========================================
-  // 3. MANEJO DE LA DISPONIBILIDAD
+  // 3. AGREGAR HORARIO (NUEVO DISEÑO)
   // ==========================================
-  const handleHorarioChange = (index, campo, valor) => {
-    const nuevosHorarios = [...horarios];
-    nuevosHorarios[index][campo] = valor;
-    setHorarios(nuevosHorarios);
-  };
-
-  const handleGuardarHorarios = async () => {
+  const handleAgregarHorario = async (e) => {
+    e.preventDefault();
     setGuardandoHorarios(true);
     setMensajeHorarios("");
+
+    const nuevoHorario = {
+      dia: diaSeleccionado,
+      estado: estadoInicial,
+      hora_inicio: horaDesde,
+      hora_fin: horaHasta
+    };
+
     try {
       const response = await fetch("http://localhost:5000/api/perfil/enfermero/horarios", {
         method: "POST",
@@ -124,17 +100,17 @@ const PerfilEnfermero = () => {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ horarios: horarios }),
+        body: JSON.stringify(nuevoHorario),
       });
       
       if (!response.ok) {
-        if(response.status === 404) throw new Error("La ruta del backend aún no existe (Falta Renzo)");
-        throw new Error("Error al guardar los horarios en la base de datos");
+        if (response.status === 404) throw new Error("La ruta del backend aún no existe");
+        throw new Error("Error al guardar el horario en la base de datos");
       }
       
-      setMensajeHorarios("✅ ¡Tus horarios se guardaron con éxito!");
+      setMensajeHorarios("✅ ¡Horario agregado con éxito!");
     } catch (err) {
-      setMensajeHorarios(`⚠️ Simulación local (Aviso: ${err.message})`);
+      setMensajeHorarios(`⚠️ Aviso: ${err.message}`);
     } finally {
       setGuardandoHorarios(false);
       setTimeout(() => setMensajeHorarios(""), 4000);
@@ -146,7 +122,7 @@ const PerfilEnfermero = () => {
   // ==========================================
   if (!datosEnfermero && !error) return (
     <div style={{ display: 'flex', justifyContent: 'center', marginTop: '100px', fontFamily: "'Segoe UI', Roboto, sans-serif" }}>
-      <h3 style={{ color: '#2ecc71', fontWeight: '600' }}>⏳ Cargando tu perfil profesional...</h3>
+      <h3 style={{ color: '#0077b6', fontWeight: '600' }}>⏳ Cargando tu perfil profesional...</h3>
     </div>
   );
 
@@ -168,8 +144,8 @@ const PerfilEnfermero = () => {
         
         {/* Cabecera general */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' }}>
-          <h2 style={{ color: '#2c3e50', margin: 0, fontSize: '28px', fontWeight: '800' }}>
-            Panel <span style={{ color: '#2ecc71' }}>Profesional</span>
+          <h2 style={{ color: '#0077b6', margin: 0, fontSize: '28px', fontWeight: '800' }}>
+            Panel <span style={{ color: '#0088cc' }}>Profesional</span>
           </h2>
           <button 
             onClick={() => navigate('/home')}
@@ -218,7 +194,7 @@ const PerfilEnfermero = () => {
               </div>
 
               <div style={{ display: 'flex', gap: '15px', marginTop: '15px' }}>
-                <button onClick={handleGuardar} style={{ flex: 1, padding: '14px', backgroundColor: '#2ecc71', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '15px' }}>
+                <button onClick={handleGuardar} style={{ flex: 1, padding: '14px', backgroundColor: '#0088cc', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '15px' }}>
                   💾 Guardar Cambios
                 </button>
                 <button onClick={() => setEditando(false)} style={{ flex: 1, padding: '14px', backgroundColor: '#ffffff', color: '#ef4444', border: '1px solid #f87171', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '15px' }}>
@@ -229,7 +205,7 @@ const PerfilEnfermero = () => {
           ) : (
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '25px', marginBottom: '30px' }}>
-                <div style={{ width: '80px', height: '80px', backgroundColor: '#dcfce7', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center', color: '#166534', fontSize: '28px', fontWeight: '800' }}>
+                <div style={{ width: '80px', height: '80px', backgroundColor: '#e0f2fe', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center', color: '#0077b6', fontSize: '28px', fontWeight: '800' }}>
                   {datosEnfermero.nombre?.charAt(0)}{datosEnfermero.apellido?.charAt(0)}
                 </div>
                 <div>
@@ -251,7 +227,7 @@ const PerfilEnfermero = () => {
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: '#64748b', fontWeight: '600' }}>Especialidad:</span>
-                    <span style={{ color: '#166534', fontWeight: '700', backgroundColor: '#dcfce7', padding: '2px 10px', borderRadius: '10px' }}>
+                    <span style={{ color: '#0077b6', fontWeight: '700', backgroundColor: '#e0f2fe', padding: '2px 10px', borderRadius: '10px' }}>
                       {datosEnfermero.especialidad || "No especificada"}
                     </span>
                   </div>
@@ -260,7 +236,7 @@ const PerfilEnfermero = () => {
 
               <button 
                 onClick={() => setEditando(true)} 
-                style={{ width: '100%', padding: '16px', backgroundColor: '#3498db', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px', boxShadow: '0 4px 6px rgba(52, 152, 219, 0.2)' }}
+                style={{ width: '100%', padding: '16px', backgroundColor: '#0088cc', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px', boxShadow: '0 4px 6px rgba(0, 136, 204, 0.2)' }}
               >
                 ✏️ Editar Perfil
               </button>
@@ -269,70 +245,81 @@ const PerfilEnfermero = () => {
         </div>
 
         {/* ==========================================
-            TARJETA 2: GESTIÓN DE DISPONIBILIDAD
+            TARJETA 2: GESTIÓN DE HORARIOS Y DISPONIBILIDAD (NUEVO DISEÑO)
             ========================================== */}
         <div style={{ backgroundColor: '#ffffff', padding: '35px', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', border: '1px solid #f1f5f9' }}>
           
-          <div style={{ borderBottom: '2px solid #f1f5f9', paddingBottom: '15px', marginBottom: '20px' }}>
-            <h3 style={{ color: '#1e293b', margin: 0, fontSize: '20px' }}>🕒 Mi Disponibilidad Horaria</h3>
-            <p style={{ color: '#64748b', margin: '5px 0 0 0', fontSize: '14px' }}>Marcá los días que trabajás y definí tu horario</p>
-          </div>
+          <h3 style={{ color: '#0077b6', margin: '0 0 25px 0', fontSize: '22px', fontWeight: '800', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+            📅 Gestión de Horarios y Disponibilidad
+          </h3>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {horarios.map((dia, index) => (
-              <div 
-                key={dia.dia_semana} 
-                style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'space-between', 
-                  padding: '16px', 
-                  backgroundColor: dia.activo ? '#f0fdf4' : '#f8fafc', 
-                  borderRadius: '12px', 
-                  border: `1px solid ${dia.activo ? '#bbf7d0' : '#e2e8f0'}`,
-                  transition: 'all 0.3s ease'
-                }}
-              >
-                {/* Switch y Día */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', width: '140px' }}>
-                  <input 
-                    type="checkbox" 
-                    checked={dia.activo} 
-                    onChange={(e) => handleHorarioChange(index, 'activo', e.target.checked)} 
-                    style={{ width: '20px', height: '20px', cursor: 'pointer', accentColor: '#2ecc71' }} 
-                  />
-                  <span style={{ fontWeight: '700', fontSize: '15px', color: dia.activo ? '#166534' : '#64748b' }}>
-                    {dia.dia_semana}
-                  </span>
-                </div>
-
-                {/* Controles de Hora (Se apagan si el día no está activo) */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', opacity: dia.activo ? 1 : 0.4, pointerEvents: dia.activo ? 'auto' : 'none' }}>
-                  <input 
-                    type="time" 
-                    value={dia.hora_inicio} 
-                    onChange={(e) => handleHorarioChange(index, 'hora_inicio', e.target.value)} 
-                    style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', color: '#1e293b', fontWeight: '600', backgroundColor: '#ffffff', colorScheme: 'light' }} 
-                  />
-                  <span style={{ color: '#64748b', fontWeight: 'bold' }}>a</span>
-                  <input 
-                    type="time" 
-                    value={dia.hora_fin} 
-                    onChange={(e) => handleHorarioChange(index, 'hora_fin', e.target.value)} 
-                    style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', color: '#1e293b', fontWeight: '600', backgroundColor: '#ffffff', colorScheme: 'light' }} 
-                  />
-                </div>
+          <form onSubmit={handleAgregarHorario} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            
+            {/* Fila 1: Día y Estado Inicial */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ color: '#0077b6', fontWeight: 'bold', fontSize: '14px' }}>Día:</label>
+                <select 
+                  value={diaSeleccionado} 
+                  onChange={(e) => setDiaSeleccionado(e.target.value)}
+                  style={{ width: '100%', backgroundColor: '#3b3e40', color: '#ffffff', border: '1px solid #2b2d2f', borderRadius: '8px', padding: '10px 14px', fontSize: '15px', outline: 'none' }}
+                >
+                  <option value="Lunes">Lunes</option>
+                  <option value="Martes">Martes</option>
+                  <option value="Miércoles">Miércoles</option>
+                  <option value="Jueves">Jueves</option>
+                  <option value="Viernes">Viernes</option>
+                  <option value="Sábado">Sábado</option>
+                  <option value="Domingo">Domingo</option>
+                </select>
               </div>
-            ))}
-          </div>
 
-          <button 
-            onClick={handleGuardarHorarios} 
-            disabled={guardandoHorarios}
-            style={{ width: '100%', padding: '16px', backgroundColor: '#2ecc71', color: 'white', border: 'none', borderRadius: '8px', cursor: guardandoHorarios ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: '16px', marginTop: '25px', boxShadow: '0 4px 6px rgba(46, 204, 113, 0.2)' }}
-          >
-            {guardandoHorarios ? "⏳ Guardando..." : "💾 Guardar Horarios"}
-          </button>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ color: '#0077b6', fontWeight: 'bold', fontSize: '14px' }}>Estado Inicial:</label>
+                <select 
+                  value={estadoInicial} 
+                  onChange={(e) => setEstadoInicial(e.target.value)}
+                  style={{ width: '100%', backgroundColor: '#3b3e40', color: '#ffffff', border: '1px solid #2b2d2f', borderRadius: '8px', padding: '10px 14px', fontSize: '15px', outline: 'none' }}
+                >
+                  <option value="Disponible">Disponible</option>
+                  <option value="Ocupado / Reservado">Ocupado / Reservado</option>
+                  <option value="En Pausa / No disponible">En Pausa / No disponible</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Fila 2: Desde y Hasta */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ color: '#0077b6', fontWeight: 'bold', fontSize: '14px' }}>Desde:</label>
+                <input 
+                  type="time" 
+                  value={horaDesde} 
+                  onChange={(e) => setHoraDesde(e.target.value)}
+                  style={{ width: '100%', backgroundColor: '#3b3e40', color: '#ffffff', border: '1px solid #2b2d2f', borderRadius: '8px', padding: '10px 14px', fontSize: '15px', outline: 'none', boxSizing: 'border-box', colorScheme: 'dark' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ color: '#0077b6', fontWeight: 'bold', fontSize: '14px' }}>Hasta:</label>
+                <input 
+                  type="time" 
+                  value={horaHasta} 
+                  onChange={(e) => setHoraHasta(e.target.value)}
+                  style={{ width: '100%', backgroundColor: '#3b3e40', color: '#ffffff', border: '1px solid #2b2d2f', borderRadius: '8px', padding: '10px 14px', fontSize: '15px', outline: 'none', boxSizing: 'border-box', colorScheme: 'dark' }}
+                />
+              </div>
+            </div>
+
+            {/* Botón Agregar */}
+            <button 
+              type="submit" 
+              disabled={guardandoHorarios}
+              style={{ width: '100%', padding: '14px', backgroundColor: '#0088cc', color: '#ffffff', border: 'none', borderRadius: '8px', cursor: guardandoHorarios ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: '16px', marginTop: '10px', boxShadow: '0 4px 6px rgba(0, 136, 204, 0.2)' }}
+            >
+              {guardandoHorarios ? "⏳ Guardando..." : "+ Agregar Horario"}
+            </button>
+          </form>
 
           {mensajeHorarios && (
             <div style={{ marginTop: '15px', color: mensajeHorarios.includes('✅') ? '#166534' : '#b45309', backgroundColor: mensajeHorarios.includes('✅') ? '#dcfce7' : '#fef3c7', padding: '10px', borderRadius: '8px', textAlign: 'center', fontWeight: 'bold', fontSize: '14px' }}>
