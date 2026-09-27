@@ -1,9 +1,11 @@
+from datetime import datetime
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity, create_access_token
+from sqlalchemy import or_
 
 from database import db
 from extensions import bcrypt
-from models.usuario_models import Usuario, Paciente, Enfermero
+from models.usuario_models import Usuario, Paciente, Enfermero, Disponibilidad
 
 usuario_bp = Blueprint('usuario_bp', __name__)
 
@@ -59,14 +61,13 @@ def registrar_usuario():
         rol=rol
     )
 
-    # Separar nombre y apellido automáticamente
     partes = nombre_completo.split(' ', 1)
     nombre = partes[0]
     apellido = partes[1] if len(partes) > 1 else ''
 
     try:
         db.session.add(nuevo_usuario)
-        db.session.flush() # Hace el insert para conseguir el nuevo_usuario.id sin cerrar la transacción
+        db.session.flush()
 
         if rol == 'paciente':
             nuevo_perfil = Paciente(
@@ -75,7 +76,6 @@ def registrar_usuario():
                 apellido=apellido
             )
         elif rol == 'enfermero':
-            # MAGIA ACÁ: Creamos una matrícula temporal única usando el ID del usuario
             matricula_temporal = f"PENDIENTE-{nuevo_usuario.id}"
             
             nuevo_perfil = Enfermero(
@@ -83,7 +83,7 @@ def registrar_usuario():
                 nombre=nombre,
                 apellido=apellido,
                 especialidad='General',
-                matricula=matricula_temporal  # Esto salva el Error 500
+                matricula=matricula_temporal
             )
         else:
             db.session.rollback()
@@ -95,6 +95,7 @@ def registrar_usuario():
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": "Error al guardar el usuario", "detalle": str(e)}), 500
+
 
 # ==========================================
 # 3. VISTA "MI PERFIL" DE PACIENTE (Pablo)
@@ -110,7 +111,6 @@ def perfil_paciente():
 
     paciente = Paciente.query.filter_by(usuario_id=usuario_id).first()
 
-    # Si es GET, devolvemos los datos
     if request.method == 'GET':
         datos_completos = usuario.to_dict()
         if not paciente:
@@ -122,7 +122,6 @@ def perfil_paciente():
             datos_completos.update(paciente.to_dict())
         return jsonify(datos_completos), 200
 
-    # Si es PUT, actualizamos los datos
     if request.method == 'PUT':
         data = request.get_json()
         if paciente:
@@ -133,7 +132,6 @@ def perfil_paciente():
             paciente.historial_medico = data.get('historial_medico', paciente.historial_medico)
             db.session.commit()
             
-            # Devolvemos el perfil actualizado
             datos_completos = usuario.to_dict()
             datos_completos.update(paciente.to_dict())
             return jsonify(datos_completos), 200
@@ -167,6 +165,15 @@ def perfil_enfermero():
             enfermero.apellido = data.get('apellido', enfermero.apellido)
             enfermero.especialidad = data.get('especialidad', enfermero.especialidad)
             enfermero.matricula = data.get('matricula', enfermero.matricula)
+            enfermero.telefono = data.get('telefono', enfermero.telefono)
+            enfermero.experiencia_anios = data.get('experiencia_anios', enfermero.experiencia_anios)
+            enfermero.descripcion = data.get('descripcion', enfermero.descripcion)
+            enfermero.direccion = data.get('direccion', enfermero.direccion)
+            enfermero.ciudad = data.get('ciudad', enfermero.ciudad)
+            enfermero.tarifa_hora = data.get('tarifa_hora', enfermero.tarifa_hora)
+            enfermero.disponible = data.get('disponible', enfermero.disponible)
+            enfermero.latitud = data.get('latitud', enfermero.latitud)
+            enfermero.longitud = data.get('longitud', enfermero.longitud)
             db.session.commit()
             
             datos_completos = usuario.to_dict()
@@ -175,22 +182,45 @@ def perfil_enfermero():
 
 
 # ==========================================
-# 5. MOCK PARA HORARIOS (Hasta que Renzo lo arme)
+# 5. GESTIÓN DE HORARIOS DE ENFERMERO (Integrado con tabla Disponibilidad)
 # ==========================================
 @usuario_bp.route('/perfil/enfermero/horarios', methods=['GET', 'POST'])
 @jwt_required()
 def gestionar_horarios():
     usuario_id = int(get_jwt_identity())
+    enfermero = Enfermero.query.filter_by(usuario_id=usuario_id).first()
     
-    # En un futuro acá Renzo va a leer/guardar en la tabla 'Disponibilidad'
+    if not enfermero:
+        return jsonify({"error": "Enfermero no encontrado"}), 404
+
     if request.method == 'GET':
-        # Simulamos que no hay horarios guardados todavía
-        return jsonify([]), 200
+        horarios = Disponibilidad.query.filter_by(enfermero_id=enfermero.id).all()
+        return jsonify([h.to_dict() for h in horarios]), 200
         
     if request.method == 'POST':
-        # Simulamos que lo recibimos y lo guardamos con éxito
-        data = request.get_json()
+        data = request.get_json() or {}
+        # Permite guardar un objeto de horario nuevo
+        dia_semana = data.get('dia_semana')
+        str_inicio = data.get('hora_inicio')
+        str_fin = data.get('hora_fin')
+        estado = data.get('estado', 'Disponible')
+
+        if dia_semana and str_inicio and str_fin:
+            hora_inicio = datetime.strptime(str_inicio, '%H:%M').time()
+            hora_fin = datetime.strptime(str_fin, '%H:%M').time()
+            nueva_disp = Disponibilidad(
+                enfermero_id=enfermero.id,
+                dia_semana=dia_semana,
+                hora_inicio=hora_inicio,
+                hora_fin=hora_fin,
+                estado=estado
+            )
+            db.session.add(nueva_disp)
+            db.session.commit()
+            return jsonify({"mensaje": "Horarios guardados con éxito", "disponibilidad": nueva_disp.to_dict()}), 201
+
         return jsonify({"mensaje": "Horarios guardados con éxito"}), 200
+
 
 # ==========================================
 # 6. OBTENER TODOS LOS ENFERMEROS (Para la Cartilla)
@@ -204,12 +234,13 @@ def obtener_enfermeros():
         usuario = Usuario.query.get(enfermero.usuario_id)
         if usuario:
             datos = enfermero.to_dict()
-            # Le pasamos el ID del usuario para que el frontend sepa a qué perfil entrar
             datos['id'] = usuario.id 
+            datos['usuario_id'] = usuario.id
             datos['email'] = usuario.email
             lista_enfermeros.append(datos)
             
     return jsonify(lista_enfermeros), 200
+
 
 # ==========================================
 # 7. OBTENER UN PERFIL POR ID (Para VerPerfiles.jsx)
@@ -223,7 +254,6 @@ def obtener_usuario_por_id(id):
 
     datos = usuario.to_dict()
     
-    # Si es enfermero, le sumamos sus datos profesionales
     if usuario.rol == 'enfermero':
         enfermero = Enfermero.query.filter_by(usuario_id=id).first()
         if enfermero:
@@ -231,12 +261,93 @@ def obtener_usuario_por_id(id):
             
     return jsonify(datos), 200
 
+
 # ==========================================
 # 8. OBTENER HORARIOS POR ID (Para VerPerfiles.jsx)
 # ==========================================
 @usuario_bp.route('/usuarios/<int:id>/horarios', methods=['GET'])
 @jwt_required()
 def obtener_horarios_por_id(id):
-    # Esto es temporal hasta que Renzo termine la tabla en la Base de Datos.
-    # Por ahora devolvemos una lista vacía para que no tire error el frontend.
-    return jsonify([]), 200
+    enfermero = Enfermero.query.filter_by(usuario_id=id).first()
+    if not enfermero:
+        return jsonify([]), 200
+    horarios = Disponibilidad.query.filter_by(enfermero_id=enfermero.id).all()
+    return jsonify([h.to_dict() for h in horarios]), 200
+
+
+# ==========================================
+# 9. SPRINT 3: API DE BÚSQUEDA AVANZADA Y FILTROS (Pablo)
+# ==========================================
+@usuario_bp.route('/enfermeros/buscar', methods=['GET'])
+def buscar_enfermeros():
+    # Parámetros de filtro que envía el Frontend por URL (?q=...&especialidad=...&precio_max=...)
+    texto = request.args.get('q', '').strip()
+    especialidad = request.args.get('especialidad', '').strip()
+    ciudad = request.args.get('ciudad', '').strip()
+    precio_max = request.args.get('precio_max', type=float)
+    disponible = request.args.get('disponible', '').strip()
+    dia_semana = request.args.get('dia_semana', '').strip()
+
+    # Parámetros de paginación
+    pagina = request.args.get('page', 1, type=int)
+    por_pagina = request.args.get('per_page', 10, type=int)
+
+    # Query base en SQLAlchemy
+    query = Enfermero.query.join(Usuario, Enfermero.usuario_id == Usuario.id)
+
+    # 1. Filtro por texto libre (nombre, apellido, especialidad o ciudad/zona)
+    if texto:
+        patron = f"%{texto}%"
+        query = query.filter(
+            or_(
+                Enfermero.nombre.ilike(patron),
+                Enfermero.apellido.ilike(patron),
+                Enfermero.especialidad.ilike(patron),
+                Enfermero.ciudad.ilike(patron),
+                Enfermero.direccion.ilike(patron)
+            )
+        )
+
+    # 2. Filtro exacto o parcial por especialidad
+    if especialidad:
+        query = query.filter(Enfermero.especialidad.ilike(f"%{especialidad}%"))
+
+    # 3. Filtro por ciudad / zona
+    if ciudad:
+        query = query.filter(Enfermero.ciudad.ilike(f"%{ciudad}%"))
+
+    # 4. Filtro por rango de precio máximo
+    if precio_max is not None:
+        query = query.filter(Enfermero.tarifa_hora <= precio_max)
+
+    # 5. Filtro por disponibilidad general (true/false)
+    if disponible.lower() == 'true':
+        query = query.filter(Enfermero.disponible.is_(True))
+    elif disponible.lower() == 'false':
+        query = query.filter(Enfermero.disponible.is_(False))
+
+    # 6. Filtro por día de atención en la tabla Disponibilidad
+    if dia_semana:
+        query = query.join(Disponibilidad).filter(
+            Disponibilidad.dia_semana.ilike(f"%{dia_semana}%"),
+            Disponibilidad.estado == 'Disponible'
+        )
+
+    # Evitar duplicados si hizo join con disponibilidades y paginar resultados
+    query = query.distinct()
+    paginacion = query.paginate(page=pagina, per_page=por_pagina, error_out=False)
+
+    resultados = []
+    for enf in paginacion.items:
+        datos_enf = enf.to_dict()
+        datos_enf['email'] = enf.usuario.email if enf.usuario else None
+        datos_enf['horarios'] = [d.to_dict() for d in enf.disponibilidades]
+        resultados.append(datos_enf)
+
+    return jsonify({
+        "pagina_actual": paginacion.page,
+        "por_pagina": paginacion.per_page,
+        "total_resultados": paginacion.total,
+        "total_paginas": paginacion.pages,
+        "enfermeros": resultados
+    }), 200
