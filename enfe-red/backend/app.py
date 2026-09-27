@@ -7,6 +7,7 @@ from flask_jwt_extended import JWTManager
 from database import db
 from extensions import bcrypt
 from routes.usuario_routes import usuario_bp
+from seed_sprint3 import inicializar_bd_sprint3
 
 load_dotenv()
 
@@ -23,13 +24,14 @@ db.init_app(app)
 jwt = JWTManager(app)
 bcrypt.init_app(app)
 
-# Registro de Blueprints del equipo (acá ya entra tu /api/perfil/paciente bueno)
+# Registro de Blueprints del equipo
 app.register_blueprint(usuario_bp, url_prefix='/api')
 
+# Crea tablas, agrega columnas nuevas del Sprint 3 y carga datos de prueba automáticamente
 with app.app_context():
     db.create_all()
+    inicializar_bd_sprint3()
 
-# Ruta raíz de prueba
 @app.route('/', methods=['GET'])
 def home():
     return jsonify({'mensaje': 'Servidor corriendo correctamente'}), 200
