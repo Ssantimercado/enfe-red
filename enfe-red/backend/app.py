@@ -15,7 +15,7 @@ app = Flask(__name__)
 CORS(app)
 
 # Configuración de base de datos y JWT
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'mysql+pymysql://root:root@localhost/enfe_red')
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'mysql+pymysql://root:Enfer-redCESIT2026@localhost/enfe_red')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'clave_secreta_super_segura_para_enfered_2026_32bytes')
 
