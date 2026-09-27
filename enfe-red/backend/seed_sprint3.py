@@ -23,7 +23,7 @@ def inicializar_bd_sprint3():
             db.session.execute(text(f"ALTER TABLE enfermeros {col};"))
             db.session.commit()
         except Exception:
-            db.session.rollback() # Si la columna ya existe, sigue de largo sin dar error
+            db.session.rollback()
 
     # 2. Crear el índice compuesto de optimización si no existe
     try:
@@ -34,7 +34,7 @@ def inicializar_bd_sprint3():
     except Exception:
         db.session.rollback()
 
-    # 3. Cargar los 4 enfermeros de prueba con coordenadas de Mendoza (solo si no existen)
+    # 3. Cargar los 4 enfermeros de prueba con coordenadas de Mendoza
     datos_prueba = [
         {
             "email": "laura.gomez@test.com", "nombre": "Laura", "apellido": "Gómez",
@@ -73,7 +73,8 @@ def inicializar_bd_sprint3():
     pass_hash = bcrypt.generate_password_hash("123456").decode('utf-8')
 
     for item in datos_prueba:
-        if not Usuario.query.filter_by(email=item["email"]).first():
+        usuario_existente = Usuario.query.filter_by(email=item["email"]).first()
+        if not usuario_existente:
             nuevo_u = Usuario(email=item["email"], password_hash=pass_hash, rol="enfermero")
             db.session.add(nuevo_u)
             db.session.flush()
@@ -94,6 +95,9 @@ def inicializar_bd_sprint3():
                     enfermero_id=nuevo_enf.id, dia_semana=dia,
                     hora_inicio=h_ini, hora_fin=h_fin, estado="Disponible"
                 ))
+        else:
+            # Si ya existía en tu BD, le actualiza la contraseña real '123456'
+            usuario_existente.password_hash = pass_hash
 
     db.session.commit()
     print("✅ BD verificada: Columnas e información de prueba del Sprint 3 listas.")

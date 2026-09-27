@@ -29,11 +29,14 @@ const Login = () => {
         if (data.rol) {
             localStorage.setItem('rol', data.rol);
         }
+        if (data.usuario) {
+            localStorage.setItem('usuario', JSON.stringify(data.usuario));
+        }
         
         setEmail('');
         setPassword('');
 
-        navigate('/home'); 
+        window.location.href = '/home'; 
 
     } catch (err) {
         setError(err.message);
