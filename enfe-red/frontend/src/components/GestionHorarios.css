@@ -1,0 +1,77 @@
+.horarios-container {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 24px;
+  font-family: Arial, sans-serif;
+}
+
+.horarios-title {
+  color: #0077b6;
+  font-size: 1.6rem;
+  font-weight: bold;
+  text-align: center;
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.horarios-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-label {
+  color: #0077b6;
+  font-weight: bold;
+  font-size: 0.95rem;
+}
+
+.dark-select,
+.dark-input {
+  width: 100%;
+  background-color: #3b3e40;
+  color: #ffffff;
+  border: 1px solid #2b2d2f;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 0.95rem;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.dark-select:focus,
+.dark-input:focus {
+  border-color: #0088cc;
+}
+
+.btn-agregar {
+  width: 100%;
+  background-color: #0088cc;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 1rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.btn-agregar:hover {
+  background-color: #006699;
+}

@@ -8,24 +8,32 @@ function VerPerfiles() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [perfil, setPerfil] = useState(null);
+  const [horarios, setHorarios] = useState([]); // <-- NUEVO ESTADO PARA LOS HORARIOS
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    const obtenerPerfil = async () => {
+    const obtenerDatos = async () => {
       try {
         setCargando(true);
-        
         const token = localStorage.getItem("token");
+        const config = { headers: { Authorization: `Bearer ${token}` } };
 
-        const respuesta = await axios.get(`${API_URL}/api/usuarios/${id}`, {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        });
-        
-        setPerfil(respuesta.data);
+        // 1. Cargar Perfil
+        const respuestaPerfil = await axios.get(`${API_URL}/api/usuarios/${id}`, config);
+        setPerfil(respuestaPerfil.data);
         setError(null);
+
+        // 2. Cargar Horarios de este enfermero (Preparado para el backend de Renzo)
+        try {
+          // Acá se asume que Renzo va a crear esta ruta pública o compartida para leer los horarios de un ID
+          const respuestaHorarios = await axios.get(`${API_URL}/api/usuarios/${id}/horarios`, config);
+          setHorarios(respuestaHorarios.data || []);
+        } catch (errHorarios) {
+          console.log("Los horarios aún no están disponibles o el endpoint falta.");
+          setHorarios([]); // Lo dejamos vacío si falla, para que no rompa la página del perfil
+        }
+
       } catch (err) {
         if (err.response?.status === 404) {
           setError("No se encontró este perfil de enfermero.");
@@ -37,7 +45,7 @@ function VerPerfiles() {
       }
     };
 
-    obtenerPerfil();
+    obtenerDatos();
   }, [id]);
 
   // Pantallas de carga y error estilizadas
@@ -57,6 +65,9 @@ function VerPerfiles() {
       </div>
     </div>
   );
+
+  // Filtramos solo los días que el enfermero marcó como activos
+  const diasActivos = horarios.filter(h => h.activo);
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f8fafc', padding: '40px 20px', fontFamily: "'Segoe UI', Roboto, Helvetica, Arial, sans-serif" }}>
@@ -91,7 +102,7 @@ function VerPerfiles() {
             </div>
           </div>
 
-          <div style={{ backgroundColor: '#f8fafc', padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+          <div style={{ backgroundColor: '#f8fafc', padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '25px' }}>
             <h3 style={{ margin: '0 0 15px 0', color: '#334155', fontSize: '18px' }}>Datos Profesionales</h3>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
@@ -108,6 +119,32 @@ function VerPerfiles() {
                 <span style={{ color: '#1e293b', fontWeight: '700' }}>{perfil.email}</span>
               </div>
             </div>
+          </div>
+
+          {/* ==========================================
+              NUEVA SECCIÓN: HORARIOS DEL ENFERMERO
+              ========================================== */}
+          <div style={{ backgroundColor: '#f0fdf4', padding: '20px', borderRadius: '12px', border: '1px solid #bbf7d0' }}>
+            <h3 style={{ margin: '0 0 15px 0', color: '#166534', fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              🕒 Horarios de Atención
+            </h3>
+            
+            {diasActivos.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {diasActivos.map((dia, index) => (
+                  <div key={index} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: index !== diasActivos.length - 1 ? '1px solid #dcfce7' : 'none', paddingBottom: index !== diasActivos.length - 1 ? '10px' : '0' }}>
+                    <span style={{ color: '#15803d', fontWeight: '700' }}>{dia.dia_semana}</span>
+                    <span style={{ color: '#1e293b', fontWeight: '600' }}>
+                      {dia.hora_inicio} a {dia.hora_fin} hs
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ textAlign: 'center', color: '#64748b', padding: '10px 0', fontStyle: 'italic' }}>
+                El profesional aún no ha configurado sus horarios.
+              </div>
+            )}
           </div>
 
         </div>

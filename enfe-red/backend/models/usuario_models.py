@@ -15,7 +15,6 @@ class Usuario(db.Model):
     def __repr__(self):
         return f'<Usuario {self.email}>'
 
-    # Método para convertir a JSON fácilmente en tu ruta
     def to_dict(self):
         return {
             "id": self.id,
@@ -29,7 +28,6 @@ class Paciente(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False, unique=True)
     
-    # Agregamos los datos personales directamente al perfil
     nombre = db.Column(db.String(100), nullable=True)
     apellido = db.Column(db.String(100), nullable=True)
     direccion = db.Column(db.String(200), nullable=True)
@@ -51,16 +49,61 @@ class Enfermero(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False, unique=True)
     
-    # Datos personales y profesionales
-    nombre = db.Column(db.String(100), nullable=True)
-    apellido = db.Column(db.String(100), nullable=True)
+    # Datos personales y profesionales (con index=True para optimizar búsquedas en MySQL)
+    nombre = db.Column(db.String(100), nullable=True, index=True)
+    apellido = db.Column(db.String(100), nullable=True, index=True)
     matricula = db.Column(db.String(50), unique=True, nullable=False)
-    especialidad = db.Column(db.String(100), nullable=True)
+    especialidad = db.Column(db.String(100), nullable=True, index=True)
+    
+    # Campos para filtros, perfil y geolocalización (Sprint 2 y 3)
+    telefono = db.Column(db.String(20), nullable=True)
+    experiencia_anios = db.Column(db.Integer, default=0)
+    descripcion = db.Column(db.Text, nullable=True)
+    direccion = db.Column(db.String(200), nullable=True)
+    ciudad = db.Column(db.String(100), nullable=True, index=True)
+    tarifa_hora = db.Column(db.Float, default=0.0, index=True)
+    disponible = db.Column(db.Boolean, default=True, index=True)
+    latitud = db.Column(db.Float, nullable=True)
+    longitud = db.Column(db.Float, nullable=True)
+
+    disponibilidades = db.relationship('Disponibilidad', backref='enfermero', cascade="all, delete-orphan")
     
     def to_dict(self):
         return {
+            "id": self.usuario_id,          # Para VerPerfiles.jsx
+            "usuario_id": self.usuario_id,  # Para ListaEnfermeros.jsx y Mapa de Germán
+            "enfermero_id": self.id,
             "nombre": self.nombre,
             "apellido": self.apellido,
             "matricula": self.matricula,
-            "especialidad": self.especialidad
+            "especialidad": self.especialidad,
+            "telefono": self.telefono,
+            "experiencia_anios": self.experiencia_anios,
+            "descripcion": self.descripcion,
+            "direccion": self.direccion,
+            "ciudad": self.ciudad,
+            "tarifa_hora": self.tarifa_hora,
+            "disponible": self.disponible,
+            "latitud": self.latitud,
+            "longitud": self.longitud
+        }
+
+class Disponibilidad(db.Model):
+    __tablename__ = 'disponibilidades'
+
+    id = db.Column(db.Integer, primary_key=True)
+    enfermero_id = db.Column(db.Integer, db.ForeignKey('enfermeros.id'), nullable=False)
+    dia_semana = db.Column(db.String(20), nullable=False)
+    hora_inicio = db.Column(db.Time, nullable=False)
+    hora_fin = db.Column(db.Time, nullable=False)
+    estado = db.Column(db.String(20), default='Disponible')
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "enfermero_id": self.enfermero_id,
+            "dia_semana": self.dia_semana,
+            "hora_inicio": self.hora_inicio.strftime('%H:%M') if self.hora_inicio else None,
+            "hora_fin": self.hora_fin.strftime('%H:%M') if self.hora_fin else None,
+            "estado": self.estado
         }

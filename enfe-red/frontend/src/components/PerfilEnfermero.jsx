@@ -2,41 +2,54 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
 const PerfilEnfermero = () => {
+  // Estados del Perfil
   const [datosEnfermero, setDatosEnfermero] = useState(null);
   const [editando, setEditando] = useState(false);
   const [form, setForm] = useState({});
   const [error, setError] = useState("");
   const [mensaje, setMensaje] = useState("");
 
+  // Estados del Formulario de Horarios (Estilo de la imagen derecha)
+  const [diaSeleccionado, setDiaSeleccionado] = useState("Lunes");
+  const [estadoInicial, setEstadoInicial] = useState("Disponible");
+  const [horaDesde, setHoraDesde] = useState("08:00");
+  const [horaHasta, setHoraHasta] = useState("16:00");
+  const [mensajeHorarios, setMensajeHorarios] = useState("");
+  const [guardandoHorarios, setGuardandoHorarios] = useState(false);
+
   const navigate = useNavigate();
   const token = localStorage.getItem("token");
 
-  const cargarPerfil = async () => {
-    if (!token) {
-      setError("Acceso denegado. Iniciá sesión primero.");
-      return;
-    }
-    try {
-      const response = await fetch(
-        "http://localhost:5000/api/perfil/enfermero",
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
-      if (!response.ok)
-        throw new Error("Error al obtener los datos del enfermero");
-      const data = await response.json();
-      setDatosEnfermero(data);
-      setForm(data);
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-
+  // ==========================================
+  // 1. CARGA DE DATOS AL INICIAR
+  // ==========================================
   useEffect(() => {
-    cargarPerfil();
-  }, []);
+    const cargarDatos = async () => {
+      if (!token) {
+        setError("Acceso denegado. Iniciá sesión primero.");
+        return;
+      }
+      
+      // Cargar Perfil
+      try {
+        const resPerfil = await fetch("http://localhost:5000/api/perfil/enfermero", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!resPerfil.ok) throw new Error("Error al obtener los datos del enfermero");
+        const dataPerfil = await resPerfil.json();
+        setDatosEnfermero(dataPerfil);
+        setForm(dataPerfil);
+      } catch (err) {
+        setError(err.message);
+      }
+    };
 
+    cargarDatos();
+  }, [token]);
+
+  // ==========================================
+  // 2. MANEJO DEL PERFIL PROFESIONAL
+  // ==========================================
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
@@ -44,17 +57,14 @@ const PerfilEnfermero = () => {
   const handleGuardar = async () => {
     try {
       setError("");
-      const response = await fetch(
-        "http://localhost:5000/api/perfil/enfermero",
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(form),
-        }
-      );
+      const response = await fetch("http://localhost:5000/api/perfil/enfermero", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(form),
+      });
       if (!response.ok) throw new Error("Error al guardar los cambios");
       
       const data = await response.json();
@@ -68,9 +78,51 @@ const PerfilEnfermero = () => {
     }
   };
 
+  // ==========================================
+  // 3. AGREGAR HORARIO (NUEVO DISEÑO)
+  // ==========================================
+  const handleAgregarHorario = async (e) => {
+    e.preventDefault();
+    setGuardandoHorarios(true);
+    setMensajeHorarios("");
+
+    const nuevoHorario = {
+      dia: diaSeleccionado,
+      estado: estadoInicial,
+      hora_inicio: horaDesde,
+      hora_fin: horaHasta
+    };
+
+    try {
+      const response = await fetch("http://localhost:5000/api/perfil/enfermero/horarios", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(nuevoHorario),
+      });
+      
+      if (!response.ok) {
+        if (response.status === 404) throw new Error("La ruta del backend aún no existe");
+        throw new Error("Error al guardar el horario en la base de datos");
+      }
+      
+      setMensajeHorarios("✅ ¡Horario agregado con éxito!");
+    } catch (err) {
+      setMensajeHorarios(`⚠️ Aviso: ${err.message}`);
+    } finally {
+      setGuardandoHorarios(false);
+      setTimeout(() => setMensajeHorarios(""), 4000);
+    }
+  };
+
+  // ==========================================
+  // RENDERIZADOS CONDICIONALES
+  // ==========================================
   if (!datosEnfermero && !error) return (
     <div style={{ display: 'flex', justifyContent: 'center', marginTop: '100px', fontFamily: "'Segoe UI', Roboto, sans-serif" }}>
-      <h3 style={{ color: '#2ecc71', fontWeight: '600' }}>⏳ Cargando tu perfil profesional...</h3>
+      <h3 style={{ color: '#0077b6', fontWeight: '600' }}>⏳ Cargando tu perfil profesional...</h3>
     </div>
   );
 
@@ -88,11 +140,12 @@ const PerfilEnfermero = () => {
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f8fafc', padding: '40px 20px', fontFamily: "'Segoe UI', Roboto, Helvetica, Arial, sans-serif" }}>
       
-      <div style={{ maxWidth: '600px', margin: '0 auto' }}>
+      <div style={{ maxWidth: '650px', margin: '0 auto' }}>
         
+        {/* Cabecera general */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' }}>
-          <h2 style={{ color: '#2c3e50', margin: 0, fontSize: '28px', fontWeight: '800' }}>
-            Perfil <span style={{ color: '#2ecc71' }}>Profesional</span>
+          <h2 style={{ color: '#0077b6', margin: 0, fontSize: '28px', fontWeight: '800' }}>
+            Panel <span style={{ color: '#0088cc' }}>Profesional</span>
           </h2>
           <button 
             onClick={() => navigate('/home')}
@@ -107,13 +160,11 @@ const PerfilEnfermero = () => {
             ✅ {mensaje}
           </div>
         )}
-        {error && (
-          <div style={{ backgroundColor: '#fee2e2', color: '#ef4444', padding: '12px', borderRadius: '8px', border: '1px solid #f87171', marginBottom: '20px', textAlign: 'center', fontWeight: '600' }}>
-            ❌ {error}
-          </div>
-        )}
 
-        <div style={{ backgroundColor: '#ffffff', padding: '35px', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', border: '1px solid #f1f5f9' }}>
+        {/* ==========================================
+            TARJETA 1: PERFIL PROFESIONAL
+            ========================================== */}
+        <div style={{ backgroundColor: '#ffffff', padding: '35px', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', border: '1px solid #f1f5f9', marginBottom: '30px' }}>
           
           {editando ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -143,7 +194,7 @@ const PerfilEnfermero = () => {
               </div>
 
               <div style={{ display: 'flex', gap: '15px', marginTop: '15px' }}>
-                <button onClick={handleGuardar} style={{ flex: 1, padding: '14px', backgroundColor: '#2ecc71', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '15px' }}>
+                <button onClick={handleGuardar} style={{ flex: 1, padding: '14px', backgroundColor: '#0088cc', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '15px' }}>
                   💾 Guardar Cambios
                 </button>
                 <button onClick={() => setEditando(false)} style={{ flex: 1, padding: '14px', backgroundColor: '#ffffff', color: '#ef4444', border: '1px solid #f87171', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '15px' }}>
@@ -154,7 +205,7 @@ const PerfilEnfermero = () => {
           ) : (
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '25px', marginBottom: '30px' }}>
-                <div style={{ width: '80px', height: '80px', backgroundColor: '#dcfce7', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center', color: '#166534', fontSize: '28px', fontWeight: '800' }}>
+                <div style={{ width: '80px', height: '80px', backgroundColor: '#e0f2fe', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center', color: '#0077b6', fontSize: '28px', fontWeight: '800' }}>
                   {datosEnfermero.nombre?.charAt(0)}{datosEnfermero.apellido?.charAt(0)}
                 </div>
                 <div>
@@ -169,7 +220,6 @@ const PerfilEnfermero = () => {
 
               <div style={{ backgroundColor: '#f8fafc', padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '25px' }}>
                 <h3 style={{ margin: '0 0 15px 0', color: '#334155', fontSize: '18px' }}>Información Registrada</h3>
-                
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #e2e8f0', paddingBottom: '10px' }}>
                     <span style={{ color: '#64748b', fontWeight: '600' }}>Matrícula:</span>
@@ -177,7 +227,7 @@ const PerfilEnfermero = () => {
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: '#64748b', fontWeight: '600' }}>Especialidad:</span>
-                    <span style={{ color: '#166534', fontWeight: '700', backgroundColor: '#dcfce7', padding: '2px 10px', borderRadius: '10px' }}>
+                    <span style={{ color: '#0077b6', fontWeight: '700', backgroundColor: '#e0f2fe', padding: '2px 10px', borderRadius: '10px' }}>
                       {datosEnfermero.especialidad || "No especificada"}
                     </span>
                   </div>
@@ -186,13 +236,99 @@ const PerfilEnfermero = () => {
 
               <button 
                 onClick={() => setEditando(true)} 
-                style={{ width: '100%', padding: '16px', backgroundColor: '#3498db', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px', boxShadow: '0 4px 6px rgba(52, 152, 219, 0.2)' }}
+                style={{ width: '100%', padding: '16px', backgroundColor: '#0088cc', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px', boxShadow: '0 4px 6px rgba(0, 136, 204, 0.2)' }}
               >
                 ✏️ Editar Perfil
               </button>
             </div>
           )}
         </div>
+
+        {/* ==========================================
+            TARJETA 2: GESTIÓN DE HORARIOS Y DISPONIBILIDAD (NUEVO DISEÑO)
+            ========================================== */}
+        <div style={{ backgroundColor: '#ffffff', padding: '35px', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', border: '1px solid #f1f5f9' }}>
+          
+          <h3 style={{ color: '#0077b6', margin: '0 0 25px 0', fontSize: '22px', fontWeight: '800', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+            📅 Gestión de Horarios y Disponibilidad
+          </h3>
+
+          <form onSubmit={handleAgregarHorario} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            
+            {/* Fila 1: Día y Estado Inicial */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ color: '#0077b6', fontWeight: 'bold', fontSize: '14px' }}>Día:</label>
+                <select 
+                  value={diaSeleccionado} 
+                  onChange={(e) => setDiaSeleccionado(e.target.value)}
+                  style={{ width: '100%', backgroundColor: '#3b3e40', color: '#ffffff', border: '1px solid #2b2d2f', borderRadius: '8px', padding: '10px 14px', fontSize: '15px', outline: 'none' }}
+                >
+                  <option value="Lunes">Lunes</option>
+                  <option value="Martes">Martes</option>
+                  <option value="Miércoles">Miércoles</option>
+                  <option value="Jueves">Jueves</option>
+                  <option value="Viernes">Viernes</option>
+                  <option value="Sábado">Sábado</option>
+                  <option value="Domingo">Domingo</option>
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ color: '#0077b6', fontWeight: 'bold', fontSize: '14px' }}>Estado Inicial:</label>
+                <select 
+                  value={estadoInicial} 
+                  onChange={(e) => setEstadoInicial(e.target.value)}
+                  style={{ width: '100%', backgroundColor: '#3b3e40', color: '#ffffff', border: '1px solid #2b2d2f', borderRadius: '8px', padding: '10px 14px', fontSize: '15px', outline: 'none' }}
+                >
+                  <option value="Disponible">Disponible</option>
+                  <option value="Ocupado / Reservado">Ocupado / Reservado</option>
+                  <option value="En Pausa / No disponible">En Pausa / No disponible</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Fila 2: Desde y Hasta */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ color: '#0077b6', fontWeight: 'bold', fontSize: '14px' }}>Desde:</label>
+                <input 
+                  type="time" 
+                  value={horaDesde} 
+                  onChange={(e) => setHoraDesde(e.target.value)}
+                  style={{ width: '100%', backgroundColor: '#3b3e40', color: '#ffffff', border: '1px solid #2b2d2f', borderRadius: '8px', padding: '10px 14px', fontSize: '15px', outline: 'none', boxSizing: 'border-box', colorScheme: 'dark' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ color: '#0077b6', fontWeight: 'bold', fontSize: '14px' }}>Hasta:</label>
+                <input 
+                  type="time" 
+                  value={horaHasta} 
+                  onChange={(e) => setHoraHasta(e.target.value)}
+                  style={{ width: '100%', backgroundColor: '#3b3e40', color: '#ffffff', border: '1px solid #2b2d2f', borderRadius: '8px', padding: '10px 14px', fontSize: '15px', outline: 'none', boxSizing: 'border-box', colorScheme: 'dark' }}
+                />
+              </div>
+            </div>
+
+            {/* Botón Agregar */}
+            <button 
+              type="submit" 
+              disabled={guardandoHorarios}
+              style={{ width: '100%', padding: '14px', backgroundColor: '#0088cc', color: '#ffffff', border: 'none', borderRadius: '8px', cursor: guardandoHorarios ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: '16px', marginTop: '10px', boxShadow: '0 4px 6px rgba(0, 136, 204, 0.2)' }}
+            >
+              {guardandoHorarios ? "⏳ Guardando..." : "+ Agregar Horario"}
+            </button>
+          </form>
+
+          {mensajeHorarios && (
+            <div style={{ marginTop: '15px', color: mensajeHorarios.includes('✅') ? '#166534' : '#b45309', backgroundColor: mensajeHorarios.includes('✅') ? '#dcfce7' : '#fef3c7', padding: '10px', borderRadius: '8px', textAlign: 'center', fontWeight: 'bold', fontSize: '14px' }}>
+              {mensajeHorarios}
+            </div>
+          )}
+
+        </div>
+
       </div>
     </div>
   );
