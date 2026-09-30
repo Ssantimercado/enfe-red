@@ -17,10 +17,10 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* RUTA RAÍZ: Si hay token va al Home, si no, va al Login */}
+        {/* RUTA RAÍZ: al abrir la aplicación siempre comenzamos en Login */}
         <Route 
           path="/" 
-          element={tieneToken() ? <Navigate to="/home" /> : <Navigate to="/login" />} 
+          element={<Navigate to="/login" replace />} 
         />
         
         {/* ==========================================
