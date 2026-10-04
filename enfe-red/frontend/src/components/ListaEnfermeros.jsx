@@ -29,7 +29,7 @@ const ListaEnfermeros = () => {
           setError(data.error || 'Error al cargar los enfermeros');
         }
       } catch (err) {
-        setError('Error de conexiÃ³n con el servidor');
+        setError('Error de conexión con el servidor');
       } finally {
         setCargando(false);
       }
@@ -40,14 +40,14 @@ const ListaEnfermeros = () => {
 
   if (cargando) return (
     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '70vh', fontFamily: "'Segoe UI', Roboto, sans-serif" }}>
-      <h3 style={{ color: '#3498db', fontWeight: '600' }}>â³ Cargando cartilla de profesionales...</h3>
+      <h3 style={{ color: '#3498db', fontWeight: '600' }}>⏳ Cargando cartilla de profesionales...</h3>
     </div>
   );
 
   if (error) return (
     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '70vh', fontFamily: "'Segoe UI', Roboto, sans-serif" }}>
       <div style={{ backgroundColor: '#fee2e2', padding: '20px 40px', borderRadius: '12px', border: '1px solid #f87171', color: '#ef4444', textAlign: 'center' }}>
-        <h3 style={{ margin: '0 0 15px 0' }}>âš ï¸ {error}</h3>
+        <h3 style={{ margin: '0 0 15px 0' }}>⚠️ {error}</h3>
         <button onClick={() => navigate('/home')} style={{ padding: '10px 20px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>
           Volver al Inicio
         </button>
@@ -60,19 +60,19 @@ const ListaEnfermeros = () => {
       
       <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
         
-        {/* Cabecera con tÃ­tulo y botÃ³n volver */}
+        {/* Cabecera con título y botón volver */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
           <div>
             <h2 style={{ color: '#2c3e50', margin: '0 0 5px 0', fontSize: '28px', fontWeight: '800' }}>
               Enfermeros <span style={{ color: '#3498db' }}>Disponibles</span>
             </h2>
-            <p style={{ color: '#7f8c8d', margin: 0, fontSize: '14px' }}>SeleccionÃ¡ un profesional para ver su perfil completo</p>
+            <p style={{ color: '#7f8c8d', margin: 0, fontSize: '14px' }}>Seleccioná un profesional para ver su perfil completo</p>
           </div>
           <button 
             onClick={() => navigate('/home')}
             style={{ padding: '10px 18px', backgroundColor: '#ffffff', color: '#475569', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}
           >
-            â† Volver al Panel
+            ← Volver al Panel
           </button>
         </div>
         
@@ -116,12 +116,12 @@ const ListaEnfermeros = () => {
                       {enf.nombre} {enf.apellido}
                     </h3>
                     <span style={{ backgroundColor: '#dcfce7', color: '#166534', padding: '4px 12px', borderRadius: '20px', fontSize: '13px', fontWeight: '600', display: 'inline-block' }}>
-                      ðŸ©º {enf.especialidad || 'General'}
+                      🩺 {enf.especialidad || 'General'}
                     </span>
                   </div>
                 </div>
                 
-                {/* BotÃ³n de acciÃ³n pro */}
+                {/* Botón de acción pro */}
                 <button 
                   onClick={(event) => {
                     event.stopPropagation();

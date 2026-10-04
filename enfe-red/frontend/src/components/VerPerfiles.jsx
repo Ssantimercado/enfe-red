@@ -67,8 +67,8 @@ function VerPerfiles() {
   );
 
   // Filtramos solo los días que el enfermero marcó como activos
-  const diasActivos = horarios.filter(h => h.activo);
-
+  const diasActivos = horarios.filter(h => h.estado === 'Disponible' || h.estado === 'disponible' || h.disponible !== false);
+  
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f8fafc', padding: '40px 20px', fontFamily: "'Segoe UI', Roboto, Helvetica, Arial, sans-serif" }}>
       

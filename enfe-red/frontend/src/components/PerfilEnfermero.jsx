@@ -9,7 +9,9 @@ const PerfilEnfermero = () => {
   const [error, setError] = useState("");
   const [mensaje, setMensaje] = useState("");
 
-  // Estados del Formulario de Horarios (Estilo de la imagen derecha)
+  // Estados del Formulario de Horarios
+  const [horariosList, setHorariosList] = useState([]);
+  const [cargandoHorariosList, setCargandoHorariosList] = useState(true);
   const [diaSeleccionado, setDiaSeleccionado] = useState("Lunes");
   const [estadoInicial, setEstadoInicial] = useState("Disponible");
   const [horaDesde, setHoraDesde] = useState("08:00");
@@ -19,6 +21,24 @@ const PerfilEnfermero = () => {
 
   const navigate = useNavigate();
   const token = localStorage.getItem("token");
+
+  // Función para pedir los horarios guardados
+  const obtenerHorarios = async () => {
+    try {
+      setCargandoHorariosList(true);
+      const res = await fetch("http://localhost:5000/api/perfil/enfermero/horarios", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setHorariosList(data);
+      }
+    } catch (err) {
+      console.error("Error al cargar horarios:", err);
+    } finally {
+      setCargandoHorariosList(false);
+    }
+  };
 
   // ==========================================
   // 1. CARGA DE DATOS AL INICIAR
@@ -42,6 +62,9 @@ const PerfilEnfermero = () => {
       } catch (err) {
         setError(err.message);
       }
+
+      // Cargar Horarios
+      await obtenerHorarios();
     };
 
     cargarDatos();
@@ -79,7 +102,7 @@ const PerfilEnfermero = () => {
   };
 
   // ==========================================
-  // 3. AGREGAR HORARIO (NUEVO DISEÑO)
+  // 3. AGREGAR HORARIO
   // ==========================================
   const handleAgregarHorario = async (e) => {
     e.preventDefault();
@@ -109,12 +132,25 @@ const PerfilEnfermero = () => {
       }
       
       setMensajeHorarios("✅ ¡Horario agregado con éxito!");
+      
+      // Volvemos a pedir los horarios actualizados a la BD
+      await obtenerHorarios();
     } catch (err) {
       setMensajeHorarios(`⚠️ Aviso: ${err.message}`);
     } finally {
       setGuardandoHorarios(false);
       setTimeout(() => setMensajeHorarios(""), 4000);
     }
+  };
+
+  // Helper para el color del badge de estado
+  const getBadgeStyle = (estado) => {
+    if (estado?.includes("Disponible")) {
+      return { backgroundColor: '#dcfce7', color: '#166534' };
+    } else if (estado?.includes("Ocupado")) {
+      return { backgroundColor: '#fee2e2', color: '#991b1b' };
+    }
+    return { backgroundColor: '#fef3c7', color: '#92400e' };
   };
 
   // ==========================================
@@ -245,7 +281,7 @@ const PerfilEnfermero = () => {
         </div>
 
         {/* ==========================================
-            TARJETA 2: GESTIÓN DE HORARIOS Y DISPONIBILIDAD (NUEVO DISEÑO)
+            TARJETA 2: GESTIÓN DE HORARIOS Y DISPONIBILIDAD
             ========================================== */}
         <div style={{ backgroundColor: '#ffffff', padding: '35px', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', border: '1px solid #f1f5f9' }}>
           
@@ -253,6 +289,7 @@ const PerfilEnfermero = () => {
             📅 Gestión de Horarios y Disponibilidad
           </h3>
 
+          {/* FORMULARIO AGREGAR HORARIO */}
           <form onSubmit={handleAgregarHorario} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             
             {/* Fila 1: Día y Estado Inicial */}
@@ -326,6 +363,42 @@ const PerfilEnfermero = () => {
               {mensajeHorarios}
             </div>
           )}
+
+          {/* LISTADO DE HORARIOS REGISTRADOS */}
+          <div style={{ marginTop: '30px', borderTop: '2px dashed #e2e8f0', paddingTop: '20px' }}>
+            <h4 style={{ margin: '0 0 15px 0', color: '#334155', fontSize: '16px', fontWeight: '700' }}>
+              📋 Mis Horarios Configurados
+            </h4>
+
+            {cargandoHorariosList ? (
+              <p style={{ color: '#64748b', fontSize: '14px', fontStyle: 'italic' }}>Cargando horarios...</p>
+            ) : horariosList.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {horariosList.map((item, index) => (
+                  <div 
+                    key={index} 
+                    style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', padding: '12px 16px', borderRadius: '10px', border: '1px solid #e2e8f0' }}
+                  >
+                    <div>
+                      <strong style={{ color: '#0077b6', fontSize: '15px', marginRight: '8px' }}>
+                        {item.dia || item.dia_semana}
+                      </strong>
+                      <span style={{ color: '#334155', fontSize: '14px', fontWeight: '600' }}>
+                        {item.hora_inicio} a {item.hora_fin} hs
+                      </span>
+                    </div>
+                    <span style={{ padding: '4px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: 'bold', ...getBadgeStyle(item.estado) }}>
+                      {item.estado || 'Disponible'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p style={{ color: '#64748b', fontSize: '14px', fontStyle: 'italic', margin: 0 }}>
+                Aún no has configurado ningún horario. Usa el formulario de arriba para agregar uno.
+              </p>
+            )}
+          </div>
 
         </div>
 

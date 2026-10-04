@@ -10,7 +10,7 @@ from models.usuario_models import Usuario, Paciente, Enfermero, Disponibilidad
 usuario_bp = Blueprint('usuario_bp', __name__)
 
 # ==========================================
-# 1. RUTA DE LOGIN (Pablo)
+# 1. RUTA DE LOGIN
 # ==========================================
 @usuario_bp.route('/login', methods=['POST'])
 def login():
@@ -35,7 +35,7 @@ def login():
 
 
 # ==========================================
-# 2. RUTA DE REGISTRO (Corregida con matrícula temporal)
+# 2. RUTA DE REGISTRO
 # ==========================================
 @usuario_bp.route('/registro', methods=['POST'])
 def registrar_usuario():
@@ -98,7 +98,7 @@ def registrar_usuario():
 
 
 # ==========================================
-# 3. VISTA "MI PERFIL" DE PACIENTE (Pablo)
+# 3. VISTA "MI PERFIL" DE PACIENTE
 # ==========================================
 @usuario_bp.route('/perfil/paciente', methods=['GET', 'PUT'])
 @jwt_required()
@@ -139,7 +139,7 @@ def perfil_paciente():
 
 
 # ==========================================
-# 4. VISTA "MI PERFIL" DE ENFERMERO (Pablo)
+# 4. VISTA "MI PERFIL" DE ENFERMERO
 # ==========================================
 @usuario_bp.route('/perfil/enfermero', methods=['GET', 'PUT'])
 @jwt_required()
@@ -182,7 +182,10 @@ def perfil_enfermero():
 
 
 # ==========================================
-# 5. GESTIÓN DE HORARIOS DE ENFERMERO (Integrado con tabla Disponibilidad)
+# 5. GESTIÓN DE HORARIOS DE ENFERMERO (Control de duplicados)
+# ==========================================
+# ==========================================
+# 5. GESTIÓN DE HORARIOS DE ENFERMERO (Control de duplicados y formato)
 # ==========================================
 @usuario_bp.route('/perfil/enfermero/horarios', methods=['GET', 'POST'])
 @jwt_required()
@@ -199,31 +202,63 @@ def gestionar_horarios():
         
     if request.method == 'POST':
         data = request.get_json() or {}
-        # Permite guardar un objeto de horario nuevo
-        dia_semana = data.get('dia_semana')
-        str_inicio = data.get('hora_inicio')
-        str_fin = data.get('hora_fin')
+        print("📥 Datos recibidos en POST /horarios:", data) # Imprime en consola de Flask para depurar
+
+        # Soporte por si la clave viene llamada 'dia' o 'dia_semana'
+        dia_semana = data.get('dia_semana') or data.get('dia')
+        str_inicio = data.get('hora_inicio') or data.get('inicio')
+        str_fin = data.get('hora_fin') or data.get('fin')
         estado = data.get('estado', 'Disponible')
 
-        if dia_semana and str_inicio and str_fin:
-            hora_inicio = datetime.strptime(str_inicio, '%H:%M').time()
-            hora_fin = datetime.strptime(str_fin, '%H:%M').time()
-            nueva_disp = Disponibilidad(
-                enfermero_id=enfermero.id,
-                dia_semana=dia_semana,
-                hora_inicio=hora_inicio,
-                hora_fin=hora_fin,
-                estado=estado
-            )
-            db.session.add(nueva_disp)
-            db.session.commit()
-            return jsonify({"mensaje": "Horarios guardados con éxito", "disponibilidad": nueva_disp.to_dict()}), 201
+        if not (dia_semana and str_inicio and str_fin):
+            return jsonify({
+                "error": "Faltan datos requeridos",
+                "recibido": data
+            }), 400
 
-        return jsonify({"mensaje": "Horarios guardados con éxito"}), 200
+        try:
+            # Función auxiliar para convertir múltiples formatos de hora
+            def parse_time(time_str):
+                time_str = str(time_str).strip()
+                for fmt in ('%H:%M:%S', '%H:%M', '%I:%M %p', '%I:%M%p'):
+                    try:
+                        return datetime.strptime(time_str, fmt).time()
+                    except ValueError:
+                        pass
+                raise ValueError(f"Formato de hora no válido: {time_str}")
+
+            hora_inicio = parse_time(str_inicio)
+            hora_fin = parse_time(str_fin)
+
+        except Exception as err:
+            print("❌ Error al convertir horas:", err)
+            return jsonify({"error": str(err)}), 400
+
+        # Verificamos si ya existe exactamente esa disponibilidad para no duplicar
+        existente = Disponibilidad.query.filter_by(
+            enfermero_id=enfermero.id,
+            dia_semana=dia_semana,
+            hora_inicio=hora_inicio,
+            hora_fin=hora_fin
+        ).first()
+
+        if existente:
+            return jsonify({"mensaje": "El horario ya se encuentra registrado", "disponibilidad": existente.to_dict()}), 200
+
+        nueva_disp = Disponibilidad(
+            enfermero_id=enfermero.id,
+            dia_semana=dia_semana,
+            hora_inicio=hora_inicio,
+            hora_fin=hora_fin,
+            estado=estado
+        )
+        db.session.add(nueva_disp)
+        db.session.commit()
+        return jsonify({"mensaje": "Horario guardado con éxito", "disponibilidad": nueva_disp.to_dict()}), 201
 
 
 # ==========================================
-# 6. OBTENER TODOS LOS ENFERMEROS (Para la Cartilla)
+# 6. OBTENER TODOS LOS ENFERMEROS (Incluye Horarios)
 # ==========================================
 @usuario_bp.route('/enfermeros', methods=['GET'])
 def obtener_enfermeros():
@@ -237,13 +272,15 @@ def obtener_enfermeros():
             datos['id'] = usuario.id 
             datos['usuario_id'] = usuario.id
             datos['email'] = usuario.email
+            # Se adjunta la lista de disponibilidades/horarios del enfermero
+            datos['horarios'] = [d.to_dict() for d in enfermero.disponibilidades]
             lista_enfermeros.append(datos)
             
     return jsonify(lista_enfermeros), 200
 
 
 # ==========================================
-# 7. OBTENER UN PERFIL POR ID (Para VerPerfiles.jsx)
+# 7. OBTENER UN PERFIL POR ID
 # ==========================================
 @usuario_bp.route('/usuarios/<int:id>', methods=['GET'])
 @jwt_required()
@@ -258,12 +295,13 @@ def obtener_usuario_por_id(id):
         enfermero = Enfermero.query.filter_by(usuario_id=id).first()
         if enfermero:
             datos.update(enfermero.to_dict())
+            datos['horarios'] = [d.to_dict() for d in enfermero.disponibilidades]
             
     return jsonify(datos), 200
 
 
 # ==========================================
-# 8. OBTENER HORARIOS POR ID (Para VerPerfiles.jsx)
+# 8. OBTENER HORARIOS POR ID
 # ==========================================
 @usuario_bp.route('/usuarios/<int:id>/horarios', methods=['GET'])
 @jwt_required()
@@ -276,11 +314,10 @@ def obtener_horarios_por_id(id):
 
 
 # ==========================================
-# 9. SPRINT 3: API DE BÚSQUEDA AVANZADA Y FILTROS (Pablo)
+# 9. SPRINT 3: API DE BÚSQUEDA AVANZADA Y FILTROS
 # ==========================================
 @usuario_bp.route('/enfermeros/buscar', methods=['GET'])
 def buscar_enfermeros():
-    # Parámetros de filtro que envía el Frontend por URL (?q=...&especialidad=...&precio_max=...)
     texto = request.args.get('q', '').strip()
     especialidad = request.args.get('especialidad', '').strip()
     ciudad = request.args.get('ciudad', '').strip()
@@ -288,14 +325,11 @@ def buscar_enfermeros():
     disponible = request.args.get('disponible', '').strip()
     dia_semana = request.args.get('dia_semana', '').strip()
 
-    # Parámetros de paginación
     pagina = request.args.get('page', 1, type=int)
     por_pagina = request.args.get('per_page', 10, type=int)
 
-    # Query base en SQLAlchemy
     query = Enfermero.query.join(Usuario, Enfermero.usuario_id == Usuario.id)
 
-    # 1. Filtro por texto libre (nombre, apellido, especialidad o ciudad/zona)
     if texto:
         patron = f"%{texto}%"
         query = query.filter(
@@ -308,32 +342,26 @@ def buscar_enfermeros():
             )
         )
 
-    # 2. Filtro exacto o parcial por especialidad
     if especialidad:
         query = query.filter(Enfermero.especialidad.ilike(f"%{especialidad}%"))
 
-    # 3. Filtro por ciudad / zona
     if ciudad:
         query = query.filter(Enfermero.ciudad.ilike(f"%{ciudad}%"))
 
-    # 4. Filtro por rango de precio máximo
     if precio_max is not None:
         query = query.filter(Enfermero.tarifa_hora <= precio_max)
 
-    # 5. Filtro por disponibilidad general (true/false)
     if disponible.lower() == 'true':
         query = query.filter(Enfermero.disponible.is_(True))
     elif disponible.lower() == 'false':
         query = query.filter(Enfermero.disponible.is_(False))
 
-    # 6. Filtro por día de atención en la tabla Disponibilidad
     if dia_semana:
         query = query.join(Disponibilidad).filter(
             Disponibilidad.dia_semana.ilike(f"%{dia_semana}%"),
             Disponibilidad.estado == 'Disponible'
         )
 
-    # Evitar duplicados si hizo join con disponibilidades y paginar resultados
     query = query.distinct()
     paginacion = query.paginate(page=pagina, per_page=por_pagina, error_out=False)
 
