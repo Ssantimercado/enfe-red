@@ -9,6 +9,7 @@ from extensions import bcrypt
 from routes.usuario_routes import usuario_bp
 from routes.auth_routes import auth_bp
 from routes.solicitud_routes import solicitud_bp
+from routes.comunicacion_routes import comunicacion_bp
 from schema_sprint4 import inicializar_bd_sprint4
 from seed_sprint3 import inicializar_bd_sprint3
 
@@ -35,6 +36,7 @@ def token_invalido(_motivo):
 app.register_blueprint(usuario_bp, url_prefix='/api')
 app.register_blueprint(auth_bp, url_prefix='/api')
 app.register_blueprint(solicitud_bp, url_prefix='/api')
+app.register_blueprint(comunicacion_bp, url_prefix='/api')
 
 # Prepara el esquema de solicitudes antes de consultar/sembrar los perfiles existentes.
 with app.app_context():
