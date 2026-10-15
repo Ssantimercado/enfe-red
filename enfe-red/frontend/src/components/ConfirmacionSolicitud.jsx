@@ -19,12 +19,13 @@ export default function ConfirmacionSolicitud() {
     }).catch(err => { if (!controller.signal.aborted) setError(errorSolicitud(err)); });
     return () => controller.abort();
   }, [idSolicitud, intento]);
-  return <main className="solicitud-panel">
-    <h1>Comprobante de solicitud</h1>
-    {error ? <><p role="alert" className="solicitud-error">{error}</p><button onClick={() => setIntento(i => i + 1)}>Reintentar consulta</button></> : !solicitud ? <p role="status">Cargando comprobante…</p> : <>
-      <p role="status">Estado: <strong>{solicitud.estado}</strong></p>
+  return <main className="page-container solicitud-page">
+    <header className="page-heading"><h1>Comprobante de solicitud</h1></header>
+    <section className="content-panel">
+    {error ? <><p role="alert" className="notice notice-error">{error}</p><button className="button button-secondary" onClick={() => setIntento(i => i + 1)}>Reintentar consulta</button></> : !solicitud ? <p role="status">Cargando comprobante…</p> : <>
+      <p className="notice notice-info" role="status">Estado: <strong>{solicitud.estado}</strong></p>
       {solicitud.estado === 'Pendiente' && <p>Tu pedido está registrado y espera la aceptación del enfermero.</p>}
-      <dl>
+      <dl className="solicitud-summary">
         <dt>Número</dt><dd>{solicitud.idSolicitud}</dd>
         <dt>Profesional</dt><dd>{solicitud.enfermero?.nombre} {solicitud.enfermero?.apellido}</dd>
         <dt>Servicio</dt><dd>{solicitud.servicio?.tipoServicio || 'No informado'}</dd>
@@ -35,6 +36,7 @@ export default function ConfirmacionSolicitud() {
       </dl>
       <CancelarSolicitud key={solicitud.idSolicitud} solicitud={solicitud} onCancelada={() => setSolicitud(actual => ({ ...actual, estado: 'Cancelada' }))} />
     </>}
-    <Link to="/cartilla">Volver a la cartilla</Link>
+    <Link className="button button-secondary" to="/cartilla">Volver a la cartilla</Link>
+    </section>
   </main>;
 }

@@ -15,6 +15,7 @@ api.interceptors.response.use(response => response, error => {
 });
 
 export const obtenerProfesional = (id, signal) => api.get(`/usuarios/${id}`, { signal }).then(r => r.data);
+export const obtenerServicios = (signal) => api.get('/servicios', { signal }).then(r => r.data);
 export const crearSolicitud = (datos) => api.post('/solicitudes', datos).then(r => r.data);
 export const obtenerSolicitud = (id, signal) => api.get(`/solicitudes/${id}`, { signal }).then(r => r.data);
 export const cancelarSolicitud = (id) => api.put(`/solicitudes/${id}/cancelar`).then(r => r.data);
