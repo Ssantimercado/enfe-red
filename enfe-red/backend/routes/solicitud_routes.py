@@ -1,4 +1,4 @@
-"""Creación y consulta de solicitudes: SCRUM-56, SCRUM-57 y SCRUM-58."""
+"""Creación, consulta y gestión de solicitudes: SCRUM-56 a SCRUM-61."""
 
 import re
 from datetime import date, datetime, time, timedelta, timezone
@@ -64,8 +64,8 @@ def _validar_datos_solicitud(datos):
     hora_texto = datos.get('hora')
     if not isinstance(fecha_texto, str) or not re.fullmatch(r'\d{4}-\d{2}-\d{2}', fecha_texto):
         raise ValueError('La fecha debe tener formato AAAA-MM-DD')
-    if not isinstance(hora_texto, str) or not re.fullmatch(r'\d{2}:\d{2}', hora_texto):
-        raise ValueError('La hora debe tener formato HH:MM (24 horas)')
+    if not isinstance(hora_texto, str) or not re.fullmatch(r'(?:[01][0-9]|2[0-3]):[0-5][0-9]', hora_texto):
+        raise ValueError('La hora debe tener formato HH:MM y estar entre 00:00 y 23:59')
 
     try:
         fecha = date.fromisoformat(fecha_texto)
@@ -90,6 +90,72 @@ def _consulta_con_resumen():
         joinedload(SolicitudServicio.enfermero),
         joinedload(SolicitudServicio.servicio),
     )
+
+
+def _bloquear_agenda(id_enfermero):
+    """Serializar escrituras de turnos del mismo profesional en MySQL/InnoDB."""
+    return Enfermero.query.filter_by(id=id_enfermero).populate_existing().with_for_update().first()
+
+
+def _turno_ocupado(id_enfermero, fecha, hora, estados=ESTADOS_ACTIVOS, excluir=None):
+    """La reserva pertenece a una fecha/hora concreta, no a una franja semanal."""
+    consulta = SolicitudServicio.query.filter(
+        SolicitudServicio.idEnfermero == id_enfermero,
+        SolicitudServicio.fecha == fecha,
+        SolicitudServicio.hora == hora,
+        SolicitudServicio.estado.in_(estados),
+    )
+    if excluir is not None:
+        consulta = consulta.filter(SolicitudServicio.idSolicitud != excluir)
+    # La lectura bloqueante ve el estado actual después de esperar la agenda.
+    return consulta.with_for_update().first() is not None
+
+
+def _cambiar_estado_solicitud(id_solicitud, *, rol, origen, destino, accion, mensaje):
+    """Validar titularidad y guardar una transición de estado de forma atómica."""
+    usuario = _usuario_actual()
+    if not usuario:
+        return jsonify({'error': 'La sesión no corresponde a un usuario existente'}), 401
+    if usuario.rol != rol:
+        return jsonify({'error': f'Solo un {rol} puede {accion} una solicitud'}), 403
+
+    solicitud = _consulta_con_resumen().filter_by(idSolicitud=id_solicitud).first()
+    if not solicitud:
+        return jsonify({'error': 'Solicitud no encontrada'}), 404
+    titular = solicitud.enfermero if rol == 'enfermero' else solicitud.paciente
+    if titular.usuario_id != usuario.id:
+        return jsonify({'error': f'Solo podés {accion} tus propias solicitudes'}), 403
+    if solicitud.estado not in origen:
+        return jsonify({'error': f'Solo se pueden {accion} solicitudes en estado {" o ".join(origen)}'}), 400
+
+    try:
+        if not _bloquear_agenda(solicitud.idEnfermero):
+            db.session.rollback()
+            return jsonify({'error': 'Enfermero no encontrado'}), 404
+        # Permitir gestionar pedidos anteriores a la validación de reservas,
+        # pero nunca aceptar dos atenciones para el mismo inicio.
+        if destino == 'Aceptada' and _turno_ocupado(
+            solicitud.idEnfermero, solicitud.fecha, solicitud.hora,
+            estados=('Aceptada',), excluir=id_solicitud,
+        ):
+            db.session.rollback()
+            return jsonify({'error': 'Ya hay otra solicitud aceptada para esa fecha y hora'}), 409
+        actualizadas = SolicitudServicio.query.filter(
+            SolicitudServicio.idSolicitud == id_solicitud,
+            SolicitudServicio.idEnfermero == solicitud.idEnfermero,
+            SolicitudServicio.idPaciente == solicitud.idPaciente,
+            SolicitudServicio.estado.in_(origen),
+        ).update({'estado': destino}, synchronize_session=False)
+        if actualizadas != 1:
+            db.session.rollback()
+            return jsonify({'error': 'La solicitud cambió de estado. Volvé a consultarla.'}), 400
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.exception('No se pudo %s la solicitud de servicio', accion)
+        return jsonify({'error': f'No se pudo {accion} la solicitud. Intentá nuevamente.'}), 500
+
+    return jsonify({'mensaje': mensaje, 'solicitud': solicitud.to_dict()}), 200
 
 
 # SCRUM-56: creación de una solicitud.
@@ -124,15 +190,26 @@ def crearSolicitud():
     if not servicio:
         return jsonify({'error': 'Servicio no encontrado'}), 404
 
-    solicitud = SolicitudServicio(
-        paciente=paciente,
-        enfermero=enfermero,
-        servicio=servicio,
-        fecha=datos['fecha'],
-        hora=datos['hora'],
-        direccionAtencion=datos['direccionAtencion'],
-    )
     try:
+        # Integración SCRUM-60/61: únicamente los pedidos activos ocupan el turno.
+        enfermero = _bloquear_agenda(enfermero.id)
+        if not enfermero:
+            db.session.rollback()
+            return jsonify({'error': 'Enfermero no encontrado'}), 404
+        if not enfermero.verificado or not enfermero.disponible:
+            db.session.rollback()
+            return jsonify({'error': 'El enfermero no está habilitado para recibir solicitudes'}), 409
+        if _turno_ocupado(enfermero.id, datos['fecha'], datos['hora']):
+            db.session.rollback()
+            return jsonify({'error': 'Ese horario ya tiene una solicitud activa. Elegí otro.'}), 409
+        solicitud = SolicitudServicio(
+            paciente=paciente,
+            enfermero=enfermero,
+            servicio=servicio,
+            fecha=datos['fecha'],
+            hora=datos['hora'],
+            direccionAtencion=datos['direccionAtencion'],
+        )
         db.session.add(solicitud)
         db.session.commit()
     except SQLAlchemyError:
@@ -202,3 +279,43 @@ def consultarSolicitudesEnfermero(idEnfermero):
         .all()
     )
     return jsonify([solicitud.to_dict() for solicitud in solicitudes]), 200
+
+
+# SCRUM-59.1 (Pablo): aceptación por el enfermero asignado.
+@solicitud_bp.route('/solicitudes/<int:idSolicitud>/aceptar', methods=['PUT'])
+@jwt_required()
+def aceptarSolicitud(idSolicitud):
+    return _cambiar_estado_solicitud(
+        idSolicitud, rol='enfermero', origen=('Pendiente',), destino='Aceptada',
+        accion='aceptar', mensaje='Solicitud aceptada',
+    )
+
+
+# SCRUM-59.2 (Pablo / HU8): finalizar la atención aceptada.
+@solicitud_bp.route('/solicitudes/<int:idSolicitud>/finalizar', methods=['PUT'])
+@jwt_required()
+def marcarComoRealizado(idSolicitud):
+    return _cambiar_estado_solicitud(
+        idSolicitud, rol='enfermero', origen=('Aceptada',), destino='Realizada',
+        accion='finalizar', mensaje='Servicio marcado como realizado',
+    )
+
+
+# SCRUM-60 (Pablo): rechazar libera la reserva de fecha y hora.
+@solicitud_bp.route('/solicitudes/<int:idSolicitud>/rechazar', methods=['PUT'])
+@jwt_required()
+def rechazarSolicitud(idSolicitud):
+    return _cambiar_estado_solicitud(
+        idSolicitud, rol='enfermero', origen=('Pendiente',), destino='Rechazada',
+        accion='rechazar', mensaje='Solicitud rechazada',
+    )
+
+
+# SCRUM-61 (Pablo): cancelar solamente los pedidos activos del propio paciente.
+@solicitud_bp.route('/solicitudes/<int:idSolicitud>/cancelar', methods=['PUT'])
+@jwt_required()
+def cancelarSolicitud(idSolicitud):
+    return _cambiar_estado_solicitud(
+        idSolicitud, rol='paciente', origen=ESTADOS_ACTIVOS, destino='Cancelada',
+        accion='cancelar', mensaje='Solicitud cancelada',
+    )
