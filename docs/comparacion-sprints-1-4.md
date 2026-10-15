@@ -11,6 +11,33 @@ su documentación y la limpieza de estructura. Se consultaron las ramas remotas 
 `git fetch origin`; su existencia por sí sola no implica integración.
 Ver el [mapa de ramas](../README.md#ramas-y-estado-de-integración).
 
+## Cronograma de entregas a la profesora
+
+Ver también el [mapa de navegación de referencia](mapa-de-navegacion.md) para
+relacionar las entregas con los recorridos de paciente, enfermero y administrador.
+
+Fechas y alcance comprometidos en el cuadro compartido por Pablo. Las fechas
+se expresan en día/mes y corresponden a la presentación de cada incremento.
+
+| Sprint / entrega | Fecha de presentación | Funcionalidades comprometidas |
+| --- | --- | --- |
+| 1 — Registro y perfiles | **07/09** | Registro de enfermeros y pacientes, edición del perfil del usuario y visualización del perfil de otros usuarios. |
+| 2 — Configuración y disponibilidad | **21/09** | Configuración de perfiles de usuario y gestión de disponibilidad: información pública de pacientes y enfermeros y definición de horarios. |
+| 3 — Búsqueda y geolocalización | **05/10** | Motor de búsqueda avanzado, filtros y geolocalización: mapa, ubicación de profesionales cercanos y segmentación por servicio. |
+| 4 — Gestión de solicitudes | **19/10** | Gestión integral de solicitudes: creación, aceptación, rechazo y cancelación de turnos. |
+| 5 — Comunicación y reputación | **02/11** | Canales de comunicación, notificaciones y sistema de reputación: mensajería interna, publicación de reseñas y calificaciones. |
+| 6 — Administración y validación | **16/11** | Panel de administración, validación profesional y moderación: verificación de matrículas, gestión de permisos y control de calidad. |
+
+Este calendario es la referencia para preparar las demostraciones a la profesora.
+El reparto interno de tareas es una planificación distinta: aunque allí reseñas
+y calificaciones se asignaron al Sprint 6, su presentación está comprometida para
+el **02/11**, junto con comunicación y notificaciones.
+
+El cuadro registra compromisos, no certifica que estén implementados. La
+comparación detallada de abajo conserva el alcance histórico de la revisión de
+Santiago; las transiciones de Pablo del Sprint 4 ya integradas se describen en
+el [contrato actualizado de solicitudes](sprint-4-santiago.md).
+
 ## Alcance y criterio
 
 Se comparan exclusivamente:

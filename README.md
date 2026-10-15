@@ -14,6 +14,8 @@ se evalúan como entregas pendientes de esta revisión.
 
 ## Guías para el equipo
 
+- [Diseño y navegación: reglas para mantener la misma interfaz](docs/diseno-y-navegacion.md).
+- [Contexto para asistentes y colaboradores](AGENTS.md).
 - [Comparación con el PDF: sprints 1 a 3 y Sprint 4 de Santiago](docs/comparacion-sprints-1-4.md).
 - [Contrato y ejemplos de la API de solicitudes](docs/sprint-4-santiago.md).
 - [Mapa de ramas y estado de integración](#ramas-y-estado-de-integración).
