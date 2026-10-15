@@ -1,0 +1,26 @@
+.enfe-navbar {
+  background: #ffffff;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 18px clamp(20px, 4vw, 40px);
+  text-align: left;
+}
+
+.enfe-navbar__brand {
+  display: inline-block;
+  color: #2c3e50;
+  font-family: 'Segoe UI', Roboto, sans-serif;
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-decoration: none;
+}
+
+.enfe-navbar__brand span {
+  color: #3498db;
+}
+
+.enfe-navbar__brand:focus-visible {
+  outline: 3px solid #3498db;
+  outline-offset: 6px;
+  border-radius: 4px;
+}

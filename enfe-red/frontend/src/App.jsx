@@ -7,6 +7,7 @@ import Register from "./components/Register";
 import RecuperarPassword from "./components/RecuperarPassword";
 import VerPerfiles from "./components/VerPerfiles";
 import ListaEnfermeros from "./components/ListaEnfermeros";
+import Navbar from "./components/Navbar";
 
 function App() {
   // Verificamos si existe el token en el almacenamiento del navegador
@@ -16,6 +17,7 @@ function App() {
 
   return (
     <BrowserRouter>
+      <Navbar />
       <Routes>
         {/* RUTA RAÍZ: al abrir la aplicación siempre comenzamos en Login */}
         <Route 

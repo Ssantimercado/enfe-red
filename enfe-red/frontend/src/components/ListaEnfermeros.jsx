@@ -138,7 +138,7 @@ const ListaEnfermerosSprint3 = () => {
         .s3-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 22px 0 14px; }
         .s3-count, .s3-page-number { color: #64748b; font-size: 14px; }
         .s3-clear { border: 0; background: transparent; color: #3498db; cursor: pointer; font-weight: 700; padding: 7px; }
-        .s3-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+        .s3-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 32px; }
         .s3-card { padding: 20px; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 4px 12px rgba(0,0,0,.04); }
         .s3-card-top, .s3-profile, .s3-card-bottom { display: flex; align-items: center; }
         .s3-card-top { justify-content: space-between; align-items: flex-start; gap: 12px; }
