@@ -1,0 +1,40 @@
+import { useEffect, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
+import { obtenerSolicitud, errorSolicitud } from '../services/solicitudes';
+import CancelarSolicitud from './CancelarSolicitud';
+import './Solicitudes.css';
+
+export default function ConfirmacionSolicitud() {
+  const { idSolicitud } = useParams();
+  const [solicitud, setSolicitud] = useState(null);
+  const [error, setError] = useState('');
+  const [intento, setIntento] = useState(0);
+  useEffect(() => {
+    const controller = new AbortController();
+    setSolicitud(null);
+    setError('');
+    obtenerSolicitud(idSolicitud, controller.signal).then(data => {
+      if (!data.idSolicitud) throw new Error('Respuesta inválida');
+      setSolicitud(data);
+    }).catch(err => { if (!controller.signal.aborted) setError(errorSolicitud(err)); });
+    return () => controller.abort();
+  }, [idSolicitud, intento]);
+  return <main className="solicitud-panel">
+    <h1>Comprobante de solicitud</h1>
+    {error ? <><p role="alert" className="solicitud-error">{error}</p><button onClick={() => setIntento(i => i + 1)}>Reintentar consulta</button></> : !solicitud ? <p role="status">Cargando comprobante…</p> : <>
+      <p role="status">Estado: <strong>{solicitud.estado}</strong></p>
+      {solicitud.estado === 'Pendiente' && <p>Tu pedido está registrado y espera la aceptación del enfermero.</p>}
+      <dl>
+        <dt>Número</dt><dd>{solicitud.idSolicitud}</dd>
+        <dt>Profesional</dt><dd>{solicitud.enfermero?.nombre} {solicitud.enfermero?.apellido}</dd>
+        <dt>Servicio</dt><dd>{solicitud.servicio?.tipoServicio || 'No informado'}</dd>
+        <dt>Fecha</dt><dd>{solicitud.fecha}</dd>
+        <dt>Hora</dt><dd>{solicitud.hora}</dd>
+        <dt>Dirección</dt><dd>{solicitud.direccionAtencion}</dd>
+        <dt>Precio estimado</dt><dd>{solicitud.servicio?.precioEstimado != null ? new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(solicitud.servicio.precioEstimado) : 'No informado'}</dd>
+      </dl>
+      <CancelarSolicitud key={solicitud.idSolicitud} solicitud={solicitud} onCancelada={() => setSolicitud(actual => ({ ...actual, estado: 'Cancelada' }))} />
+    </>}
+    <Link to="/cartilla">Volver a la cartilla</Link>
+  </main>;
+}

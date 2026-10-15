@@ -8,6 +8,8 @@ import RecuperarPassword from "./components/RecuperarPassword";
 import VerPerfiles from "./components/VerPerfiles";
 import ListaEnfermeros from "./components/ListaEnfermeros";
 import Navbar from "./components/Navbar";
+import SolicitarServicio from "./components/SolicitarServicio";
+import ConfirmacionSolicitud from "./components/ConfirmacionSolicitud";
 
 function App() {
   // Verificamos si existe el token en el almacenamiento del navegador
@@ -19,6 +21,8 @@ function App() {
     <BrowserRouter>
       <Navbar />
       <Routes>
+        <Route path="/perfil/:id/solicitar" element={tieneToken() && localStorage.getItem('rol') === 'paciente' ? <SolicitarServicio /> : <Navigate to="/login" replace />} />
+        <Route path="/solicitudes/:idSolicitud" element={tieneToken() && localStorage.getItem('rol') === 'paciente' ? <ConfirmacionSolicitud /> : <Navigate to="/login" replace />} />
         {/* RUTA RAÍZ: al abrir la aplicación siempre comenzamos en Login */}
         <Route 
           path="/" 

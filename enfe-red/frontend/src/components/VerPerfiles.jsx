@@ -85,6 +85,11 @@ function VerPerfiles() {
         </div>
 
         {/* Tarjeta Principal */}
+        {localStorage.getItem('rol') === 'paciente' && perfil.rol === 'enfermero' && (
+          <button type="button" onClick={() => navigate(`/perfil/${id}/solicitar`)} style={{ marginBottom: '24px', padding: '12px 20px', background: '#287fba', color: 'white', border: 0, borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>
+            Solicitar servicio
+          </button>
+        )}
         <div style={{ backgroundColor: '#ffffff', padding: '35px', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', border: '1px solid #f1f5f9' }}>
           
           <div style={{ display: 'flex', alignItems: 'center', gap: '25px', marginBottom: '30px' }}>
