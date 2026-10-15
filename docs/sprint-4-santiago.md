@@ -14,7 +14,7 @@ endpoints Flask en `routes/`, registro de Blueprints en `app.py` y pruebas en
 | --- | --- |
 | `models/servicio_models.py` | Catálogo de servicios y precio estimado. |
 | `models/solicitud_models.py` | Solicitud, estados permitidos y comprobante JSON (`to_dict`). |
-| `routes/solicitud_routes.py` | Validar la entrada, comprobar permisos y atender las cuatro rutas. |
+| `routes/solicitud_routes.py` | Creación y consulta de Santiago; cambios de estado de Pablo. |
 | `schema_sprint4.py` | Preparar las tablas y la columna de verificación al iniciar la app. |
 | `tests/test_solicitudes.py` | Probar solicitudes, permisos y preparación de bases anteriores. |
 
@@ -96,7 +96,7 @@ Ejemplo de cuerpo JSON (usar IDs existentes y una fecha futura):
 ```
 
 Validaciones: IDs enteros positivos, dirección de 1 a 200 caracteres (se recortan
-espacios exteriores), fecha `AAAA-MM-DD` y hora `HH:MM` de 24 horas. El turno debe
+espacios exteriores), fecha `AAAA-MM-DD` y hora `HH:MM` entre `00:00` y `23:59` (no `24:00`). El turno debe
 ser futuro según hora de Argentina (UTC-3). El enfermero debe estar verificado y
 disponible, y el servicio debe existir. No se admiten campos adicionales como
 `estado`, `idSolicitud` o un precio enviado por el cliente.
@@ -183,18 +183,39 @@ el `Location` retornado y ambas bandejas con la sesión correspondiente. El GET
 de confirmación mantiene `Pendiente`: consultar el comprobante no es aceptar el
 servicio.
 
-### Integración con las tareas de Pablo
+### Pablo: gestión de solicitudes (SCRUM-59, SCRUM-60 y SCRUM-61)
 
-Importar `SolicitudServicio` y `ESTADOS_ACTIVOS` desde
-`models.solicitud_models`. Estados previstos: `Pendiente`, `Aceptada`,
-`Rechazada`, `Cancelada`, `Realizada`.
+Las cuatro rutas están en el Blueprint existente `routes/solicitud_routes.py`,
+usando `SolicitudServicio` de `models.solicitud_models`. Todas requieren JWT;
+los permisos se comprueban con el rol y los perfiles guardados en la base.
+El token identifica a `Usuario`, no a `Paciente` ni a `Enfermero`.
 
-Esta entrega crea el pedido y permite consultarlo. No modifica los bloques
-semanales de `Disponibilidad`, ni bloquea/libera horarios ni resuelve
-superposiciones de turnos: el POST valida el indicador general `disponible`,
-según SCRUM-56. La reserva/liberación debe coordinarse con los cambios de estado.
-Aceptar, rechazar, cancelar y finalizar quedan para SCRUM-59/60/61; no se
-implementaron sus rutas. Tampoco se modificó el frontend del Sprint 4.
+| Método y ruta | Transición permitida | Quién puede usarlo |
+| --- | --- | --- |
+| `PUT /api/solicitudes/<idSolicitud>/aceptar` | `Pendiente` → `Aceptada` | Enfermero asignado. |
+| `PUT /api/solicitudes/<idSolicitud>/finalizar` | `Aceptada` → `Realizada` | Enfermero asignado (HU8). |
+| `PUT /api/solicitudes/<idSolicitud>/rechazar` | `Pendiente` → `Rechazada` | Enfermero asignado. |
+| `PUT /api/solicitudes/<idSolicitud>/cancelar` | `Pendiente` o `Aceptada` → `Cancelada` | Paciente dueño. |
+
+No necesitan cuerpo JSON. Responden HTTP 200 con `mensaje` y `solicitud`, usando
+el mismo comprobante del POST. No se toman identidades ni estados enviados en
+el cuerpo para autorizar la operación. Un estado de origen inválido, incluida
+la repetición de una acción ya realizada, devuelve `400`; otro rol o titular,
+`403`; una solicitud inexistente, `404`; una sesión ausente, vencida o sin usuario,
+`401`. Los errores de persistencia devuelven `500` y revierten el cambio.
+
+La reserva se deriva del estado: un pedido `Pendiente` o `Aceptada` ocupa la
+combinación enfermero, fecha y hora. El POST devuelve `409` si esa combinación
+ya está ocupada. Rechazar o cancelar permite solicitarla nuevamente. No se
+modifica `Enfermero.disponible` ni los bloques semanales de `Disponibilidad`.
+Como el modelo no define duración, este control cubre el mismo inicio exacto,
+no intervalos de atención superpuestos.
+
+Las escrituras bloquean la fila del enfermero dentro de la transacción en
+MySQL/InnoDB y actualizan el estado de forma condicional. Si existen pedidos
+duplicados anteriores a esta validación, se permite rechazarlos o cancelarlos,
+pero no aceptar otro cuando ya hay uno `Aceptada` para ese inicio (`409`).
+Esta entrega no modifica el frontend ni implementa los sprints 5 o 6.
 
 ### Pruebas del sprint
 
@@ -202,5 +223,9 @@ implementaron sus rutas. Tampoco se modificó el frontend del Sprint 4.
 regresiones existentes. `tests/test_solicitudes.py` cubre creación/comprobante,
 estado inicial, permisos por titular y rol, validaciones, ambas bandejas,
 rollback, límites de datos expuestos, IDs de perfiles, consultas sin N+1 y
-actualización repetible de bases nuevas y anteriores. Las pruebas usan SQLite
+actualización repetible de bases nuevas y anteriores. También cubre las cuatro
+transiciones de Pablo, estados inválidos, cancelación ajena, JWT, rollback y
+reserva/liberación de horarios. Las pruebas usan SQLite
 en memoria; no modifican `.env` ni la base configurada de la aplicación.
+El bloqueo concurrente específico de MySQL/InnoDB requiere validación adicional
+contra ese motor; SQLite no reproduce esos bloqueos de filas.

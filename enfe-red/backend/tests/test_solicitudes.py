@@ -151,7 +151,8 @@ class SolicitudesTest(unittest.TestCase):
             {'idEnfermero': -1}, {'idEnfermero': 2**40}, {'idServicio': 1.5}, {'idServicio': 0},
             {'idPaciente': False}, {'idPaciente': '101'},
             {'fecha': None}, {'fecha': '2030-02-30'}, {'fecha': '2030-1-11'}, {'fecha': []},
-            {'hora': '24:00'}, {'hora': '9:00'}, {'hora': '14:30:30'}, {'hora': 10},
+            {'hora': '24:00'}, {'hora': '24:01'}, {'hora': '25:00'}, {'hora': '23:60'},
+            {'hora': '-1:00'}, {'hora': '9:00'}, {'hora': '14:30:30'}, {'hora': 10},
             {'direccionAtencion': '   '}, {'direccionAtencion': None},
             {'direccionAtencion': 'a' * 201}, {'direccionAtencion': {}},
             {'estado': 'Aceptada'}, {'precioEstimado': '1.00'}, {'idSolicitud': 1},
@@ -168,6 +169,13 @@ class SolicitudesTest(unittest.TestCase):
             response = self.client.post('/api/solicitudes', data=raw, content_type='application/json', headers=self.headers())
             self.assertEqual(response.status_code, 400)
         self.assertEqual(SolicitudServicio.query.count(), 0)
+
+    def test_horas_limite_validas_se_guardan_sin_normalizar(self):
+        for hora in ('00:00', '23:59'):
+            with self.subTest(hora=hora):
+                response = self.crear(hora=hora)
+                self.assertEqual(response.status_code, 201, response.json)
+                self.assertEqual(response.json['solicitud']['hora'], hora)
 
     def test_fecha_hora_pasadas_y_actual_rechazadas_mismo_dia_futuro_permitido(self):
         for fecha, hora in (('2030-01-09', '23:59'), ('2030-01-10', '09:59'), ('2030-01-10', '10:00')):
@@ -263,6 +271,264 @@ class SolicitudesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.json), 6)
         self.assertLessEqual(len(queries), 3)
+
+
+    # SCRUM-59.1 (Pablo): permisos y transición de aceptación.
+    def test_aceptar_solo_actualiza_estado_y_se_refleja_en_consultas(self):
+        id_solicitud = self.guardar_solicitud()
+        antes = db.session.get(SolicitudServicio, id_solicitud).to_dict()
+        response = self.client.put(f'/api/solicitudes/{id_solicitud}/aceptar', headers=self.headers(21))
+        self.assertEqual(response.status_code, 200, response.json)
+        esperado = {**antes, 'estado': 'Aceptada'}
+        self.assertEqual(response.json['solicitud'], esperado)
+        self.assertTrue(db.session.get(Enfermero, 201).disponible)
+        detalle = self.client.get(f'/api/solicitudes/{id_solicitud}', headers=self.headers())
+        self.assertEqual(detalle.json, esperado)
+        paciente = self.client.get('/api/solicitudes/paciente/101', headers=self.headers())
+        enfermero = self.client.get('/api/solicitudes/enfermero/201', headers=self.headers(21))
+        self.assertEqual(paciente.json[0]['estado'], 'Aceptada')
+        self.assertEqual(enfermero.json[0]['estado'], 'Aceptada')
+
+    def test_aceptar_cualquier_estado_distinto_de_pendiente_devuelve_400(self):
+        for estado in ('Aceptada', 'Realizada', 'Rechazada', 'Cancelada'):
+            with self.subTest(estado=estado):
+                id_solicitud = self.guardar_solicitud(estado=estado)
+                response = self.client.put(f'/api/solicitudes/{id_solicitud}/aceptar', headers=self.headers(21))
+                self.assertEqual(response.status_code, 400)
+                self.assertIn('error', response.json)
+                self.assertEqual(db.session.get(SolicitudServicio, id_solicitud).estado, estado)
+
+    def test_aceptar_dos_veces_devuelve_400_la_segunda_vez(self):
+        id_solicitud = self.guardar_solicitud()
+        ruta = f'/api/solicitudes/{id_solicitud}/aceptar'
+        self.assertEqual(self.client.put(ruta, headers=self.headers(21)).status_code, 200)
+        self.assertEqual(self.client.put(ruta, headers=self.headers(21)).status_code, 400)
+        self.assertEqual(db.session.get(SolicitudServicio, id_solicitud).estado, 'Aceptada')
+
+    def test_aceptar_rechaza_pacientes_y_otro_enfermero_sin_modificar_solicitud(self):
+        id_solicitud = self.guardar_solicitud()
+        for usuario_id in (11, 12, 22):
+            with self.subTest(usuario_id=usuario_id):
+                response = self.client.put(f'/api/solicitudes/{id_solicitud}/aceptar', headers=self.headers(usuario_id))
+                self.assertEqual(response.status_code, 403)
+                self.assertNotIn('solicitud', response.json)
+                self.assertEqual(db.session.get(SolicitudServicio, id_solicitud).estado, 'Pendiente')
+
+    def test_aceptar_exige_jwt_vigente_y_usuario_valido(self):
+        id_solicitud = self.guardar_solicitud()
+        for headers in ({}, self.headers(21, expires_delta=timedelta(seconds=-1)),
+                        self.headers(999), self.headers(201), self.headers('invalido')):
+            with self.subTest(headers=bool(headers)):
+                response = self.client.put(f'/api/solicitudes/{id_solicitud}/aceptar', headers=headers)
+                self.assertEqual(response.status_code, 401)
+                self.assertEqual(db.session.get(SolicitudServicio, id_solicitud).estado, 'Pendiente')
+
+    def test_aceptar_solicitud_inexistente_devuelve_404(self):
+        response = self.client.put('/api/solicitudes/999/aceptar', headers=self.headers(21))
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(SolicitudServicio.query.count(), 0)
+
+    def test_aceptar_no_confia_en_rol_ni_asignacion_del_token(self):
+        id_solicitud = self.guardar_solicitud()
+        for headers in (self.headers(11, additional_claims={'rol': 'enfermero'}),
+                        self.headers(22, additional_claims={'idEnfermero': 201})):
+            self.assertEqual(self.client.put(f'/api/solicitudes/{id_solicitud}/aceptar', headers=headers).status_code, 403)
+        self.assertEqual(db.session.get(SolicitudServicio, id_solicitud).estado, 'Pendiente')
+
+    def test_aceptar_hace_rollback_si_falla_y_permite_reintentar(self):
+        id_solicitud = self.guardar_solicitud()
+        ruta = f'/api/solicitudes/{id_solicitud}/aceptar'
+        with patch.object(db.session(), 'commit', side_effect=SQLAlchemyError('detalle privado')):
+            response = self.client.put(ruta, headers=self.headers(21))
+        self.assertEqual(response.status_code, 500)
+        self.assertNotIn('detalle privado', response.get_data(as_text=True))
+        self.assertEqual(db.session.get(SolicitudServicio, id_solicitud).estado, 'Pendiente')
+        self.assertEqual(self.client.put(ruta, headers=self.headers(21)).status_code, 200)
+
+
+    # SCRUM-59.2 (Pablo / HU8): finalizar la atención aceptada.
+    def test_crear_aceptar_finalizar_actualiza_detalle_y_bandejas(self):
+        creada = self.crear()
+        id_solicitud = creada.json['solicitud']['idSolicitud']
+        ruta = f'/api/solicitudes/{id_solicitud}'
+        self.assertEqual(self.client.put(ruta + '/aceptar', headers=self.headers(21)).status_code, 200)
+        response = self.client.put(ruta + '/finalizar', headers=self.headers(21))
+        self.assertEqual(response.status_code, 200, response.json)
+        esperado = {**creada.json['solicitud'], 'estado': 'Realizada'}
+        self.assertEqual(response.json['solicitud'], esperado)
+        self.assertEqual(db.session.get(SolicitudServicio, id_solicitud).estado, 'Realizada')
+        self.assertEqual(self.client.get(ruta, headers=self.headers()).json, esperado)
+        self.assertEqual(self.client.get('/api/solicitudes/paciente/101', headers=self.headers()).json, [])
+        recibidas = self.client.get('/api/solicitudes/enfermero/201', headers=self.headers(21))
+        self.assertEqual(recibidas.json, [esperado])
+        self.assertTrue(db.session.get(Enfermero, 201).disponible)
+
+    def test_finalizar_cualquier_estado_distinto_de_aceptada_devuelve_400(self):
+        for estado in ('Pendiente', 'Realizada', 'Rechazada', 'Cancelada'):
+            with self.subTest(estado=estado):
+                id_solicitud = self.guardar_solicitud(estado=estado)
+                response = self.client.put(f'/api/solicitudes/{id_solicitud}/finalizar', headers=self.headers(21))
+                self.assertEqual(response.status_code, 400)
+                self.assertIn('error', response.json)
+                self.assertEqual(db.session.get(SolicitudServicio, id_solicitud).estado, estado)
+
+    def test_finalizar_dos_veces_devuelve_400_la_segunda_vez(self):
+        id_solicitud = self.guardar_solicitud(estado='Aceptada')
+        ruta = f'/api/solicitudes/{id_solicitud}/finalizar'
+        self.assertEqual(self.client.put(ruta, headers=self.headers(21)).status_code, 200)
+        self.assertEqual(self.client.put(ruta, headers=self.headers(21)).status_code, 400)
+        self.assertEqual(db.session.get(SolicitudServicio, id_solicitud).estado, 'Realizada')
+
+    def test_finalizar_rechaza_pacientes_y_otro_enfermero_sin_modificar_solicitud(self):
+        id_solicitud = self.guardar_solicitud(estado='Aceptada')
+        for usuario_id in (11, 12, 22):
+            with self.subTest(usuario_id=usuario_id):
+                response = self.client.put(f'/api/solicitudes/{id_solicitud}/finalizar', headers=self.headers(usuario_id))
+                self.assertEqual(response.status_code, 403)
+                self.assertNotIn('solicitud', response.json)
+                self.assertEqual(db.session.get(SolicitudServicio, id_solicitud).estado, 'Aceptada')
+
+    def test_finalizar_exige_jwt_vigente_y_usuario_valido(self):
+        id_solicitud = self.guardar_solicitud(estado='Aceptada')
+        for headers in ({}, self.headers(21, expires_delta=timedelta(seconds=-1)),
+                        self.headers(999), self.headers(201), self.headers('invalido')):
+            with self.subTest(headers=bool(headers)):
+                response = self.client.put(f'/api/solicitudes/{id_solicitud}/finalizar', headers=headers)
+                self.assertEqual(response.status_code, 401)
+                self.assertEqual(db.session.get(SolicitudServicio, id_solicitud).estado, 'Aceptada')
+
+    def test_finalizar_solicitud_inexistente_devuelve_404(self):
+        response = self.client.put('/api/solicitudes/999/finalizar', headers=self.headers(21))
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(SolicitudServicio.query.count(), 0)
+
+    def test_finalizar_no_confia_en_rol_ni_asignacion_del_token(self):
+        id_solicitud = self.guardar_solicitud(estado='Aceptada')
+        for headers in (self.headers(11, additional_claims={'rol': 'enfermero'}),
+                        self.headers(22, additional_claims={'idEnfermero': 201})):
+            response = self.client.put(f'/api/solicitudes/{id_solicitud}/finalizar', headers=headers)
+            self.assertEqual(response.status_code, 403)
+        self.assertEqual(db.session.get(SolicitudServicio, id_solicitud).estado, 'Aceptada')
+
+    def test_finalizar_hace_rollback_si_falla_y_permite_reintentar(self):
+        id_solicitud = self.guardar_solicitud(estado='Aceptada')
+        ruta = f'/api/solicitudes/{id_solicitud}/finalizar'
+        with patch.object(db.session(), 'commit', side_effect=SQLAlchemyError('detalle privado')):
+            response = self.client.put(ruta, headers=self.headers(21))
+        self.assertEqual(response.status_code, 500)
+        self.assertNotIn('detalle privado', response.get_data(as_text=True))
+        self.assertEqual(db.session.get(SolicitudServicio, id_solicitud).estado, 'Aceptada')
+        self.assertEqual(self.client.put(ruta, headers=self.headers(21)).status_code, 200)
+
+
+    def test_rechazar_y_cancelar_liberan_turno_y_actualizan_bandejas(self):
+        for accion, usuario, origen, destino in (
+            ('rechazar', 21, 'Pendiente', 'Rechazada'),
+            ('cancelar', 11, 'Pendiente', 'Cancelada'),
+            ('cancelar', 11, 'Aceptada', 'Cancelada'),
+        ):
+            with self.subTest(accion=accion, origen=origen):
+                id_solicitud = self.guardar_solicitud(estado=origen)
+                antes = db.session.get(SolicitudServicio, id_solicitud).to_dict()
+                self.assertEqual(self.crear().status_code, 409)
+                ruta = f'/api/solicitudes/{id_solicitud}/{accion}'
+                response = self.client.put(ruta, headers=self.headers(usuario))
+                self.assertEqual(response.status_code, 200, response.json)
+                self.assertEqual(response.json['solicitud'], {**antes, 'estado': destino})
+                self.assertEqual(self.client.put(ruta, headers=self.headers(usuario)).status_code, 400)
+                self.assertEqual(self.client.get('/api/solicitudes/paciente/101', headers=self.headers()).json, [])
+                recibidas = self.client.get('/api/solicitudes/enfermero/201', headers=self.headers(21)).json
+                self.assertEqual(next(s for s in recibidas if s['idSolicitud'] == id_solicitud)['estado'], destino)
+                nueva = self.crear()
+                self.assertEqual(nueva.status_code, 201, nueva.json)
+                # Dejar libre el mismo horario para el siguiente caso.
+                nueva_id = nueva.json['solicitud']['idSolicitud']
+                self.assertEqual(self.client.put(f'/api/solicitudes/{nueva_id}/cancelar', headers=self.headers()).status_code, 200)
+                self.assertTrue(db.session.get(Enfermero, 201).disponible)
+
+    def test_rechazar_y_cancelar_no_permiten_estados_invalidos(self):
+        for accion, usuario, estados in (
+            ('rechazar', 21, ('Aceptada', 'Realizada', 'Rechazada', 'Cancelada')),
+            ('cancelar', 11, ('Realizada', 'Rechazada', 'Cancelada')),
+        ):
+            for estado in estados:
+                with self.subTest(accion=accion, estado=estado):
+                    id_solicitud = self.guardar_solicitud(estado=estado)
+                    response = self.client.put(f'/api/solicitudes/{id_solicitud}/{accion}', headers=self.headers(usuario))
+                    self.assertEqual(response.status_code, 400)
+                    self.assertEqual(db.session.get(SolicitudServicio, id_solicitud).estado, estado)
+
+    def test_rechazar_y_cancelar_exigen_rol_y_titularidad_de_la_base(self):
+        id_solicitud = self.guardar_solicitud()
+        for accion, usuarios in (('rechazar', (11, 12, 22)), ('cancelar', (12, 21, 22))):
+            for usuario in usuarios:
+                with self.subTest(accion=accion, usuario=usuario):
+                    response = self.client.put(
+                        f'/api/solicitudes/{id_solicitud}/{accion}',
+                        headers=self.headers(usuario, additional_claims={'rol': 'paciente', 'idPaciente': 101, 'idEnfermero': 201}),
+                        json={'idPaciente': 101, 'idEnfermero': 201, 'estado': 'Cancelada'},
+                    )
+                    self.assertEqual(response.status_code, 403)
+                    self.assertNotIn('solicitud', response.json)
+                    self.assertEqual(db.session.get(SolicitudServicio, id_solicitud).estado, 'Pendiente')
+        self.assertEqual(self.crear().status_code, 409)
+
+    def test_rechazar_y_cancelar_exigen_jwt_y_usuario_existente(self):
+        id_solicitud = self.guardar_solicitud()
+        for accion, usuario in (('rechazar', 21), ('cancelar', 11)):
+            for headers in ({}, self.headers(usuario, expires_delta=timedelta(seconds=-1)),
+                            self.headers(999), self.headers(101), self.headers('invalido')):
+                with self.subTest(accion=accion, headers=bool(headers)):
+                    response = self.client.put(f'/api/solicitudes/{id_solicitud}/{accion}', headers=headers)
+                    self.assertEqual(response.status_code, 401)
+                    self.assertEqual(db.session.get(SolicitudServicio, id_solicitud).estado, 'Pendiente')
+
+    def test_rechazar_y_cancelar_solicitud_inexistente(self):
+        for accion, usuario in (('rechazar', 21), ('cancelar', 11)):
+            response = self.client.put(f'/api/solicitudes/999/{accion}', headers=self.headers(usuario))
+            self.assertEqual(response.status_code, 404)
+        self.assertEqual(SolicitudServicio.query.count(), 0)
+
+    def test_rechazar_y_cancelar_rollback_conserva_reserva_y_permite_reintentar(self):
+        for accion, usuario in (('rechazar', 21), ('cancelar', 11)):
+            with self.subTest(accion=accion):
+                id_solicitud = self.guardar_solicitud()
+                ruta = f'/api/solicitudes/{id_solicitud}/{accion}'
+                with patch.object(db.session(), 'commit', side_effect=SQLAlchemyError('detalle privado')):
+                    response = self.client.put(ruta, headers=self.headers(usuario))
+                self.assertEqual(response.status_code, 500)
+                self.assertNotIn('detalle privado', response.get_data(as_text=True))
+                self.assertEqual(db.session.get(SolicitudServicio, id_solicitud).estado, 'Pendiente')
+                self.assertEqual(self.crear().status_code, 409)
+                self.assertEqual(self.client.put(ruta, headers=self.headers(usuario)).status_code, 200)
+
+    def test_reserva_solo_bloquea_mismo_enfermero_fecha_y_hora_activos(self):
+        id_solicitud = self.guardar_solicitud()
+        self.assertEqual(self.crear(usuario_id=12).status_code, 409)
+        self.assertEqual(self.client.put(f'/api/solicitudes/{id_solicitud}/aceptar', headers=self.headers(21)).status_code, 200)
+        self.assertEqual(self.crear().status_code, 409)
+        for cambios in ({'fecha': '2030-01-12'}, {'hora': '15:30'}, {'idEnfermero': 202}):
+            with self.subTest(cambios=cambios):
+                self.assertEqual(self.crear(**cambios).status_code, 201)
+
+    def test_duplicados_anteriores_no_pueden_aceptarse_simultaneamente(self):
+        primero = self.guardar_solicitud()
+        segundo = self.guardar_solicitud(paciente=102)
+        self.assertEqual(self.client.put(f'/api/solicitudes/{primero}/aceptar', headers=self.headers(21)).status_code, 200)
+        self.assertEqual(self.client.put(f'/api/solicitudes/{segundo}/aceptar', headers=self.headers(21)).status_code, 409)
+        self.assertEqual(self.client.put(f'/api/solicitudes/{primero}/cancelar', headers=self.headers()).status_code, 200)
+        # El segundo pedido pendiente conserva su reserva aunque se cancele el primero.
+        self.assertEqual(self.crear().status_code, 409)
+        self.assertEqual(self.client.put(f'/api/solicitudes/{segundo}/aceptar', headers=self.headers(21)).status_code, 200)
+
+    def test_liberar_turno_no_reactiva_enfermero_no_disponible(self):
+        id_solicitud = self.guardar_solicitud()
+        db.session.get(Enfermero, 201).disponible = False
+        db.session.commit()
+        response = self.client.put(f'/api/solicitudes/{id_solicitud}/rechazar', headers=self.headers(21))
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(db.session.get(Enfermero, 201).disponible)
+        self.assertEqual(self.crear().status_code, 409)
 
 
 class MigracionSprint4Test(unittest.TestCase):
