@@ -1,24 +1,24 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { cerrarSesion, sesionActual } from '../api';
 
 const Home = () => {
   const navigate = useNavigate();
 
   // Leemos el rol que guardamos en el navegador. 
   // (Si por algún motivo no lo encuentra, lo toma como 'paciente' por precaución)
-  const rolUsuario = localStorage.getItem('rol') || 'paciente';
+  const rolUsuario = sesionActual()?.rol || 'paciente';
 
   const handleLogout = () => {
-    localStorage.removeItem('token'); 
-    localStorage.removeItem('rol'); // También borramos el rol al salir
-    navigate('/login'); 
+    cerrarSesion();
+    navigate('/login', { replace: true });
   };
 
   return (
-    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '80vh', fontFamily: "'Segoe UI', Roboto, Helvetica, Arial, sans-serif" }}>
+    <div className="auth-page" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '80vh', fontFamily: "'Segoe UI', Roboto, Helvetica, Arial, sans-serif" }}>
       
       {/* Tarjeta Principal */}
-      <div style={{ width: '100%', maxWidth: '500px', backgroundColor: '#ffffff', padding: '40px', borderRadius: '16px', boxShadow: '0 10px 25px rgba(0,0,0,0.08)', textAlign: 'center' }}>
+      <div className="auth-card" style={{ width: '100%', maxWidth: '500px', backgroundColor: '#ffffff', padding: '40px', borderRadius: '16px', boxShadow: '0 10px 25px rgba(0,0,0,0.08)', textAlign: 'center' }}>
         
         {/* Cabecera */}
         <div style={{ marginBottom: '35px' }}>

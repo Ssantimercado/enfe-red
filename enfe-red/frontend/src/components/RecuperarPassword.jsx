@@ -1,5 +1,5 @@
 import { useState } from "react";
-import axios from "axios";
+import { api } from '../api';
 import { useNavigate } from "react-router-dom";
 
 export default function RecuperarPassword() {
@@ -16,10 +16,10 @@ export default function RecuperarPassword() {
     e.preventDefault();
     setMensaje("");
     try {
-      await axios.post("http://localhost:5000/api/recuperar-password", {
+      await api.post("/api/recuperar-password", {
         email,
       });
-      setMensaje("Si el correo es válido, enviamos un código. Revisá la consola de Python.");
+      setMensaje("Modo de prueba: si el correo está registrado, el código aparece en la consola del servidor y dura 10 minutos.");
       setTipoMensaje("success");
       setPaso(2);
     } catch (error) {
@@ -32,7 +32,7 @@ export default function RecuperarPassword() {
     e.preventDefault();
     setMensaje("");
     try {
-      await axios.post("http://localhost:5000/api/reset-password", {
+      await api.post("/api/reset-password", {
         email,
         codigo,
         nueva_password: nuevaPassword,
@@ -45,15 +45,15 @@ export default function RecuperarPassword() {
         navigate("/login");
       }, 2000);
     } catch (error) {
-      setMensaje("El código es incorrecto o ya expiró.");
+      setMensaje(error.response?.data?.error || "No se pudo actualizar la contraseña. Intentá nuevamente.");
       setTipoMensaje("error");
     }
   };
 
   return (
-    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '80vh', fontFamily: "'Segoe UI', Roboto, Helvetica, Arial, sans-serif" }}>
+    <div className="auth-page" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '80vh', fontFamily: "'Segoe UI', Roboto, Helvetica, Arial, sans-serif" }}>
       
-      <div style={{ width: '100%', maxWidth: '420px', backgroundColor: '#ffffff', padding: '40px', borderRadius: '16px', boxShadow: '0 10px 25px rgba(0,0,0,0.08)' }}>
+      <div className="auth-card" style={{ width: '100%', maxWidth: '420px', backgroundColor: '#ffffff', padding: '40px', borderRadius: '16px', boxShadow: '0 10px 25px rgba(0,0,0,0.08)' }}>
         
         {/* Cabecera */}
         <div style={{ textAlign: 'center', marginBottom: '30px' }}>

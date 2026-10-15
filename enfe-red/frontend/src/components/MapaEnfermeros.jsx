@@ -176,6 +176,7 @@ export default function MapaEnfermeros({
   enfermeros,
   selectedId,
   onSelect,
+  volverA = '/cartilla',
 }) {
   const [userPosition, setUserPosition] = useState(null);
   const [locationState, setLocationState] = useState('idle');
@@ -461,7 +462,7 @@ export default function MapaEnfermeros({
 
                   <button
                     type="button"
-                    onClick={() => navigate(`/perfil/${id}`)}
+                    onClick={() => navigate(`/perfil/${id}`, { state: { volverA } })}
                     style={{
                       width: '100%',
                       padding: '8px 12px',

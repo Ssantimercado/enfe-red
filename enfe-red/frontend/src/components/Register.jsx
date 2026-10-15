@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { API_URL } from '../api';
 
 const Register = () => {
   const [formData, setFormData] = useState({
@@ -26,7 +27,7 @@ const Register = () => {
     setError('');
 
     try {
-      const response = await fetch('http://localhost:5000/api/registro', {
+      const response = await fetch(`${API_URL}/api/registro`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -52,9 +53,9 @@ const Register = () => {
   };
 
   return (
-    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '85vh', fontFamily: "'Segoe UI', Roboto, Helvetica, Arial, sans-serif" }}>
+    <div className="auth-page" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '85vh', fontFamily: "'Segoe UI', Roboto, Helvetica, Arial, sans-serif" }}>
       
-      <div style={{ width: '100%', maxWidth: '420px', backgroundColor: '#ffffff', padding: '40px', borderRadius: '16px', boxShadow: '0 10px 25px rgba(0,0,0,0.08)' }}>
+      <div className="auth-card" style={{ width: '100%', maxWidth: '420px', backgroundColor: '#ffffff', padding: '40px', borderRadius: '16px', boxShadow: '0 10px 25px rgba(0,0,0,0.08)' }}>
         
         <div style={{ textAlign: 'center', marginBottom: '30px' }}>
           <h2 style={{ color: '#2c3e50', fontSize: '28px', margin: '0 0 8px 0', fontWeight: '800' }}>

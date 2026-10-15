@@ -1,8 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import MapaEnfermeros from './MapaEnfermeros';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { API_URL, apiFetch } from '../api';
+const MapaEnfermeros = lazy(() => import('./MapaEnfermeros'));
 
-const API_URL = 'http://localhost:5000';
 const PAGE_SIZE = 6;
 
 const INITIAL_FILTERS = {
@@ -36,9 +36,13 @@ const ListaEnfermerosSprint3 = () => {
   const navigate = useNavigate();
   const [enfermeros, setEnfermeros] = useState([]);
   const [especialidades, setEspecialidades] = useState([]);
-  const [busqueda, setBusqueda] = useState('');
-  const [filtros, setFiltros] = useState(INITIAL_FILTERS);
-  const [pagina, setPagina] = useState(1);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const busqueda = searchParams.get('q') || '';
+  const filtros = useMemo(() => Object.fromEntries(
+    Object.keys(INITIAL_FILTERS).map((key) => [key, searchParams.get(key) || '']),
+  ), [searchParams]);
+  const pagina = Math.max(1, Math.floor(Number(searchParams.get('page'))) || 1);
+  const volverA = `/cartilla${searchParams.size ? `?${searchParams}` : ''}`;
   const [paginacion, setPaginacion] = useState({ total_resultados: 0, total_paginas: 1 });
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
@@ -53,11 +57,12 @@ const ListaEnfermerosSprint3 = () => {
       if (busqueda.trim()) params.set('q', busqueda.trim());
       if (filtros.especialidad) params.set('especialidad', filtros.especialidad);
       if (filtros.precio_max) params.set('precio_max', filtros.precio_max);
+      if (filtros.precio_min) params.set('precio_min', filtros.precio_min);
       if (filtros.disponible) params.set('disponible', filtros.disponible);
       if (filtros.dia_semana) params.set('dia_semana', filtros.dia_semana);
 
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/enfermeros/buscar?${params}`, {
+      const response = await apiFetch(`${API_URL}/api/enfermeros/buscar?${params}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         signal,
       });
@@ -66,14 +71,10 @@ const ListaEnfermerosSprint3 = () => {
       if (!response.ok) throw new Error(data.error || 'No se pudo cargar la búsqueda');
 
       const resultados = Array.isArray(data) ? data : (data.enfermeros || []);
-      const minimo = filtros.precio_min ? Number(filtros.precio_min) : null;
-      const visibles = Number.isFinite(minimo)
-        ? resultados.filter((item) => Number(item.tarifa_hora || 0) >= minimo)
-        : resultados;
-
-      setEnfermeros(visibles);
+      if (signal?.aborted) return;
+      setEnfermeros(resultados);
       setPaginacion({
-        total_resultados: data.total_resultados ?? visibles.length,
+        total_resultados: data.total_resultados ?? resultados.length,
         total_paginas: data.total_paginas ?? 1,
       });
       setEspecialidades((current) => [...new Set([
@@ -99,14 +100,23 @@ const ListaEnfermerosSprint3 = () => {
   }, [cargarResultados]);
 
   const cambiarFiltro = (name, value) => {
-    setFiltros((current) => ({ ...current, [name]: value }));
-    setPagina(1);
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      if (value) next.set(name, value); else next.delete(name);
+      next.delete('page');
+      return next;
+    }, { replace: true });
   };
 
+  const setPagina = (update) => setSearchParams((current) => {
+    const next = new URLSearchParams(current);
+    const value = typeof update === 'function' ? update(pagina) : update;
+    next.set('page', String(value));
+    return next;
+  });
+
   const limpiarFiltros = () => {
-    setBusqueda('');
-    setFiltros(INITIAL_FILTERS);
-    setPagina(1);
+    setSearchParams({}, { replace: true });
   };
 
   const hayFiltros = useMemo(
@@ -172,7 +182,7 @@ const ListaEnfermerosSprint3 = () => {
         <div className="s3-shell">
           <header className="s3-header">
             <div>
-              <h2>Enfermeros <span style={{ color: '#3498db' }}>disponibles</span></h2>
+              <h2>Cartilla de <span style={{ color: '#3498db' }}>enfermeros</span></h2>
               <p>Encontrá el profesional adecuado para tu atención domiciliaria.</p>
             </div>
             <button className="s3-back-button" type="button" onClick={() => navigate('/home')}>← Volver al Panel</button>
@@ -180,7 +190,7 @@ const ListaEnfermerosSprint3 = () => {
 
           <section className="s3-panel" aria-label="Buscar y filtrar enfermeros">
             <div className="s3-search-row">
-              <input className="s3-search" type="search" value={busqueda} onChange={(event) => { setBusqueda(event.target.value); setPagina(1); }} placeholder="Buscar por nombre, zona o especialidad..." aria-label="Buscar enfermeros" />
+              <input className="s3-search" type="search" value={busqueda} onChange={(event) => cambiarFiltro('q', event.target.value)} placeholder="Buscar por nombre, zona o especialidad..." aria-label="Buscar enfermeros" />
               <button className="s3-filter-button" type="button" onClick={() => document.getElementById('s3-filtros')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })}>⚙ Filtros</button>
             </div>
 
@@ -207,11 +217,12 @@ const ListaEnfermerosSprint3 = () => {
               : enfermeros.length === 0 ? <div className="s3-empty"><p>No encontramos enfermeros con esos criterios.</p>{hayFiltros && <button className="s3-profile-button" type="button" onClick={limpiarFiltros}>Ver todos los profesionales</button>}</div>
                 : <>
                   <div className="s3-toolbar"><span className="s3-count">{paginacion.total_resultados} profesionales encontrados</span></div>
-                  <MapaEnfermeros
+                  <Suspense fallback={<p role="status">Cargando mapa…</p>}><MapaEnfermeros
                     enfermeros={enfermeros}
                     selectedId={enfermeroSeleccionado}
                     onSelect={setEnfermeroSeleccionado}
-                  />
+                    volverA={volverA}
+                  /></Suspense>
                   <section className="s3-grid" aria-label="Resultados de enfermeros">
                     {enfermeros.map((enfermero) => {
                       const foto = enfermero.foto_url || enfermero.foto || enfermero.imagen;
@@ -223,7 +234,7 @@ const ListaEnfermerosSprint3 = () => {
                         <span className="s3-specialty">⚕ {enfermero.especialidad || 'Enfermería general'}</span>
                         <p className="s3-description">{enfermero.descripcion || 'Perfil profesional de enfermería para atención domiciliaria.'}</p>
                         <div className="s3-meta"><span className="s3-meta-item"><strong>{rating === null ? '—' : `★ ${rating.toFixed(1)}`}</strong>Puntuación</span><span className="s3-meta-item"><strong>{distance === null ? '—' : `${distance.toFixed(1)} km`}</strong>Distancia</span><span className="s3-meta-item"><strong>{enfermero.experiencia_anios || 0} años</strong>Experiencia</span></div>
-                        <div className="s3-card-bottom"><span className="s3-price">{formatPrice(enfermero.tarifa_hora)}</span><button className="s3-profile-button" type="button" onClick={(event) => { event.stopPropagation(); navigate(`/perfil/${profileId}`); }}>Ver perfil</button></div>
+                        <div className="s3-card-bottom"><span className="s3-price">{formatPrice(enfermero.tarifa_hora)}</span><button className="s3-profile-button" type="button" onClick={(event) => { event.stopPropagation(); navigate(`/perfil/${profileId}`, { state: { volverA } }); }}>Ver perfil</button></div>
                       </article>;
                     })}
                   </section>

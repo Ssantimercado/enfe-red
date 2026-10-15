@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import { API_URL, apiFetch } from "../api";
 
 const PerfilPaciente = () => {
   const [datosPaciente, setDatosPaciente] = useState(null);
@@ -7,18 +8,19 @@ const PerfilPaciente = () => {
   const [form, setForm] = useState({});
   const [error, setError] = useState("");
   const [mensaje, setMensaje] = useState("");
+  const [guardando, setGuardando] = useState(false);
 
   const navigate = useNavigate();
   const token = localStorage.getItem("token");
 
-  const cargarPerfil = async () => {
+  const cargarPerfil = useCallback(async () => {
     if (!token) {
       setError("Acceso denegado. Iniciá sesión primero.");
       return;
     }
     try {
-      const response = await fetch(
-        "http://localhost:5000/api/perfil/paciente",
+      const response = await apiFetch(
+        `${API_URL}/api/perfil/paciente`,
         {
           headers: { Authorization: `Bearer ${token}` },
         },
@@ -31,21 +33,22 @@ const PerfilPaciente = () => {
     } catch (err) {
       setError(err.message);
     }
-  };
+  }, [token]);
 
   useEffect(() => {
     cargarPerfil();
-  }, []);
+  }, [cargarPerfil]);
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
   const handleGuardar = async () => {
+    setGuardando(true);
     try {
       setError("");
-      const response = await fetch(
-        "http://localhost:5000/api/perfil/paciente",
+      const response = await apiFetch(
+        `${API_URL}/api/perfil/paciente`,
         {
           method: "PUT",
           headers: {
@@ -55,16 +58,18 @@ const PerfilPaciente = () => {
           body: JSON.stringify(form),
         },
       );
-      if (!response.ok) throw new Error("Error al guardar los cambios");
-      
       const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Error al guardar los cambios");
       setDatosPaciente(data);
+      setForm(data);
       setEditando(false);
       setMensaje("¡Perfil actualizado correctamente!");
       
       setTimeout(() => setMensaje(""), 3000);
     } catch (err) {
       setError(err.message);
+    } finally {
+      setGuardando(false);
     }
   };
 
@@ -86,11 +91,11 @@ const PerfilPaciente = () => {
   );
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#f8fafc', padding: '40px 20px', fontFamily: "'Segoe UI', Roboto, Helvetica, Arial, sans-serif" }}>
+    <div className="profile-page" style={{ minHeight: '100vh', backgroundColor: '#f8fafc', padding: '40px 20px', fontFamily: "'Segoe UI', Roboto, Helvetica, Arial, sans-serif" }}>
       
       <div style={{ maxWidth: '600px', margin: '0 auto' }}>
         
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' }}>
+        <div className="profile-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' }}>
           <h2 style={{ color: '#2c3e50', margin: 0, fontSize: '28px', fontWeight: '800' }}>
             Mi <span style={{ color: '#3498db' }}>Perfil</span>
           </h2>
@@ -113,7 +118,7 @@ const PerfilPaciente = () => {
           </div>
         )}
 
-        <div style={{ backgroundColor: '#ffffff', padding: '35px', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', border: '1px solid #f1f5f9' }}>
+        <div className="profile-card" style={{ backgroundColor: '#ffffff', padding: '35px', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', border: '1px solid #f1f5f9' }}>
           
           {editando ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -121,7 +126,7 @@ const PerfilPaciente = () => {
                 <h3 style={{ color: '#1e293b', margin: 0 }}>Editar mis datos</h3>
               </div>
 
-              <div style={{ display: 'flex', gap: '15px' }}>
+              <div className="form-row" style={{ display: 'flex', gap: '15px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
                   <label style={{ marginBottom: '6px', fontWeight: '600', color: '#475569', fontSize: '14px' }}>Nombre</label>
                   <input name="nombre" value={form.nombre || ""} onChange={handleChange} style={{ padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#1e293b', outline: 'none' }} />
@@ -148,10 +153,10 @@ const PerfilPaciente = () => {
               </div>
 
               <div style={{ display: 'flex', gap: '15px', marginTop: '15px' }}>
-                <button onClick={handleGuardar} style={{ flex: 1, padding: '14px', backgroundColor: '#2ecc71', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '15px' }}>
-                  💾 Guardar Cambios
+                <button onClick={handleGuardar} disabled={guardando} style={{ flex: 1, padding: '14px', backgroundColor: '#2ecc71', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '15px' }}>
+                  {guardando ? 'Guardando…' : 'Guardar cambios'}
                 </button>
-                <button onClick={() => setEditando(false)} style={{ flex: 1, padding: '14px', backgroundColor: '#ffffff', color: '#ef4444', border: '1px solid #f87171', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '15px' }}>
+                <button onClick={() => { setForm(datosPaciente); setError(""); setEditando(false); }} style={{ flex: 1, padding: '14px', backgroundColor: '#ffffff', color: '#ef4444', border: '1px solid #f87171', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '15px' }}>
                   Cancelar
                 </button>
               </div>
@@ -194,7 +199,7 @@ const PerfilPaciente = () => {
               </div>
 
               <button 
-                onClick={() => setEditando(true)} 
+                onClick={() => { setForm(datosPaciente); setError(""); setMensaje(""); setEditando(true); }}
                 style={{ width: '100%', padding: '16px', backgroundColor: '#3498db', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px', boxShadow: '0 4px 6px rgba(52, 152, 219, 0.2)' }}
               >
                 ✏️ Editar Mi Perfil
