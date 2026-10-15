@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import { API_URL, apiFetch } from "../api";
 
 const PerfilEnfermero = () => {
   // Estados del Perfil
@@ -8,6 +9,7 @@ const PerfilEnfermero = () => {
   const [form, setForm] = useState({});
   const [error, setError] = useState("");
   const [mensaje, setMensaje] = useState("");
+  const [guardando, setGuardando] = useState(false);
 
   // Estados del Formulario de Horarios
   const [horariosList, setHorariosList] = useState([]);
@@ -23,22 +25,21 @@ const PerfilEnfermero = () => {
   const token = localStorage.getItem("token");
 
   // Función para pedir los horarios guardados
-  const obtenerHorarios = async () => {
+  const obtenerHorarios = useCallback(async () => {
     try {
       setCargandoHorariosList(true);
-      const res = await fetch("http://localhost:5000/api/perfil/enfermero/horarios", {
+      const res = await apiFetch(`${API_URL}/api/perfil/enfermero/horarios`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (res.ok) {
-        const data = await res.json();
-        setHorariosList(data);
-      }
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "No se pudieron cargar los horarios");
+      setHorariosList(data);
     } catch (err) {
-      console.error("Error al cargar horarios:", err);
+      setMensajeHorarios(`Aviso: ${err.message}`);
     } finally {
       setCargandoHorariosList(false);
     }
-  };
+  }, [token]);
 
   // ==========================================
   // 1. CARGA DE DATOS AL INICIAR
@@ -52,7 +53,7 @@ const PerfilEnfermero = () => {
       
       // Cargar Perfil
       try {
-        const resPerfil = await fetch("http://localhost:5000/api/perfil/enfermero", {
+        const resPerfil = await apiFetch(`${API_URL}/api/perfil/enfermero`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!resPerfil.ok) throw new Error("Error al obtener los datos del enfermero");
@@ -68,7 +69,7 @@ const PerfilEnfermero = () => {
     };
 
     cargarDatos();
-  }, [token]);
+  }, [token, obtenerHorarios]);
 
   // ==========================================
   // 2. MANEJO DEL PERFIL PROFESIONAL
@@ -78,9 +79,10 @@ const PerfilEnfermero = () => {
   };
 
   const handleGuardar = async () => {
+    setGuardando(true);
     try {
       setError("");
-      const response = await fetch("http://localhost:5000/api/perfil/enfermero", {
+      const response = await apiFetch(`${API_URL}/api/perfil/enfermero`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -88,16 +90,18 @@ const PerfilEnfermero = () => {
         },
         body: JSON.stringify(form),
       });
-      if (!response.ok) throw new Error("Error al guardar los cambios");
-      
       const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Error al guardar los cambios");
       setDatosEnfermero(data);
+      setForm(data);
       setEditando(false);
       setMensaje("¡Perfil actualizado correctamente!");
       
       setTimeout(() => setMensaje(""), 3000);
     } catch (err) {
       setError(err.message);
+    } finally {
+      setGuardando(false);
     }
   };
 
@@ -117,7 +121,7 @@ const PerfilEnfermero = () => {
     };
 
     try {
-      const response = await fetch("http://localhost:5000/api/perfil/enfermero/horarios", {
+      const response = await apiFetch(`${API_URL}/api/perfil/enfermero/horarios`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -126,10 +130,8 @@ const PerfilEnfermero = () => {
         body: JSON.stringify(nuevoHorario),
       });
       
-      if (!response.ok) {
-        if (response.status === 404) throw new Error("La ruta del backend aún no existe");
-        throw new Error("Error al guardar el horario en la base de datos");
-      }
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Error al guardar el horario");
       
       setMensajeHorarios("✅ ¡Horario agregado con éxito!");
       
@@ -158,7 +160,7 @@ const PerfilEnfermero = () => {
   // ==========================================
   if (!datosEnfermero && !error) return (
     <div style={{ display: 'flex', justifyContent: 'center', marginTop: '100px', fontFamily: "'Segoe UI', Roboto, sans-serif" }}>
-      <h3 style={{ color: '#0077b6', fontWeight: '600' }}>⏳ Cargando tu perfil profesional...</h3>
+      <h3 style={{ color: '#2c3e50', fontWeight: '600' }}>⏳ Cargando tu perfil profesional...</h3>
     </div>
   );
 
@@ -174,14 +176,14 @@ const PerfilEnfermero = () => {
   );
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#f8fafc', padding: '40px 20px', fontFamily: "'Segoe UI', Roboto, Helvetica, Arial, sans-serif" }}>
+    <div className="profile-page" style={{ minHeight: '100vh', backgroundColor: '#f8fafc', padding: '40px 20px', fontFamily: "'Segoe UI', Roboto, Helvetica, Arial, sans-serif" }}>
       
       <div style={{ maxWidth: '650px', margin: '0 auto' }}>
         
         {/* Cabecera general */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' }}>
-          <h2 style={{ color: '#0077b6', margin: 0, fontSize: '28px', fontWeight: '800' }}>
-            Panel <span style={{ color: '#0088cc' }}>Profesional</span>
+        <div className="profile-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' }}>
+          <h2 style={{ color: '#2c3e50', margin: 0, fontSize: '28px', fontWeight: '800' }}>
+            Panel <span style={{ color: '#3498db' }}>Profesional</span>
           </h2>
           <button 
             onClick={() => navigate('/home')}
@@ -197,10 +199,12 @@ const PerfilEnfermero = () => {
           </div>
         )}
 
+        {error && <div className="error-notice" role="alert">{error}</div>}
+
         {/* ==========================================
             TARJETA 1: PERFIL PROFESIONAL
             ========================================== */}
-        <div style={{ backgroundColor: '#ffffff', padding: '35px', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', border: '1px solid #f1f5f9', marginBottom: '30px' }}>
+        <div className="profile-card" style={{ backgroundColor: '#ffffff', padding: '35px', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', border: '1px solid #f1f5f9', marginBottom: '30px' }}>
           
           {editando ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -208,7 +212,7 @@ const PerfilEnfermero = () => {
                 <h3 style={{ color: '#1e293b', margin: 0 }}>Editar mis datos</h3>
               </div>
 
-              <div style={{ display: 'flex', gap: '15px' }}>
+              <div className="form-row" style={{ display: 'flex', gap: '15px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
                   <label style={{ marginBottom: '6px', fontWeight: '600', color: '#475569', fontSize: '14px' }}>Nombre</label>
                   <input name="nombre" value={form.nombre || ""} onChange={handleChange} style={{ padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#1e293b', outline: 'none' }} />
@@ -230,10 +234,10 @@ const PerfilEnfermero = () => {
               </div>
 
               <div style={{ display: 'flex', gap: '15px', marginTop: '15px' }}>
-                <button onClick={handleGuardar} style={{ flex: 1, padding: '14px', backgroundColor: '#0088cc', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '15px' }}>
-                  💾 Guardar Cambios
+                <button onClick={handleGuardar} disabled={guardando} style={{ flex: 1, padding: '14px', backgroundColor: '#3498db', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '15px' }}>
+                  {guardando ? 'Guardando…' : 'Guardar cambios'}
                 </button>
-                <button onClick={() => setEditando(false)} style={{ flex: 1, padding: '14px', backgroundColor: '#ffffff', color: '#ef4444', border: '1px solid #f87171', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '15px' }}>
+                <button onClick={() => { setForm(datosEnfermero); setError(""); setEditando(false); }} style={{ flex: 1, padding: '14px', backgroundColor: '#ffffff', color: '#ef4444', border: '1px solid #f87171', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '15px' }}>
                   Cancelar
                 </button>
               </div>
@@ -241,7 +245,7 @@ const PerfilEnfermero = () => {
           ) : (
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '25px', marginBottom: '30px' }}>
-                <div style={{ width: '80px', height: '80px', backgroundColor: '#e0f2fe', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center', color: '#0077b6', fontSize: '28px', fontWeight: '800' }}>
+                <div style={{ width: '80px', height: '80px', backgroundColor: '#e0f2fe', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center', color: '#2c3e50', fontSize: '28px', fontWeight: '800' }}>
                   {datosEnfermero.nombre?.charAt(0)}{datosEnfermero.apellido?.charAt(0)}
                 </div>
                 <div>
@@ -263,7 +267,7 @@ const PerfilEnfermero = () => {
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: '#64748b', fontWeight: '600' }}>Especialidad:</span>
-                    <span style={{ color: '#0077b6', fontWeight: '700', backgroundColor: '#e0f2fe', padding: '2px 10px', borderRadius: '10px' }}>
+                    <span style={{ color: '#2c3e50', fontWeight: '700', backgroundColor: '#e0f2fe', padding: '2px 10px', borderRadius: '10px' }}>
                       {datosEnfermero.especialidad || "No especificada"}
                     </span>
                   </div>
@@ -271,8 +275,8 @@ const PerfilEnfermero = () => {
               </div>
 
               <button 
-                onClick={() => setEditando(true)} 
-                style={{ width: '100%', padding: '16px', backgroundColor: '#0088cc', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px', boxShadow: '0 4px 6px rgba(0, 136, 204, 0.2)' }}
+                onClick={() => { setForm(datosEnfermero); setError(""); setMensaje(""); setEditando(true); }}
+                style={{ width: '100%', padding: '16px', backgroundColor: '#3498db', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px', boxShadow: '0 4px 6px rgba(0, 136, 204, 0.2)' }}
               >
                 ✏️ Editar Perfil
               </button>
@@ -283,9 +287,9 @@ const PerfilEnfermero = () => {
         {/* ==========================================
             TARJETA 2: GESTIÓN DE HORARIOS Y DISPONIBILIDAD
             ========================================== */}
-        <div style={{ backgroundColor: '#ffffff', padding: '35px', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', border: '1px solid #f1f5f9' }}>
+        <div className="profile-card" style={{ backgroundColor: '#ffffff', padding: '35px', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', border: '1px solid #f1f5f9' }}>
           
-          <h3 style={{ color: '#0077b6', margin: '0 0 25px 0', fontSize: '22px', fontWeight: '800', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+          <h3 style={{ color: '#2c3e50', margin: '0 0 25px 0', fontSize: '22px', fontWeight: '800', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
             📅 Gestión de Horarios y Disponibilidad
           </h3>
 
@@ -293,13 +297,13 @@ const PerfilEnfermero = () => {
           <form onSubmit={handleAgregarHorario} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             
             {/* Fila 1: Día y Estado Inicial */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+            <div className="form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ color: '#0077b6', fontWeight: 'bold', fontSize: '14px' }}>Día:</label>
+                <label style={{ color: '#2c3e50', fontWeight: 'bold', fontSize: '14px' }}>Día:</label>
                 <select 
                   value={diaSeleccionado} 
                   onChange={(e) => setDiaSeleccionado(e.target.value)}
-                  style={{ width: '100%', backgroundColor: '#3b3e40', color: '#ffffff', border: '1px solid #2b2d2f', borderRadius: '8px', padding: '10px 14px', fontSize: '15px', outline: 'none' }}
+                  style={{ width: '100%', backgroundColor: '#f8fafc', color: '#1e293b', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '10px 14px', fontSize: '15px', outline: 'none' }}
                 >
                   <option value="Lunes">Lunes</option>
                   <option value="Martes">Martes</option>
@@ -312,11 +316,11 @@ const PerfilEnfermero = () => {
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ color: '#0077b6', fontWeight: 'bold', fontSize: '14px' }}>Estado Inicial:</label>
+                <label style={{ color: '#2c3e50', fontWeight: 'bold', fontSize: '14px' }}>Estado Inicial:</label>
                 <select 
                   value={estadoInicial} 
                   onChange={(e) => setEstadoInicial(e.target.value)}
-                  style={{ width: '100%', backgroundColor: '#3b3e40', color: '#ffffff', border: '1px solid #2b2d2f', borderRadius: '8px', padding: '10px 14px', fontSize: '15px', outline: 'none' }}
+                  style={{ width: '100%', backgroundColor: '#f8fafc', color: '#1e293b', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '10px 14px', fontSize: '15px', outline: 'none' }}
                 >
                   <option value="Disponible">Disponible</option>
                   <option value="Ocupado / Reservado">Ocupado / Reservado</option>
@@ -326,24 +330,24 @@ const PerfilEnfermero = () => {
             </div>
 
             {/* Fila 2: Desde y Hasta */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+            <div className="form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ color: '#0077b6', fontWeight: 'bold', fontSize: '14px' }}>Desde:</label>
+                <label style={{ color: '#2c3e50', fontWeight: 'bold', fontSize: '14px' }}>Desde:</label>
                 <input 
                   type="time" 
                   value={horaDesde} 
                   onChange={(e) => setHoraDesde(e.target.value)}
-                  style={{ width: '100%', backgroundColor: '#3b3e40', color: '#ffffff', border: '1px solid #2b2d2f', borderRadius: '8px', padding: '10px 14px', fontSize: '15px', outline: 'none', boxSizing: 'border-box', colorScheme: 'dark' }}
+                  style={{ width: '100%', backgroundColor: '#f8fafc', color: '#1e293b', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '10px 14px', fontSize: '15px', outline: 'none', boxSizing: 'border-box', colorScheme: 'light' }}
                 />
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ color: '#0077b6', fontWeight: 'bold', fontSize: '14px' }}>Hasta:</label>
+                <label style={{ color: '#2c3e50', fontWeight: 'bold', fontSize: '14px' }}>Hasta:</label>
                 <input 
                   type="time" 
                   value={horaHasta} 
                   onChange={(e) => setHoraHasta(e.target.value)}
-                  style={{ width: '100%', backgroundColor: '#3b3e40', color: '#ffffff', border: '1px solid #2b2d2f', borderRadius: '8px', padding: '10px 14px', fontSize: '15px', outline: 'none', boxSizing: 'border-box', colorScheme: 'dark' }}
+                  style={{ width: '100%', backgroundColor: '#f8fafc', color: '#1e293b', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '10px 14px', fontSize: '15px', outline: 'none', boxSizing: 'border-box', colorScheme: 'light' }}
                 />
               </div>
             </div>
@@ -352,7 +356,7 @@ const PerfilEnfermero = () => {
             <button 
               type="submit" 
               disabled={guardandoHorarios}
-              style={{ width: '100%', padding: '14px', backgroundColor: '#0088cc', color: '#ffffff', border: 'none', borderRadius: '8px', cursor: guardandoHorarios ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: '16px', marginTop: '10px', boxShadow: '0 4px 6px rgba(0, 136, 204, 0.2)' }}
+              style={{ width: '100%', padding: '14px', backgroundColor: '#3498db', color: '#ffffff', border: 'none', borderRadius: '8px', cursor: guardandoHorarios ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: '16px', marginTop: '10px', boxShadow: '0 4px 6px rgba(0, 136, 204, 0.2)' }}
             >
               {guardandoHorarios ? "⏳ Guardando..." : "+ Agregar Horario"}
             </button>
@@ -380,7 +384,7 @@ const PerfilEnfermero = () => {
                     style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', padding: '12px 16px', borderRadius: '10px', border: '1px solid #e2e8f0' }}
                   >
                     <div>
-                      <strong style={{ color: '#0077b6', fontSize: '15px', marginRight: '8px' }}>
+                      <strong style={{ color: '#2c3e50', fontSize: '15px', marginRight: '8px' }}>
                         {item.dia || item.dia_semana}
                       </strong>
                       <span style={{ color: '#334155', fontSize: '14px', fontWeight: '600' }}>

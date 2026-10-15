@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import axios from "axios";
-
-const API_URL = "http://localhost:5000";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
+import { api } from '../api';
 
 function VerPerfiles() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const volverA = location.state?.volverA?.startsWith('/cartilla') ? location.state.volverA : '/cartilla';
   const [perfil, setPerfil] = useState(null);
   const [horarios, setHorarios] = useState([]); // <-- NUEVO ESTADO PARA LOS HORARIOS
   const [cargando, setCargando] = useState(true);
@@ -20,14 +20,14 @@ function VerPerfiles() {
         const config = { headers: { Authorization: `Bearer ${token}` } };
 
         // 1. Cargar Perfil
-        const respuestaPerfil = await axios.get(`${API_URL}/api/usuarios/${id}`, config);
+        const respuestaPerfil = await api.get(`/api/usuarios/${id}`, config);
         setPerfil(respuestaPerfil.data);
         setError(null);
 
         // 2. Cargar Horarios de este enfermero (Preparado para el backend de Renzo)
         try {
           // Acá se asume que Renzo va a crear esta ruta pública o compartida para leer los horarios de un ID
-          const respuestaHorarios = await axios.get(`${API_URL}/api/usuarios/${id}/horarios`, config);
+          const respuestaHorarios = await api.get(`/api/usuarios/${id}/horarios`, config);
           setHorarios(respuestaHorarios.data || []);
         } catch (errHorarios) {
           console.log("Los horarios aún no están disponibles o el endpoint falta.");
@@ -59,7 +59,7 @@ function VerPerfiles() {
     <div style={{ display: 'flex', justifyContent: 'center', marginTop: '100px', fontFamily: "'Segoe UI', Roboto, sans-serif", flexDirection: 'column', alignItems: 'center' }}>
       <div style={{ backgroundColor: '#fee2e2', padding: '20px 40px', borderRadius: '12px', border: '1px solid #f87171', color: '#ef4444', textAlign: 'center' }}>
         <h3 style={{ margin: '0 0 15px 0' }}>⚠️ {error}</h3>
-        <button onClick={() => navigate('/cartilla')} style={{ padding: '10px 20px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>
+        <button onClick={() => navigate(volverA)} style={{ padding: '10px 20px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>
           Volver a la Cartilla
         </button>
       </div>
@@ -67,17 +67,17 @@ function VerPerfiles() {
   );
 
   // Filtramos solo los días que el enfermero marcó como activos
-  const diasActivos = horarios.filter(h => h.estado === 'Disponible' || h.estado === 'disponible' || h.disponible !== false);
+  const diasActivos = horarios.filter(h => h.estado?.toLowerCase() === 'disponible');
   
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#f8fafc', padding: '40px 20px', fontFamily: "'Segoe UI', Roboto, Helvetica, Arial, sans-serif" }}>
+    <div className="profile-page" style={{ minHeight: '100vh', backgroundColor: '#f8fafc', padding: '40px 20px', fontFamily: "'Segoe UI', Roboto, Helvetica, Arial, sans-serif" }}>
       
       <div style={{ maxWidth: '600px', margin: '0 auto' }}>
         
         {/* Botón Volver */}
         <div style={{ marginBottom: '25px', display: 'flex', justifyContent: 'flex-end' }}>
           <button 
-            onClick={() => navigate('/cartilla')}
+            onClick={() => navigate(volverA)}
             style={{ padding: '8px 16px', backgroundColor: '#ffffff', color: '#475569', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}
           >
             ← Volver a la Cartilla
@@ -85,7 +85,7 @@ function VerPerfiles() {
         </div>
 
         {/* Tarjeta Principal */}
-        <div style={{ backgroundColor: '#ffffff', padding: '35px', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', border: '1px solid #f1f5f9' }}>
+        <div className="profile-card" style={{ backgroundColor: '#ffffff', padding: '35px', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', border: '1px solid #f1f5f9' }}>
           
           <div style={{ display: 'flex', alignItems: 'center', gap: '25px', marginBottom: '30px' }}>
             {/* Avatar circular */}

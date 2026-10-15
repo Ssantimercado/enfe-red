@@ -95,9 +95,6 @@ def inicializar_bd_sprint3():
                     enfermero_id=nuevo_enf.id, dia_semana=dia,
                     hora_inicio=h_ini, hora_fin=h_fin, estado="Disponible"
                 ))
-        else:
-            # Si ya existía en tu BD, le actualiza la contraseña real '123456'
-            usuario_existente.password_hash = pass_hash
 
     db.session.commit()
-    print("✅ BD verificada: Columnas e información de prueba del Sprint 3 listas.")
+    print("BD verificada: datos del Sprint 3 listos.")
