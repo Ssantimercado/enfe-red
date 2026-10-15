@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
-import { requestApi as api, DAYS } from '../api';
+import { requestApi as api, DAYS, sesionActual } from '../api';
 import Avatar from './ui/Avatar';
 import Icon from './ui/Icon';
 import ProfileSkeleton from './ui/ProfileSkeleton';
@@ -80,6 +80,11 @@ export default function VerPerfiles() {
               </div>
             </div>
           </header>
+          {sesionActual()?.rol === 'paciente' && profile.rol === 'enfermero' && (
+            <Link className="button button-primary" to={`/perfil/${id}/solicitar`}>
+              Solicitar servicio
+            </Link>
+          )}
           <div className="profile-columns public-profile-layout">
             <ProfessionalContact profile={profile} />
             <div className="profile-information">
