@@ -1,156 +1,157 @@
-import { useEffect, useState } from "react";
-import { useParams, useNavigate, useLocation } from "react-router-dom";
-import { api } from '../api';
+import { useEffect, useState } from 'react';
+import { Link, useLocation, useParams } from 'react-router-dom';
+import { requestApi as api, DAYS } from '../api';
+import Avatar from './ui/Avatar';
+import Icon from './ui/Icon';
+import ProfileSkeleton from './ui/ProfileSkeleton';
+import ProfessionalContact from './ProfessionalContact';
 
-function VerPerfiles() {
+export default function VerPerfiles() {
   const { id } = useParams();
-  const navigate = useNavigate();
   const location = useLocation();
-  const volverA = location.state?.volverA?.startsWith('/cartilla') ? location.state.volverA : '/cartilla';
-  const [perfil, setPerfil] = useState(null);
-  const [horarios, setHorarios] = useState([]); // <-- NUEVO ESTADO PARA LOS HORARIOS
-  const [cargando, setCargando] = useState(true);
-  const [error, setError] = useState(null);
-
+  const [profile, setProfile] = useState(null);
+  const [error, setError] = useState('');
+  const [retry, setRetry] = useState(0);
   useEffect(() => {
-    const obtenerDatos = async () => {
-      try {
-        setCargando(true);
-        const token = localStorage.getItem("token");
-        const config = { headers: { Authorization: `Bearer ${token}` } };
+    const controller = new AbortController();
+    setProfile(null);
+    setError('');
+    api(`/usuarios/${id}`, { signal: controller.signal })
+      .then((data) => {
+        if (!controller.signal.aborted) setProfile(data);
+      })
+      .catch((err) => {
+        if (!controller.signal.aborted) setError(err.message);
+      });
+    return () => controller.abort();
+  }, [id, retry]);
+  const schedules = (profile?.horarios || [])
+    .filter((item) => item.estado?.toLowerCase() === 'disponible')
+    .sort(
+      (a, b) =>
+        DAYS.indexOf(a.dia_semana) - DAYS.indexOf(b.dia_semana) ||
+        a.hora_inicio.localeCompare(b.hora_inicio),
+    );
+  const returnPath = location.state?.from || location.state?.volverA;
+  const back = returnPath?.startsWith('/cartilla') ? returnPath : '/cartilla';
 
-        // 1. Cargar Perfil
-        const respuestaPerfil = await api.get(`/api/usuarios/${id}`, config);
-        setPerfil(respuestaPerfil.data);
-        setError(null);
-
-        // 2. Cargar Horarios de este enfermero (Preparado para el backend de Renzo)
-        try {
-          // Acá se asume que Renzo va a crear esta ruta pública o compartida para leer los horarios de un ID
-          const respuestaHorarios = await api.get(`/api/usuarios/${id}/horarios`, config);
-          setHorarios(respuestaHorarios.data || []);
-        } catch (errHorarios) {
-          console.log("Los horarios aún no están disponibles o el endpoint falta.");
-          setHorarios([]); // Lo dejamos vacío si falla, para que no rompa la página del perfil
-        }
-
-      } catch (err) {
-        if (err.response?.status === 404) {
-          setError("No se encontró este perfil de enfermero.");
-        } else {
-          setError("Ocurrió un error al cargar el perfil.");
-        }
-      } finally {
-        setCargando(false);
-      }
-    };
-
-    obtenerDatos();
-  }, [id]);
-
-  // Pantallas de carga y error estilizadas
-  if (cargando) return (
-    <div style={{ display: 'flex', justifyContent: 'center', marginTop: '100px', fontFamily: "'Segoe UI', Roboto, sans-serif" }}>
-      <h3 style={{ color: '#3498db', fontWeight: '600' }}>⏳ Cargando perfil del profesional...</h3>
-    </div>
-  );
-
-  if (error) return (
-    <div style={{ display: 'flex', justifyContent: 'center', marginTop: '100px', fontFamily: "'Segoe UI', Roboto, sans-serif", flexDirection: 'column', alignItems: 'center' }}>
-      <div style={{ backgroundColor: '#fee2e2', padding: '20px 40px', borderRadius: '12px', border: '1px solid #f87171', color: '#ef4444', textAlign: 'center' }}>
-        <h3 style={{ margin: '0 0 15px 0' }}>⚠️ {error}</h3>
-        <button onClick={() => navigate(volverA)} style={{ padding: '10px 20px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>
-          Volver a la Cartilla
-        </button>
-      </div>
-    </div>
-  );
-
-  // Filtramos solo los días que el enfermero marcó como activos
-  const diasActivos = horarios.filter(h => h.estado?.toLowerCase() === 'disponible');
-  
   return (
-    <div className="profile-page" style={{ minHeight: '100vh', backgroundColor: '#f8fafc', padding: '40px 20px', fontFamily: "'Segoe UI', Roboto, Helvetica, Arial, sans-serif" }}>
-      
-      <div style={{ maxWidth: '600px', margin: '0 auto' }}>
-        
-        {/* Botón Volver */}
-        <div style={{ marginBottom: '25px', display: 'flex', justifyContent: 'flex-end' }}>
-          <button 
-            onClick={() => navigate(volverA)}
-            style={{ padding: '8px 16px', backgroundColor: '#ffffff', color: '#475569', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}
+    <div className="page-container">
+      <Link className="text-link profile-back" to={back}>
+        <Icon name="back" size={17} />
+        Volver a los profesionales
+      </Link>
+      {error ? (
+        <div className="empty-state" role="alert">
+          <h1>No pudimos cargar este perfil.</h1>
+          <p>{error}</p>
+          <button
+            className="button button-primary"
+            onClick={() => setRetry((v) => v + 1)}
           >
-            ← Volver a la Cartilla
+            Reintentar
           </button>
         </div>
-
-        {/* Tarjeta Principal */}
-        <div className="profile-card" style={{ backgroundColor: '#ffffff', padding: '35px', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', border: '1px solid #f1f5f9' }}>
-          
-          <div style={{ display: 'flex', alignItems: 'center', gap: '25px', marginBottom: '30px' }}>
-            {/* Avatar circular */}
-            <div style={{ width: '80px', height: '80px', backgroundColor: '#e0f2fe', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center', color: '#0284c7', fontSize: '28px', fontWeight: '800' }}>
-              {perfil.nombre?.charAt(0)}{perfil.apellido?.charAt(0)}
-            </div>
+      ) : !profile ? (
+        <ProfileSkeleton />
+      ) : (
+        <>
+          <header className="profile-hero">
+            <Avatar person={profile} large />
             <div>
-              <h1 style={{ color: '#1e293b', margin: '0 0 5px 0', fontSize: '26px' }}>
-                {perfil.nombre} {perfil.apellido}
+              <span className="eyebrow">PERFIL PROFESIONAL</span>
+              <h1>
+                {profile.nombre} {profile.apellido}
               </h1>
-              <span style={{ backgroundColor: '#dcfce7', color: '#166534', padding: '5px 12px', borderRadius: '20px', fontSize: '13px', fontWeight: '700' }}>
-                🩺 {perfil.especialidad || 'General'}
-              </span>
-            </div>
-          </div>
-
-          <div style={{ backgroundColor: '#f8fafc', padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '25px' }}>
-            <h3 style={{ margin: '0 0 15px 0', color: '#334155', fontSize: '18px' }}>Datos Profesionales</h3>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #e2e8f0', paddingBottom: '10px' }}>
-                <span style={{ color: '#64748b', fontWeight: '600' }}>Matrícula:</span>
-                <span style={{ color: '#1e293b', fontWeight: '700' }}>{perfil.matricula || "No registrada"}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #e2e8f0', paddingBottom: '10px' }}>
-                <span style={{ color: '#64748b', fontWeight: '600' }}>Especialidad:</span>
-                <span style={{ color: '#1e293b', fontWeight: '700' }}>{perfil.especialidad || "No especificada"}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#64748b', fontWeight: '600' }}>Email de contacto:</span>
-                <span style={{ color: '#1e293b', fontWeight: '700' }}>{perfil.email}</span>
+              <p className="card-location">
+                <Icon name="pin" size={15} />
+                {profile.ciudad || 'Zona sin informar'}
+              </p>
+              <div className="card-tags">
+                <span className="specialty-tag">
+                  {profile.especialidad || 'Especialidad sin informar'}
+                </span>
+                <span
+                  className={`availability ${profile.disponible ? '' : 'unavailable'}`}
+                >
+                  <span className="status-dot" />
+                  {profile.disponible ? 'Disponible' : 'No disponible'}
+                </span>
               </div>
             </div>
-          </div>
-
-          {/* ==========================================
-              NUEVA SECCIÓN: HORARIOS DEL ENFERMERO
-              ========================================== */}
-          <div style={{ backgroundColor: '#f0fdf4', padding: '20px', borderRadius: '12px', border: '1px solid #bbf7d0' }}>
-            <h3 style={{ margin: '0 0 15px 0', color: '#166534', fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              🕒 Horarios de Atención
-            </h3>
-            
-            {diasActivos.length > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {diasActivos.map((dia, index) => (
-                  <div key={index} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: index !== diasActivos.length - 1 ? '1px solid #dcfce7' : 'none', paddingBottom: index !== diasActivos.length - 1 ? '10px' : '0' }}>
-                    <span style={{ color: '#15803d', fontWeight: '700' }}>{dia.dia_semana}</span>
-                    <span style={{ color: '#1e293b', fontWeight: '600' }}>
-                      {dia.hora_inicio} a {dia.hora_fin} hs
-                    </span>
+          </header>
+          <div className="profile-columns public-profile-layout">
+            <ProfessionalContact profile={profile} />
+            <div className="profile-information">
+              <section className="content-panel">
+                <h2 className="panel-title">
+                  <Icon name="user" />
+                  Conocé a {profile.nombre}
+                </h2>
+                <p>
+                  {profile.descripcion ||
+                    'Este profesional todavía no agregó una presentación.'}
+                </p>
+                <dl className="profile-facts">
+                  <div>
+                    <dt>Especialidad</dt>
+                    <dd>{profile.especialidad || 'Sin informar'}</dd>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <div style={{ textAlign: 'center', color: '#64748b', padding: '10px 0', fontStyle: 'italic' }}>
-                El profesional aún no ha configurado sus horarios.
-              </div>
-            )}
+                  <div>
+                    <dt>Experiencia</dt>
+                    <dd>
+                      {profile.experiencia_anios > 0
+                        ? `${profile.experiencia_anios} años`
+                        : 'Sin informar'}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Matrícula informada</dt>
+                    <dd>{profile.matricula || 'Sin informar'}</dd>
+                  </div>
+                </dl>
+              </section>
+              <section className="content-panel">
+                <h2 className="panel-title">
+                  <Icon name="calendar" />
+                  Horarios disponibles
+                </h2>
+                {schedules.length ? (
+                  <dl className="weekly-schedule">
+                    {DAYS.filter((day) =>
+                      schedules.some((item) => item.dia_semana === day),
+                    ).map((day) => (
+                      <div key={day}>
+                        <dt>{day}</dt>
+                        <dd>
+                          {schedules
+                            .filter((item) => item.dia_semana === day)
+                            .map((item) => (
+                              <span className="time-slot" key={item.id}>
+                                <Icon name="clock" size={14} />
+                                {item.hora_inicio.slice(0, 5)} –{' '}
+                                {item.hora_fin.slice(0, 5)}
+                              </span>
+                            ))}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                ) : (
+                  <p>
+                    No hay horarios disponibles publicados. Consultá
+                    directamente con el profesional.
+                  </p>
+                )}
+                <p className="schedule-note">
+                  Los horarios son orientativos. Confirmá la disponibilidad al
+                  contactar.
+                </p>
+              </section>
+            </div>
           </div>
-
-        </div>
-      </div>
+        </>
+      )}
     </div>
   );
 }
-
-export default VerPerfiles;

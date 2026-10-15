@@ -1,126 +1,133 @@
 import { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import AuthLayout from './AuthLayout';
+import Icon from './ui/Icon';
 import { API_URL, cerrarSesion } from '../api';
 
-const Login = () => {
+export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [visible, setVisible] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [enviando, setEnviando] = useState(false);
+  const navigate = useNavigate();
   const location = useLocation();
-  
-  const navigate = useNavigate(); 
-
-  const handleSubmit = async (e) => {
-    e.preventDefault(); 
+  async function handleSubmit(event) {
+    event.preventDefault();
+    if (loading) return;
+    setLoading(true);
     setError('');
-    setEnviando(true);
-
     try {
-        const response = await fetch(`${API_URL}/api/login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password }),
-        });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-            throw new Error(data.error || 'Error al iniciar sesión');
-        }
-
-        cerrarSesion();
-        localStorage.setItem('token', data.token);
-        if (data.rol) {
-            localStorage.setItem('rol', data.rol);
-        }
-        if (data.usuario) {
-            localStorage.setItem('usuario', JSON.stringify(data.usuario));
-        }
-        
-        setEmail('');
-        setPassword('');
-
-        const destino = location.state?.from;
-        navigate(destino?.startsWith('/') && !destino.startsWith('//') ? destino : '/home', { replace: true });
-
+      const response = await fetch(`${API_URL}/api/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim(), password }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.token)
+        throw new Error(
+          data.error || 'No pudimos iniciar tu sesión. Revisá tus datos.',
+        );
+      cerrarSesion();
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('rol', data.rol || 'paciente');
+      if (data.usuario)
+        localStorage.setItem('usuario', JSON.stringify(data.usuario));
+      else localStorage.removeItem('usuario');
+      const destination = location.state?.from;
+      navigate(
+        destination?.startsWith('/') && !destination.startsWith('//')
+          ? destination
+          : '/home',
+        { replace: true },
+      );
     } catch (err) {
-        setError(err.message === 'Failed to fetch' ? 'No se pudo conectar con el servidor.' : err.message);
+      setError(
+        err instanceof TypeError
+          ? 'No podemos conectar con el servidor. Intentá nuevamente.'
+          : err.message,
+      );
     } finally {
-        setEnviando(false);
+      setLoading(false);
     }
-  };
-
+  }
   return (
-    <div className="auth-page" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '80vh', fontFamily: "'Segoe UI', Roboto, Helvetica, Arial, sans-serif" }}>
-      
-      <div className="auth-card" style={{ width: '100%', maxWidth: '420px', backgroundColor: '#ffffff', padding: '40px', borderRadius: '16px', boxShadow: '0 10px 25px rgba(0,0,0,0.08)' }}>
-        
-        <div style={{ textAlign: 'center', marginBottom: '35px' }}>
-          <h2 style={{ color: '#2c3e50', fontSize: '28px', margin: '0 0 8px 0', fontWeight: '800' }}>
-            Bienvenido a <span style={{ color: '#3498db' }}>ENFE-RED</span>
-          </h2>
-          <p style={{ color: '#7f8c8d', margin: 0, fontSize: '15px' }}>Ingresá tus credenciales para continuar</p>
+    <AuthLayout>
+      <span className="eyebrow">TU ESPACIO DE CUIDADO</span>
+      <h2 className="auth-title">Qué bueno verte.</h2>
+      <p className="auth-subtitle">
+        Ingresá a tu cuenta para seguir conectando.
+      </p>
+      {new URLSearchParams(location.search).get('sesion') === 'expirada' && (
+        <div className="notice notice-info" role="status">
+          Tu sesión terminó. Volvé a iniciar sesión.
         </div>
-        
-        {new URLSearchParams(location.search).get('sesion') === 'expirada' && <p className="session-notice" role="status">Tu sesión terminó. Volvé a iniciar sesión.</p>}
-        {error && (
-          <div style={{ backgroundColor: '#fee2e2', padding: '12px', borderRadius: '8px', marginBottom: '25px', color: '#ef4444', textAlign: 'center', fontSize: '14px', border: '1px solid #f87171' }}>
-            <strong>⚠️ {error}</strong>
-          </div>
-        )}
-        
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          
-          {/* Input de Email */}
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <label style={{ marginBottom: '8px', fontWeight: '600', color: '#34495e', fontSize: '14px' }}>Correo Electrónico</label>
-              <input 
-                  type="email" 
-                  value={email} 
-                  onChange={(e) => setEmail(e.target.value)} 
-                  required
-                  placeholder="ejemplo@correo.com"
-                  style={{ padding: '14px 16px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '15px', backgroundColor: '#f8fafc', color: '#1e293b', outline: 'none' }}
-              />
-          </div>
-
-          {/* Input de Contraseña */}
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <label style={{ marginBottom: '8px', fontWeight: '600', color: '#34495e', fontSize: '14px' }}>Contraseña</label>
-              <input 
-                  type="password" 
-                  value={password} 
-                  onChange={(e) => setPassword(e.target.value)} 
-                  required 
-                  placeholder="••••••••"
-                  style={{ padding: '14px 16px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '15px', backgroundColor: '#f8fafc', color: '#1e293b', outline: 'none' }}
-              />
-          </div>
-
-          <button 
-              type="submit" disabled={enviando}
-              style={{ padding: '16px', backgroundColor: '#3498db', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px', marginTop: '10px', boxShadow: '0 4px 6px rgba(52, 152, 219, 0.2)' }}
-          >
-            {enviando ? 'Ingresando…' : 'Iniciar Sesión'}
-          </button>
-          
-          <button type="button" className="text-button" onClick={() => navigate('/recuperar-password')}>¿Olvidaste tu contraseña?</button>
-          <div style={{ textAlign: 'center', marginTop: '20px', paddingTop: '20px', borderTop: '1px solid #e2e8f0' }}>
-            <span style={{ color: '#64748b', fontSize: '14px' }}>¿No tenés cuenta? </span>
-            <button 
-              type="button" 
-              onClick={() => navigate('/registro')} 
-              style={{ background: 'none', border: 'none', color: '#3498db', fontWeight: 'bold', cursor: 'pointer', padding: '0', fontSize: '14px' }}
+      )}
+      {error && (
+        <div className="notice notice-error" role="alert">
+          {error}
+        </div>
+      )}
+      <form className="form-stack" onSubmit={handleSubmit} aria-busy={loading}>
+        <label className="field">
+          Correo electrónico
+          <span className="input-icon">
+            <Icon name="mail" />
+            <input
+              type="email"
+              autoComplete="email"
+              placeholder="tu@email.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </span>
+        </label>
+        <label className="field">
+          Contraseña
+          <span className="input-icon">
+            <Icon name="lock" />
+            <input
+              type={visible ? 'text' : 'password'}
+              autoComplete="current-password"
+              placeholder="Ingresá tu contraseña"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+            <button
+              type="button"
+              className="icon-button"
+              aria-label={visible ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+              aria-pressed={visible}
+              onClick={() => setVisible(!visible)}
             >
-              Crear cuenta nueva
+              <Icon name={visible ? 'eyeOff' : 'eye'} size={19} />
             </button>
-          </div>
-          
-        </form>
+          </span>
+        </label>
+        <button
+          className="button button-primary button-full"
+          disabled={loading}
+        >
+          {loading ? 'Ingresando…' : 'Iniciar sesión'}
+          {!loading && <Icon name="arrow" size={18} />}
+        </button>
+      </form>
+      <p className="auth-switch">
+        <Link to="/recuperar-password">¿Olvidaste tu contraseña?</Link>
+      </p>
+      <p className="auth-switch">
+        ¿Todavía no tenés una cuenta? <Link to="/registro">Registrate</Link>
+      </p>
+      <div className="auth-note">
+        <Icon name="heart" size={18} />
+        <p>
+          Para quienes necesitan cuidado.
+          <br />
+          Para quienes hacen del cuidado su profesión.
+        </p>
       </div>
-    </div>
+    </AuthLayout>
   );
-};
-
-export default Login;
+}

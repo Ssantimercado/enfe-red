@@ -1,156 +1,158 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { API_URL } from '../api';
+import { useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { requestApi as api } from '../api';
+import AuthLayout from './AuthLayout';
+import Icon from './ui/Icon';
 
-const Register = () => {
-  const [formData, setFormData] = useState({
+export default function Register() {
+  const [params] = useSearchParams();
+  const [form, setForm] = useState({
     nombre: '',
     email: '',
     password: '',
-    rol: 'paciente'
+    rol: params.get('rol') === 'enfermero' ? 'enfermero' : 'paciente',
   });
-  const [mensaje, setMensaje] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [done, setDone] = useState(false);
   const [error, setError] = useState('');
-
-  const navigate = useNavigate();
-
-  const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
-  };
-
-  const handleSubmit = async (e) => {
+  const [visible, setVisible] = useState(false);
+  const change = (e) =>
+    setForm((current) => ({ ...current, [e.target.name]: e.target.value }));
+  async function submit(e) {
     e.preventDefault();
-    setMensaje('');
+    if (loading) return;
+    setLoading(true);
     setError('');
-
     try {
-      const response = await fetch(`${API_URL}/api/registro`, {
+      await api('/registro', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(formData)
+        body: { ...form, nombre: form.nombre.trim(), email: form.email.trim() },
       });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setMensaje(data.mensaje || '¡Registro exitoso! Redirigiendo...');
-        setFormData({ nombre: '', email: '', password: '', rol: 'paciente' });
-        
-        setTimeout(() => {
-          navigate('/login'); 
-        }, 1500);
-      } else {
-        setError(data.error || 'Error al registrar usuario');
-      }
+      setDone(true);
+      setForm((current) => ({ ...current, password: '' }));
     } catch (err) {
-      setError('No se pudo conectar con el servidor backend');
+      setError(err.message);
+    } finally {
+      setLoading(false);
     }
-  };
-
+  }
   return (
-    <div className="auth-page" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '85vh', fontFamily: "'Segoe UI', Roboto, Helvetica, Arial, sans-serif" }}>
-      
-      <div className="auth-card" style={{ width: '100%', maxWidth: '420px', backgroundColor: '#ffffff', padding: '40px', borderRadius: '16px', boxShadow: '0 10px 25px rgba(0,0,0,0.08)' }}>
-        
-        <div style={{ textAlign: 'center', marginBottom: '30px' }}>
-          <h2 style={{ color: '#2c3e50', fontSize: '28px', margin: '0 0 8px 0', fontWeight: '800' }}>
-            Crear <span style={{ color: '#3498db' }}>Cuenta</span>
-          </h2>
-          <p style={{ color: '#7f8c8d', margin: 0, fontSize: '15px' }}>Registrate para empezar a usar ENFE-RED</p>
-        </div>
-
-        {mensaje && (
-          <div style={{ backgroundColor: '#dcfce7', color: '#166534', padding: '12px', borderRadius: '8px', marginBottom: '20px', textAlign: 'center', fontSize: '14px', fontWeight: '600', border: '1px solid #bbf7d0' }}>
-            ✅ {mensaje}
-          </div>
-        )}
-        {error && (
-          <div style={{ backgroundColor: '#fee2e2', color: '#ef4444', padding: '12px', borderRadius: '8px', marginBottom: '20px', textAlign: 'center', fontSize: '14px', fontWeight: '600', border: '1px solid #f87171' }}>
-            ❌ {error}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
-          
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <label style={{ marginBottom: '6px', fontWeight: '600', color: '#34495e', fontSize: '14px' }}>Nombre y Apellido</label>
-            <input
-              type="text"
-              name="nombre"
-              value={formData.nombre}
-              onChange={handleChange}
-              required
-              placeholder="Ej: Juan Pérez"
-              style={{ padding: '12px 16px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '15px', backgroundColor: '#f8fafc', color: '#1e293b', outline: 'none' }}
-            />
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <label style={{ marginBottom: '6px', fontWeight: '600', color: '#34495e', fontSize: '14px' }}>Correo Electrónico</label>
-            <input
-              type="email"
-              name="email"
-              value={formData.email}
-              onChange={handleChange}
-              required
-              placeholder="ejemplo@correo.com"
-              style={{ padding: '12px 16px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '15px', backgroundColor: '#f8fafc', color: '#1e293b', outline: 'none' }}
-            />
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <label style={{ marginBottom: '6px', fontWeight: '600', color: '#34495e', fontSize: '14px' }}>Contraseña</label>
-            <input
-              type="password"
-              name="password"
-              value={formData.password}
-              onChange={handleChange}
-              required
-              placeholder="••••••••"
-              style={{ padding: '12px 16px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '15px', backgroundColor: '#f8fafc', color: '#1e293b', outline: 'none' }}
-            />
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <label style={{ marginBottom: '6px', fontWeight: '600', color: '#34495e', fontSize: '14px' }}>Rol en la plataforma</label>
-            <select 
-              name="rol" 
-              value={formData.rol} 
-              onChange={handleChange}
-              style={{ padding: '12px 16px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '15px', backgroundColor: '#f8fafc', color: '#1e293b', outline: 'none', cursor: 'pointer' }}
+    <AuthLayout>
+      {done ? (
+        <>
+          <span className="soft-icon mint">
+            <Icon name="check" size={28} />
+          </span>
+          <h2 className="auth-title">Ya sos parte de la red.</h2>
+          <p className="auth-subtitle" role="status">
+            Tu cuenta está creada. Iniciá sesión para completar tu perfil y
+            empezar.
+          </p>
+          <Link className="button button-primary button-full" to="/login">
+            Ir a iniciar sesión
+            <Icon name="arrow" size={17} />
+          </Link>
+        </>
+      ) : (
+        <>
+          <span className="eyebrow">UNITE A ENFE-RED</span>
+          <h2 className="auth-title">El primer paso es conectar.</h2>
+          <p className="auth-subtitle">
+            Creá tu cuenta y encontrá tu lugar en la red.
+          </p>
+          {error && (
+            <div className="notice notice-error" role="alert">
+              {error}
+            </div>
+          )}
+          <form className="form-stack" onSubmit={submit} aria-busy={loading}>
+            <fieldset className="role-options">
+              <legend>¿Cómo vas a usar Enfe-red?</legend>
+              <div>
+                <label className="role-option">
+                  <input
+                    type="radio"
+                    name="rol"
+                    value="paciente"
+                    checked={form.rol === 'paciente'}
+                    onChange={change}
+                  />
+                  Busco cuidados
+                </label>
+                <label className="role-option">
+                  <input
+                    type="radio"
+                    name="rol"
+                    value="enfermero"
+                    checked={form.rol === 'enfermero'}
+                    onChange={change}
+                  />
+                  Soy enfermero/a
+                </label>
+              </div>
+            </fieldset>
+            <label className="field">
+              Nombre y apellido
+              <input
+                autoComplete="name"
+                name="nombre"
+                value={form.nombre}
+                onChange={change}
+                required
+                placeholder="Tu nombre completo"
+              />
+            </label>
+            <label className="field">
+              Correo electrónico
+              <input
+                autoComplete="email"
+                type="email"
+                name="email"
+                value={form.email}
+                onChange={change}
+                required
+                placeholder="tu@email.com"
+              />
+            </label>
+            <label className="field">
+              Contraseña
+              <span className="input-icon">
+                <Icon name="lock" size={18} />
+                <input
+                  name="password"
+                  type={visible ? 'text' : 'password'}
+                  autoComplete="new-password"
+                  value={form.password}
+                  onChange={change}
+                  required
+                  placeholder="Creá tu contraseña"
+                />
+                <button
+                  type="button"
+                  className="icon-button"
+                  aria-label={
+                    visible ? 'Ocultar contraseña' : 'Mostrar contraseña'
+                  }
+                  aria-pressed={visible}
+                  onClick={() => setVisible(!visible)}
+                >
+                  <Icon name={visible ? 'eyeOff' : 'eye'} size={18} />
+                </button>
+              </span>
+            </label>
+            <button
+              className="button button-primary button-full"
+              disabled={loading}
             >
-              <option value="paciente">Paciente</option>
-              <option value="enfermero">Enfermero</option>
-            </select>
-          </div>
-
-          <button 
-            type="submit" 
-            style={{ padding: '16px', backgroundColor: '#3498db', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px', marginTop: '10px', boxShadow: '0 4px 6px rgba(52, 152, 219, 0.2)' }}
-          >
-            Registrarse
-          </button>
-        </form>
-
-        <div style={{ textAlign: 'center', marginTop: '25px', paddingTop: '20px', borderTop: '1px solid #e2e8f0' }}>
-          <span style={{ color: '#64748b', fontSize: '14px' }}>¿Ya tenés una cuenta? </span>
-          <button 
-            type="button" 
-            onClick={() => navigate('/login')} 
-            style={{ background: 'none', border: 'none', color: '#3498db', fontWeight: 'bold', cursor: 'pointer', padding: '0', fontSize: '14px' }}
-          >
-            Iniciar Sesión
-          </button>
-        </div>
-
-      </div>
-    </div>
+              {loading ? 'Creando tu cuenta…' : 'Crear cuenta'}
+              {!loading && <Icon name="arrow" size={17} />}
+            </button>
+          </form>
+          <p className="auth-switch">
+            ¿Ya tenés una cuenta? <Link to="/login">Iniciá sesión</Link>
+          </p>
+        </>
+      )}
+    </AuthLayout>
   );
-};
-
-export default Register;
+}

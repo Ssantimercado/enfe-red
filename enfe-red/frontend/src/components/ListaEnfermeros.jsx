@@ -1,249 +1,574 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { API_URL, apiFetch } from '../api';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import Avatar from './ui/Avatar';
+import Icon from './ui/Icon';
+import DirectoryFilters from './DirectoryFilters';
+import { requestApi as api, formatPrice } from '../api';
 const MapaEnfermeros = lazy(() => import('./MapaEnfermeros'));
 
-const PAGE_SIZE = 6;
+const FILTERS = [
+  'especialidad',
+  'precio_min',
+  'precio_max',
+  'disponible',
+  'dia_semana',
+];
+const optionalNumber = (value) =>
+  value == null || value === '' || !Number.isFinite(Number(value))
+    ? null
+    : Number(value);
 
-const INITIAL_FILTERS = {
-  especialidad: '',
-  precio_min: '',
-  precio_max: '',
-  disponible: '',
-  dia_semana: '',
-};
-
-const formatPrice = (value) => {
-  const price = Number(value);
-  return Number.isFinite(price) && price > 0
-    ? `$${price.toLocaleString('es-AR')}/hora`
-    : 'Consultar precio';
-};
-
-const initialsFor = (person) => {
-  const first = person.nombre?.trim()?.[0] || '';
-  const last = person.apellido?.trim()?.[0] || '';
-  return `${first}${last}`.toUpperCase() || 'EN';
-};
-
-const optionalNumber = (...values) => {
-  const value = values.find((item) => item !== null && item !== undefined && item !== '');
-  const number = Number(value);
-  return Number.isFinite(number) ? number : null;
-};
-
-const ListaEnfermerosSprint3 = () => {
-  const navigate = useNavigate();
-  const [enfermeros, setEnfermeros] = useState([]);
-  const [especialidades, setEspecialidades] = useState([]);
-  const [searchParams, setSearchParams] = useSearchParams();
-  const busqueda = searchParams.get('q') || '';
-  const filtros = useMemo(() => Object.fromEntries(
-    Object.keys(INITIAL_FILTERS).map((key) => [key, searchParams.get(key) || '']),
-  ), [searchParams]);
-  const pagina = Math.max(1, Math.floor(Number(searchParams.get('page'))) || 1);
-  const volverA = `/cartilla${searchParams.size ? `?${searchParams}` : ''}`;
-  const [paginacion, setPaginacion] = useState({ total_resultados: 0, total_paginas: 1 });
-  const [cargando, setCargando] = useState(true);
+export default function ListaEnfermeros() {
+  const [params, setParams] = useSearchParams();
+  const query = params.get('q') || '';
+  const page = Math.max(1, Math.floor(Number(params.get('page'))) || 1);
+  const filterValues = Object.fromEntries(
+    FILTERS.map((key) => [key, params.get(key) || '']),
+  );
+  const requestKey = new URLSearchParams(
+    [...params].filter(
+      ([key]) => FILTERS.includes(key) || key === 'q' || key === 'page',
+    ),
+  ).toString();
+  const [data, setData] = useState({
+    enfermeros: [],
+    total_resultados: 0,
+    total_paginas: 0,
+  });
+  const [specialties, setSpecialties] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [enfermeroSeleccionado, setEnfermeroSeleccionado] = useState(null);
+  const [retry, setRetry] = useState(0);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [draftFilters, setDraftFilters] = useState(filterValues);
+  const showMap = params.get('vista') === 'mapa';
+  const [selected, setSelected] = useState(null);
+  const mapRef = useRef(null);
+  const filterDialog = useRef(null);
+  const invalidDraft =
+    draftFilters.precio_min !== '' &&
+    draftFilters.precio_max !== '' &&
+    Number(draftFilters.precio_min) > Number(draftFilters.precio_max);
+  const invalidRange =
+    filterValues.precio_min !== '' &&
+    filterValues.precio_max !== '' &&
+    Number(filterValues.precio_min) > Number(filterValues.precio_max);
 
-  const cargarResultados = useCallback(async (signal) => {
-    setCargando(true);
-    setError('');
-
-    try {
-      const params = new URLSearchParams({ page: String(pagina), per_page: String(PAGE_SIZE) });
-      if (busqueda.trim()) params.set('q', busqueda.trim());
-      if (filtros.especialidad) params.set('especialidad', filtros.especialidad);
-      if (filtros.precio_max) params.set('precio_max', filtros.precio_max);
-      if (filtros.precio_min) params.set('precio_min', filtros.precio_min);
-      if (filtros.disponible) params.set('disponible', filtros.disponible);
-      if (filtros.dia_semana) params.set('dia_semana', filtros.dia_semana);
-
-      const token = localStorage.getItem('token');
-      const response = await apiFetch(`${API_URL}/api/enfermeros/buscar?${params}`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        signal,
-      });
-      const data = await response.json();
-
-      if (!response.ok) throw new Error(data.error || 'No se pudo cargar la búsqueda');
-
-      const resultados = Array.isArray(data) ? data : (data.enfermeros || []);
-      if (signal?.aborted) return;
-      setEnfermeros(resultados);
-      setPaginacion({
-        total_resultados: data.total_resultados ?? resultados.length,
-        total_paginas: data.total_paginas ?? 1,
-      });
-      setEspecialidades((current) => [...new Set([
-        ...current,
-        ...resultados.map((item) => item.especialidad).filter(Boolean),
-      ])].sort((a, b) => a.localeCompare(b, 'es')));
-    } catch (requestError) {
-      if (requestError.name !== 'AbortError') {
-        setError(requestError.message || 'Error de conexión con el servidor');
-      }
-    } finally {
-      if (!signal?.aborted) setCargando(false);
-    }
-  }, [busqueda, filtros, pagina]);
+  useEffect(() => {
+    if (!filtersOpen) return;
+    const dialog = filterDialog.current;
+    const originalOverflow = document.body.style.overflow;
+    dialog.showModal();
+    document.body.style.overflow = 'hidden';
+    const desktop = window.matchMedia('(min-width: 801px)');
+    const closeOnDesktop = () => {
+      if (desktop.matches) setFiltersOpen(false);
+    };
+    desktop.addEventListener('change', closeOnDesktop);
+    return () => {
+      dialog.close();
+      document.body.style.overflow = originalOverflow;
+      desktop.removeEventListener('change', closeOnDesktop);
+    };
+  }, [filtersOpen]);
 
   useEffect(() => {
     const controller = new AbortController();
-    const timer = window.setTimeout(() => cargarResultados(controller.signal), 250);
+    api('/enfermeros', { signal: controller.signal })
+      .then((list) => {
+        setSpecialties(
+          [
+            ...new Set(
+              list.map((person) => person.especialidad).filter(Boolean),
+            ),
+          ].sort((a, b) => a.localeCompare(b, 'es')),
+        );
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true);
+    setError('');
+    setSelected(null);
+    if (invalidRange) {
+      setLoading(false);
+      return () => controller.abort();
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const search = new URLSearchParams(requestKey);
+        search.set('per_page', '6');
+        search.set('page', String(page));
+        const results = await api(`/enfermeros/buscar?${search}`, {
+          signal: controller.signal,
+        });
+        if (!controller.signal.aborted) setData(results);
+      } catch (err) {
+        if (!controller.signal.aborted) setError(err.message);
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    }, 250);
     return () => {
-      window.clearTimeout(timer);
+      clearTimeout(timer);
       controller.abort();
     };
-  }, [cargarResultados]);
+  }, [requestKey, page, retry, invalidRange]);
 
-  const cambiarFiltro = (name, value) => {
-    setSearchParams((current) => {
-      const next = new URLSearchParams(current);
-      if (value) next.set(name, value); else next.delete(name);
-      next.delete('page');
-      return next;
-    }, { replace: true });
+  function update(key, value) {
+    setParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        if (value) next.set(key, value);
+        else next.delete(key);
+        if (key !== 'page' && key !== 'vista') next.delete('page');
+        return next;
+      },
+      { replace: key !== 'page' },
+    );
+  }
+  function clear(keepQuery = false) {
+    setParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        FILTERS.forEach((key) => next.delete(key));
+        next.delete('page');
+        if (!keepQuery) next.delete('q');
+        return next;
+      },
+      { replace: true },
+    );
+  }
+  function applyFilters(event) {
+    event.preventDefault();
+    if (invalidDraft) return;
+    setParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        FILTERS.forEach((key) => {
+          if (draftFilters[key]) next.set(key, draftFilters[key]);
+          else next.delete(key);
+        });
+        next.delete('page');
+        return next;
+      },
+      { replace: true },
+    );
+    setFiltersOpen(false);
+  }
+  const active = FILTERS.filter((key) => filterValues[key]);
+  const hasFilters = Boolean(query || active.length);
+  const labels = {
+    especialidad: filterValues.especialidad,
+    precio_min: `Desde $${Number(filterValues.precio_min).toLocaleString('es-AR')}`,
+    precio_max: `Hasta $${Number(filterValues.precio_max).toLocaleString('es-AR')}`,
+    disponible:
+      filterValues.disponible === 'true' ? 'Disponibles' : 'No disponibles',
+    dia_semana: filterValues.dia_semana,
   };
-
-  const setPagina = (update) => setSearchParams((current) => {
-    const next = new URLSearchParams(current);
-    const value = typeof update === 'function' ? update(pagina) : update;
-    next.set('page', String(value));
-    return next;
-  });
-
-  const limpiarFiltros = () => {
-    setSearchParams({}, { replace: true });
+  const profileState = {
+    from: `/cartilla${params.size ? `?${params}` : ''}`,
   };
-
-  const hayFiltros = useMemo(
-    () => Boolean(busqueda.trim() || Object.values(filtros).some(Boolean)),
-    [busqueda, filtros],
-  );
-  const totalPaginas = Math.max(paginacion.total_paginas || 1, 1);
 
   return (
-    <>
-      <style>{`
-        .s3-cartilla { min-height: 100vh; background: #f8fafc; padding: 40px 20px 56px; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b; }
-        .s3-shell { max-width: 1080px; margin: 0 auto; }
-        .s3-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; margin-bottom: 26px; }
-        .s3-header h2 { margin: 0 0 6px; color: #2c3e50; font-size: 30px; font-weight: 800; }
-        .s3-header p { margin: 0; color: #7f8c8d; font-size: 15px; }
-        .s3-panel, .s3-card, .s3-empty, .s3-error { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; box-shadow: 0 8px 22px rgba(15, 23, 42, .05); }
-        .s3-panel { padding: 20px; margin-bottom: 24px; }
-        .s3-search-row { display: flex; gap: 12px; align-items: center; }
-        .s3-search, .s3-select, .s3-number { box-sizing: border-box; border: 1px solid #cbd5e1; border-radius: 9px; padding: 11px 12px; color: #334155; background: #fff; font-size: 14px; outline: none; }
-        .s3-search { flex: 1; min-width: 0; padding: 13px 15px; font-size: 15px; }
-        .s3-search:focus, .s3-select:focus, .s3-number:focus { border-color: #3498db; box-shadow: 0 0 0 3px rgba(52, 152, 219, .14); }
-        .s3-filter-label { display: flex; flex-direction: column; gap: 6px; color: #64748b; font-size: 12px; font-weight: 700; }
-        .s3-filters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
-        .s3-price-range { display: flex; gap: 7px; }
-        .s3-price-range .s3-number { min-width: 0; width: 50%; }
-        .s3-filter-button, .s3-back-button, .s3-page-button { border: 1px solid #cbd5e1; background: #fff; color: #475569; border-radius: 9px; padding: 11px 15px; cursor: pointer; font-weight: 700; white-space: nowrap; }
-        .s3-back-button { box-shadow: 0 2px 4px rgba(0,0,0,.02); }
-        .s3-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 22px 0 14px; }
-        .s3-count, .s3-page-number { color: #64748b; font-size: 14px; }
-        .s3-clear { border: 0; background: transparent; color: #3498db; cursor: pointer; font-weight: 700; padding: 7px; }
-        .s3-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 32px; }
-        .s3-card { padding: 20px; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 4px 12px rgba(0,0,0,.04); }
-        .s3-card-top, .s3-profile, .s3-card-bottom { display: flex; align-items: center; }
-        .s3-card-top { justify-content: space-between; align-items: flex-start; gap: 12px; }
-        .s3-profile { gap: 13px; min-width: 0; }
-        .s3-avatar { width: 58px; height: 58px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
-        .s3-avatar-placeholder { display: flex; justify-content: center; align-items: center; background: #e0f2fe; color: #0284c7; font-size: 18px; font-weight: 800; }
-        .s3-name { margin: 0 0 5px; color: #1e293b; font-size: 18px; line-height: 1.2; font-weight: 750; }
-        .s3-location { margin: 0; color: #64748b; font-size: 13px; }
-        .s3-status { border-radius: 999px; padding: 5px 9px; font-size: 11px; font-weight: 750; white-space: nowrap; }
-        .s3-status.available { background: #dcfce7; color: #166534; }
-        .s3-status.unavailable { background: #f1f5f9; color: #64748b; }
-        .s3-specialty { display: inline-flex; align-self: flex-start; background: #e0f2fe; color: #0369a1; border-radius: 999px; padding: 5px 10px; font-size: 12px; font-weight: 700; }
-        .s3-description { min-height: 38px; margin: 0; color: #64748b; font-size: 13px; line-height: 1.45; }
-        .s3-meta { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding-top: 13px; border-top: 1px solid #f1f5f9; }
-        .s3-meta-item { display: flex; flex-direction: column; gap: 3px; color: #94a3b8; font-size: 11px; }
-        .s3-meta-item strong { color: #334155; font-size: 13px; }
-        .s3-card-bottom { justify-content: space-between; gap: 12px; }
-        .s3-price { color: #0f766e; font-size: 14px; font-weight: 800; }
-        .s3-profile-button { border: 0; border-radius: 8px; padding: 10px 14px; color: #fff; background: #3498db; cursor: pointer; font-weight: 700; box-shadow: 0 4px 6px rgba(52, 152, 219, .2); }
-        .s3-loading, .s3-empty, .s3-error { padding: 42px 24px; text-align: center; }
-        .s3-loading { color: #3498db; font-weight: 700; }
-        .s3-empty p { margin: 0 0 15px; color: #64748b; }
-        .s3-error { color: #b91c1c; border-color: #fecaca; background: #fff7f7; }
-        .s3-pagination { display: flex; justify-content: center; align-items: center; gap: 12px; margin-top: 24px; }
-        .s3-page-button:disabled { cursor: not-allowed; opacity: .45; }
-        @media (max-width: 760px) { .s3-cartilla { padding: 25px 14px 42px; } .s3-header { flex-direction: column; } .s3-back-button { align-self: flex-start; } .s3-search-row { flex-direction: column; align-items: stretch; } .s3-filters, .s3-grid { grid-template-columns: 1fr; } }
-        @media (max-width: 440px) { .s3-meta { grid-template-columns: 1fr 1fr; } .s3-card-bottom { align-items: stretch; flex-direction: column; } .s3-profile-button { width: 100%; } }
-      `}</style>
-
-      <main className="s3-cartilla">
-        <div className="s3-shell">
-          <header className="s3-header">
-            <div>
-              <h2>Cartilla de <span style={{ color: '#3498db' }}>enfermeros</span></h2>
-              <p>Encontrá el profesional adecuado para tu atención domiciliaria.</p>
-            </div>
-            <button className="s3-back-button" type="button" onClick={() => navigate('/home')}>← Volver al Panel</button>
-          </header>
-
-          <section className="s3-panel" aria-label="Buscar y filtrar enfermeros">
-            <div className="s3-search-row">
-              <input className="s3-search" type="search" value={busqueda} onChange={(event) => cambiarFiltro('q', event.target.value)} placeholder="Buscar por nombre, zona o especialidad..." aria-label="Buscar enfermeros" />
-              <button className="s3-filter-button" type="button" onClick={() => document.getElementById('s3-filtros')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })}>⚙ Filtros</button>
-            </div>
-
-            <div id="s3-filtros" className="s3-filters">
-              <label className="s3-filter-label">Especialidad
-                <select className="s3-select" value={filtros.especialidad} onChange={(event) => cambiarFiltro('especialidad', event.target.value)}><option value="">Todas</option>{especialidades.map((item) => <option key={item} value={item}>{item}</option>)}</select>
-              </label>
-              <label className="s3-filter-label">Precio por hora
-                <span className="s3-price-range"><input className="s3-number" type="number" min="0" value={filtros.precio_min} onChange={(event) => cambiarFiltro('precio_min', event.target.value)} placeholder="Desde" aria-label="Precio mínimo" /><input className="s3-number" type="number" min="0" value={filtros.precio_max} onChange={(event) => cambiarFiltro('precio_max', event.target.value)} placeholder="Hasta" aria-label="Precio máximo" /></span>
-              </label>
-              <label className="s3-filter-label">Disponibilidad
-                <select className="s3-select" value={filtros.disponible} onChange={(event) => cambiarFiltro('disponible', event.target.value)}><option value="">Cualquiera</option><option value="true">Disponible ahora</option><option value="false">No disponible</option></select>
-              </label>
-              <label className="s3-filter-label">Día de atención
-                <select className="s3-select" value={filtros.dia_semana} onChange={(event) => cambiarFiltro('dia_semana', event.target.value)}><option value="">Cualquier día</option>{['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'].map((day) => <option key={day} value={day}>{day}</option>)}</select>
-              </label>
-            </div>
-
-            {hayFiltros && <div className="s3-toolbar"><span className="s3-count">Filtros activos</span><button className="s3-clear" type="button" onClick={limpiarFiltros}>Limpiar filtros</button></div>}
-          </section>
-
-          {error ? <div className="s3-error" role="alert"><p>⚠ {error}</p><button className="s3-profile-button" type="button" onClick={() => cargarResultados(new AbortController().signal)}>Reintentar</button></div>
-            : cargando ? <div className="s3-loading" role="status">⏳ Buscando profesionales...</div>
-              : enfermeros.length === 0 ? <div className="s3-empty"><p>No encontramos enfermeros con esos criterios.</p>{hayFiltros && <button className="s3-profile-button" type="button" onClick={limpiarFiltros}>Ver todos los profesionales</button>}</div>
-                : <>
-                  <div className="s3-toolbar"><span className="s3-count">{paginacion.total_resultados} profesionales encontrados</span></div>
-                  <Suspense fallback={<p role="status">Cargando mapa…</p>}><MapaEnfermeros
-                    enfermeros={enfermeros}
-                    selectedId={enfermeroSeleccionado}
-                    onSelect={setEnfermeroSeleccionado}
-                    volverA={volverA}
-                  /></Suspense>
-                  <section className="s3-grid" aria-label="Resultados de enfermeros">
-                    {enfermeros.map((enfermero) => {
-                      const foto = enfermero.foto_url || enfermero.foto || enfermero.imagen;
-                      const rating = optionalNumber(enfermero.puntuacion, enfermero.rating, enfermero.calificacion);
-                      const distance = optionalNumber(enfermero.distancia_km, enfermero.distanciaKm, enfermero.distancia);
-                      const profileId = enfermero.id || enfermero.usuario_id;
-                      return <article className="s3-card" key={profileId || enfermero.enfermero_id} onClick={() => setEnfermeroSeleccionado(profileId)} style={{ borderColor: String(enfermeroSeleccionado) === String(profileId) ? '#3498db' : '#e2e8f0', cursor: 'pointer' }}>
-                        <div className="s3-card-top"><div className="s3-profile">{foto ? <img className="s3-avatar" src={foto} alt={`Foto de ${enfermero.nombre || 'enfermero'}`} /> : <div className="s3-avatar s3-avatar-placeholder" aria-hidden="true">{initialsFor(enfermero)}</div>}<div><h3 className="s3-name">{enfermero.nombre || 'Profesional'} {enfermero.apellido || ''}</h3><p className="s3-location">📍 {enfermero.ciudad || enfermero.direccion || 'Zona no informada'}</p></div></div><span className={`s3-status ${enfermero.disponible ? 'available' : 'unavailable'}`}>{enfermero.disponible ? 'Disponible' : 'No disponible'}</span></div>
-                        <span className="s3-specialty">⚕ {enfermero.especialidad || 'Enfermería general'}</span>
-                        <p className="s3-description">{enfermero.descripcion || 'Perfil profesional de enfermería para atención domiciliaria.'}</p>
-                        <div className="s3-meta"><span className="s3-meta-item"><strong>{rating === null ? '—' : `★ ${rating.toFixed(1)}`}</strong>Puntuación</span><span className="s3-meta-item"><strong>{distance === null ? '—' : `${distance.toFixed(1)} km`}</strong>Distancia</span><span className="s3-meta-item"><strong>{enfermero.experiencia_anios || 0} años</strong>Experiencia</span></div>
-                        <div className="s3-card-bottom"><span className="s3-price">{formatPrice(enfermero.tarifa_hora)}</span><button className="s3-profile-button" type="button" onClick={(event) => { event.stopPropagation(); navigate(`/perfil/${profileId}`, { state: { volverA } }); }}>Ver perfil</button></div>
-                      </article>;
-                    })}
-                  </section>
-                  {totalPaginas > 1 && <nav className="s3-pagination" aria-label="Paginación de resultados"><button className="s3-page-button" type="button" disabled={pagina <= 1} onClick={() => setPagina((actual) => actual - 1)}>← Anterior</button><span className="s3-page-number">Página {pagina} de {totalPaginas}</span><button className="s3-page-button" type="button" disabled={pagina >= totalPaginas} onClick={() => setPagina((actual) => actual + 1)}>Siguiente →</button></nav>}
-                </>}
+    <div className="page-container">
+      <header className="page-heading">
+        <div>
+          <span className="eyebrow">ENCONTRÁ TU PROFESIONAL</span>
+          <h1>El cuidado empieza acá.</h1>
+          <p>
+            Explorá perfiles y encontrá atención de enfermería para vos o tu
+            familia.
+          </p>
         </div>
-      </main>
-    </>
+      </header>
+      <div className="directory-search" role="search">
+        <Icon name="search" size={22} />
+        <input
+          type="search"
+          aria-label="Buscar por nombre, zona o especialidad"
+          placeholder="Nombre, zona o especialidad"
+          value={query}
+          onChange={(e) => update('q', e.target.value)}
+        />
+        <button
+          type="button"
+          className="button button-secondary mobile-filter-button"
+          aria-label={`Mostrar filtros${active.length ? `, ${active.length} activos` : ''}`}
+          aria-controls="filtros-mobile"
+          aria-haspopup="dialog"
+          aria-expanded={filtersOpen}
+          onClick={() => {
+            setDraftFilters(filterValues);
+            setFiltersOpen(true);
+          }}
+        >
+          <Icon name="sliders" size={18} />
+          <span>Filtros</span>
+          {active.length > 0 && (
+            <span className="filter-count">{active.length}</span>
+          )}
+        </button>
+      </div>
+      <div className="directory-layout">
+        <aside
+          id="filtros"
+          className="filters-panel"
+          aria-label="Filtros de búsqueda"
+        >
+          <div className="filters-heading">
+            <h2>
+              <Icon name="sliders" size={17} />
+              Filtros
+            </h2>
+            {active.length > 0 && (
+              <button
+                type="button"
+                className="text-link"
+                onClick={() => clear(true)}
+              >
+                Limpiar
+              </button>
+            )}
+          </div>
+          <DirectoryFilters
+            values={filterValues}
+            specialties={specialties}
+            onChange={update}
+            prefix="desktop"
+          />
+          <div className="filter-help">
+            <Icon name="heart" size={21} />
+            <strong>Cada cuidado es diferente.</strong>
+            <p>
+              Consultá el perfil para conocer los horarios y coordinar la
+              atención.
+            </p>
+          </div>
+        </aside>
+        <section aria-label="Resultados de búsqueda" aria-busy={loading}>
+          <div className="results-toolbar">
+            <p className="results-count" role="status">
+              {loading ? (
+                'Buscando profesionales…'
+              ) : error || invalidRange ? (
+                'Revisá tu búsqueda'
+              ) : (
+                <>
+                  <strong>{data.total_resultados}</strong>{' '}
+                  {data.total_resultados === 1
+                    ? 'profesional encontrado'
+                    : 'profesionales encontrados'}
+                </>
+              )}
+            </p>
+            <div className="view-switch" aria-label="Vista de resultados">
+              <button
+                type="button"
+                aria-pressed={!showMap}
+                onClick={() => update('vista', '')}
+              >
+                <Icon name="grid" size={15} />
+                Lista
+              </button>
+              <button
+                type="button"
+                aria-pressed={showMap}
+                onClick={() => update('vista', 'mapa')}
+              >
+                <Icon name="map" size={15} />
+                Mapa
+              </button>
+            </div>
+          </div>
+          {hasFilters && (
+            <div className="active-filters">
+              {query && (
+                <button
+                  className="filter-chip"
+                  onClick={() => update('q', '')}
+                  aria-label={`Quitar búsqueda ${query}`}
+                >
+                  “{query}”<Icon name="close" size={13} />
+                </button>
+              )}
+              {active.map((key) => (
+                <button
+                  className="filter-chip"
+                  key={key}
+                  onClick={() => update(key, '')}
+                  aria-label={`Quitar filtro ${labels[key]}`}
+                >
+                  {labels[key]}
+                  <Icon name="close" size={13} />
+                </button>
+              ))}
+            </div>
+          )}
+          {invalidRange ? (
+            <div className="notice notice-error" role="alert">
+              El precio mínimo debe ser menor o igual al máximo.
+            </div>
+          ) : error ? (
+            <div className="empty-state" role="alert">
+              <h2>No pudimos cargar los perfiles.</h2>
+              <p>{error}</p>
+              <button
+                className="button button-primary"
+                onClick={() => setRetry((v) => v + 1)}
+              >
+                Reintentar
+              </button>
+            </div>
+          ) : loading ? (
+            <div className="professional-grid" aria-hidden="true">
+              {[1, 2, 3, 4].map((i) => (
+                <div className="skeleton-card" key={i}>
+                  <div className="skeleton avatar" />
+                  <div className="skeleton" />
+                  <div className="skeleton wide" />
+                  <div className="skeleton" />
+                </div>
+              ))}
+            </div>
+          ) : data.enfermeros.length === 0 ? (
+            <div className="empty-state">
+              <span className="soft-icon">
+                <Icon name="search" size={26} />
+              </span>
+              <h2>Probemos con otra búsqueda.</h2>
+              <p>
+                No encontramos profesionales con estos criterios. Podés cambiar
+                la zona o quitar algún filtro.
+              </p>
+              <button className="button button-primary" onClick={() => clear()}>
+                Ver todos los profesionales
+              </button>
+            </div>
+          ) : (
+            <>
+              {showMap && (
+                <div className="results-map" ref={mapRef}>
+                  <Suspense fallback={<p role="status">Cargando mapa…</p>}>
+                    <MapaEnfermeros
+                      enfermeros={data.enfermeros}
+                      selectedId={selected}
+                      onSelect={setSelected}
+                      volverA={profileState.from}
+                    />
+                  </Suspense>
+                  <p className="map-results-note">
+                    El mapa muestra los profesionales de esta página con
+                    ubicación informada.
+                  </p>
+                </div>
+              )}
+              <div className="professional-grid">
+                {data.enfermeros.map((person) => {
+                  const id = person.usuario_id ?? person.id;
+                  const rating = optionalNumber(
+                    person.puntuacion ?? person.rating,
+                  );
+                  const distance = optionalNumber(
+                    person.distancia_km ?? person.distancia,
+                  );
+                  const hasCoordinates =
+                    person.latitud != null &&
+                    person.longitud != null &&
+                    person.latitud !== '' &&
+                    person.longitud !== '';
+                  return (
+                    <article
+                      className={`professional-card ${String(selected) === String(id) ? 'is-selected' : ''}`}
+                      key={id}
+                    >
+                      <div className="card-identity">
+                        <Avatar person={person} />
+                        <div>
+                          <h3>
+                            <Link to={`/perfil/${id}`} state={profileState}>
+                              {person.nombre} {person.apellido}
+                            </Link>
+                          </h3>
+                          <p className="card-location">
+                            <Icon name="pin" size={13} />
+                            {person.ciudad || 'Zona sin informar'}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="card-tags">
+                        <span className="specialty-tag">
+                          {person.especialidad || 'Especialidad sin informar'}
+                        </span>
+                        <span
+                          className={`availability ${person.disponible ? '' : 'unavailable'}`}
+                        >
+                          <span className="status-dot" />
+                          {person.disponible ? 'Disponible' : 'No disponible'}
+                        </span>
+                      </div>
+                      <p className="card-description">
+                        {person.descripcion ||
+                          'Conocé sus datos y horarios de atención en el perfil.'}
+                      </p>
+                      <div className="card-meta">
+                        {person.experiencia_anios > 0 && (
+                          <span>
+                            <Icon name="briefcase" size={14} />
+                            {person.experiencia_anios} años de experiencia
+                          </span>
+                        )}
+                        {rating !== null && (
+                          <span>
+                            <Icon name="star" size={14} />
+                            {rating.toFixed(1)}
+                          </span>
+                        )}
+                        {distance !== null && (
+                          <span>
+                            <Icon name="pin" size={14} />A {distance.toFixed(1)}{' '}
+                            km
+                          </span>
+                        )}
+                      </div>
+                      <div className="card-bottom">
+                        <div className="card-price">
+                          {formatPrice(person.tarifa_hora)}
+                          {Number(person.tarifa_hora) > 0 && (
+                            <small> / hora</small>
+                          )}
+                        </div>
+                        <Link
+                          to={`/perfil/${id}`}
+                          state={profileState}
+                          className="button button-primary"
+                        >
+                          Ver perfil
+                          <Icon name="arrow" size={15} />
+                        </Link>
+                      </div>
+                      {hasCoordinates && (
+                        <button
+                          className="text-link map-card-link"
+                          onClick={() => {
+                            setSelected(id);
+                            update('vista', 'mapa');
+                            requestAnimationFrame(() =>
+                              mapRef.current?.scrollIntoView({
+                                behavior: 'smooth',
+                                block: 'center',
+                              }),
+                            );
+                          }}
+                        >
+                          <Icon name="pin" size={14} />
+                          Ver en el mapa
+                        </button>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+              {data.total_paginas > 1 && (
+                <nav className="pagination" aria-label="Paginación">
+                  <button
+                    className="button button-secondary"
+                    disabled={page <= 1}
+                    onClick={() => update('page', String(page - 1))}
+                  >
+                    <Icon name="back" size={15} />
+                    Anterior
+                  </button>
+                  <span>
+                    Página {page} de {data.total_paginas}
+                  </span>
+                  <button
+                    className="button button-secondary"
+                    disabled={page >= data.total_paginas}
+                    onClick={() => update('page', String(page + 1))}
+                  >
+                    Siguiente
+                    <Icon name="arrow" size={15} />
+                  </button>
+                </nav>
+              )}
+            </>
+          )}
+        </section>
+      </div>
+      <dialog
+        ref={filterDialog}
+        id="filtros-mobile"
+        className="filter-dialog"
+        aria-labelledby="filter-dialog-title"
+        aria-describedby="filter-dialog-description"
+        onCancel={(event) => {
+          event.preventDefault();
+          setFiltersOpen(false);
+        }}
+        onClick={(event) => {
+          if (event.target === event.currentTarget) {
+            const bounds = event.currentTarget.getBoundingClientRect();
+            if (
+              event.clientX < bounds.left ||
+              event.clientX > bounds.right ||
+              event.clientY < bounds.top ||
+              event.clientY > bounds.bottom
+            )
+              setFiltersOpen(false);
+          }
+        }}
+      >
+        <form onSubmit={applyFilters}>
+          <div className="filter-dialog-heading">
+            <div>
+              <span className="eyebrow">A TU MEDIDA</span>
+              <h2 id="filter-dialog-title">Filtrá tu búsqueda</h2>
+            </div>
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="Cerrar filtros"
+              onClick={() => setFiltersOpen(false)}
+            >
+              <Icon name="close" />
+            </button>
+          </div>
+          <div className="filter-dialog-body">
+            <p id="filter-dialog-description">
+              Elegí qué necesitás para encontrar tu profesional.
+            </p>
+            <DirectoryFilters
+              values={draftFilters}
+              specialties={specialties}
+              onChange={(key, value) =>
+                setDraftFilters((current) => ({ ...current, [key]: value }))
+              }
+              prefix="mobile"
+            />
+          </div>
+          <div className="filter-dialog-actions">
+            <button
+              type="button"
+              className="text-link"
+              onClick={() =>
+                setDraftFilters(
+                  Object.fromEntries(FILTERS.map((key) => [key, ''])),
+                )
+              }
+            >
+              Limpiar filtros
+            </button>
+            <button className="button button-primary" disabled={invalidDraft}>
+              Aplicar filtros
+              <Icon name="arrow" size={17} />
+            </button>
+          </div>
+        </form>
+      </dialog>
+    </div>
   );
-};
-
-export default ListaEnfermerosSprint3;
+}

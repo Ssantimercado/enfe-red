@@ -1,82 +1,106 @@
 import { useEffect, useState } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { cerrarSesion, sesionActual } from './api';
-import Login from "./components/Login";
-import Home from "./components/Home";
-import PerfilPaciente from "./components/PerfilPaciente";
-import PerfilEnfermero from "./components/PerfilEnfermero";
-import Register from "./components/Register";
-import RecuperarPassword from "./components/RecuperarPassword";
-import VerPerfiles from "./components/VerPerfiles";
-import ListaEnfermeros from "./components/ListaEnfermeros";
-import Navbar from "./components/Navbar";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  useLocation,
+} from 'react-router-dom';
+import Login from './components/Login';
+import Home from './components/Home';
+import PerfilPaciente from './components/PerfilPaciente';
+import PerfilEnfermero from './components/PerfilEnfermero';
+import Register from './components/Register';
+import RecuperarPassword from './components/RecuperarPassword';
+import VerPerfiles from './components/VerPerfiles';
+import ListaEnfermeros from './components/ListaEnfermeros';
+import AppShell from './components/AppShell';
+import Landing from './components/Landing';
+import './App.css';
+
+function EntryRoute() {
+  return <Navigate to={sesionActual() ? '/home' : '/login'} replace />;
+}
+
+function ScrollToTop() {
+  const { pathname, hash } = useLocation();
+  useEffect(() => {
+    if (pathname === '/' && hash) {
+      document.getElementById(hash.slice(1))?.scrollIntoView();
+      return;
+    }
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }, [pathname, hash]);
+  return null;
+}
 
 function RutaProtegida({ children, rol }) {
-  const [, actualizar] = useState(0);
+  const [, update] = useState(0);
   const location = useLocation();
-  const sesion = sesionActual();
-  const vencimiento = sesion?.exp;
+  const session = sesionActual();
+  const expiration = session?.exp;
   useEffect(() => {
-    if (!vencimiento) {
+    if (!expiration) {
       cerrarSesion();
       return;
     }
-    const timer = window.setTimeout(() => actualizar((value) => value + 1),
-      Math.min(vencimiento * 1000 - Date.now() + 100, 2147483647));
+    const timer = window.setTimeout(
+      () => update((value) => value + 1),
+      Math.min(expiration * 1000 - Date.now() + 100, 2147483647),
+    );
     return () => window.clearTimeout(timer);
-  }, [vencimiento]);
-  if (!sesion) return <Navigate to="/login?sesion=expirada" replace state={{ from: location.pathname + location.search }} />;
-  if (rol && sesion.rol !== rol) return <Navigate to="/home" replace />;
+  }, [expiration]);
+  if (!session)
+    return (
+      <Navigate
+        to="/login?sesion=expirada"
+        replace
+        state={{ from: location.pathname + location.search }}
+      />
+    );
+  if (rol && session.rol !== rol) return <Navigate to="/home" replace />;
   return children;
 }
 
-function App() {
-
+export default function App() {
   return (
     <BrowserRouter>
-      <Navbar />
+      <ScrollToTop />
       <Routes>
-        {/* RUTA RAÍZ: al abrir la aplicación siempre comenzamos en Login */}
-        <Route 
-          path="/" 
-          element={<Navigate to={sesionActual() ? '/home' : '/login'} replace />}
-        />
-        
-        {/* ==========================================
-            RUTAS PÚBLICAS (No requieren sesión)
-            ========================================== */}
+        <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
         <Route path="/registro" element={<Register />} />
         <Route path="/recuperar-password" element={<RecuperarPassword />} />
-
-        {/* ==========================================
-            RUTAS PROTEGIDAS (Requieren sesión activa)
-            ========================================== */}
-        <Route 
-          path="/home" 
-          element={<RutaProtegida><Home /></RutaProtegida>}
-        />
-        <Route 
-          path="/perfil-paciente" 
-          element={<RutaProtegida rol="paciente"><PerfilPaciente /></RutaProtegida>}
-        />
-        <Route 
-          path="/perfil-enfermero" 
-          element={<RutaProtegida rol="enfermero"><PerfilEnfermero /></RutaProtegida>}
-        />
-        <Route 
-          path="/perfil/:id" 
-          element={<RutaProtegida><VerPerfiles /></RutaProtegida>}
-        />
-        <Route 
-          path="/cartilla" 
-          element={<RutaProtegida><ListaEnfermeros /></RutaProtegida>}
-        />
-        <Route path="*" element={<Navigate to={sesionActual() ? '/home' : '/login'} replace />} />
+        <Route
+          element={
+            <RutaProtegida>
+              <AppShell />
+            </RutaProtegida>
+          }
+        >
+          <Route path="/home" element={<Home />} />
+          <Route
+            path="/perfil-paciente"
+            element={
+              <RutaProtegida rol="paciente">
+                <PerfilPaciente />
+              </RutaProtegida>
+            }
+          />
+          <Route
+            path="/perfil-enfermero"
+            element={
+              <RutaProtegida rol="enfermero">
+                <PerfilEnfermero />
+              </RutaProtegida>
+            }
+          />
+          <Route path="/perfil/:id" element={<VerPerfiles />} />
+          <Route path="/cartilla" element={<ListaEnfermeros />} />
+        </Route>
+        <Route path="*" element={<EntryRoute />} />
       </Routes>
-      
     </BrowserRouter>
   );
 }
-
-export default App;

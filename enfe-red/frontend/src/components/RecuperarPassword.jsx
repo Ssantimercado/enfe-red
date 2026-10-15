@@ -1,155 +1,114 @@
-import { useState } from "react";
-import { api } from '../api';
-import { useNavigate } from "react-router-dom";
+import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { requestApi as api } from '../api';
+import AuthLayout from './AuthLayout';
+import Icon from './ui/Icon';
 
 export default function RecuperarPassword() {
-  const [paso, setPaso] = useState(1);
-  const [email, setEmail] = useState("");
-  const [codigo, setCodigo] = useState("");
-  const [nuevaPassword, setNuevaPassword] = useState("");
-  const [mensaje, setMensaje] = useState("");
-  const [tipoMensaje, setTipoMensaje] = useState("info"); // 'info' o 'error'
-
-  const navigate = useNavigate();
-
-  const solicitarCodigo = async (e) => {
+  const [step, setStep] = useState(1);
+  const [email, setEmail] = useState('');
+  const [code, setCode] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  async function submit(e) {
     e.preventDefault();
-    setMensaje("");
+    if (loading) return;
+    setLoading(true);
+    setError('');
     try {
-      await api.post("/api/recuperar-password", {
-        email,
+      await api(step === 1 ? '/recuperar-password' : '/reset-password', {
+        method: 'POST',
+        body:
+          step === 1
+            ? { email: email.trim() }
+            : { email: email.trim(), codigo: code, nueva_password: password },
       });
-      setMensaje("Modo de prueba: si el correo está registrado, el código aparece en la consola del servidor y dura 10 minutos.");
-      setTipoMensaje("success");
-      setPaso(2);
-    } catch (error) {
-      setMensaje("Hubo un error al procesar la solicitud.");
-      setTipoMensaje("error");
+      setStep(step + 1);
+    } catch (err) {
+      setError(
+        err.message ||
+          'No pudimos completar la recuperación. Intentá nuevamente.',
+      );
+    } finally {
+      setLoading(false);
     }
-  };
-
-  const resetearPassword = async (e) => {
-    e.preventDefault();
-    setMensaje("");
-    try {
-      await api.post("/api/reset-password", {
-        email,
-        codigo,
-        nueva_password: nuevaPassword,
-      });
-      setMensaje("¡Contraseña actualizada con éxito! Redirigiendo al login...");
-      setTipoMensaje("success");
-      
-      // Redirigir al login después de 2 segundos para que alcance a leer el mensaje
-      setTimeout(() => {
-        navigate("/login");
-      }, 2000);
-    } catch (error) {
-      setMensaje(error.response?.data?.error || "No se pudo actualizar la contraseña. Intentá nuevamente.");
-      setTipoMensaje("error");
-    }
-  };
-
+  }
   return (
-    <div className="auth-page" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '80vh', fontFamily: "'Segoe UI', Roboto, Helvetica, Arial, sans-serif" }}>
-      
-      <div className="auth-card" style={{ width: '100%', maxWidth: '420px', backgroundColor: '#ffffff', padding: '40px', borderRadius: '16px', boxShadow: '0 10px 25px rgba(0,0,0,0.08)' }}>
-        
-        {/* Cabecera */}
-        <div style={{ textAlign: 'center', marginBottom: '30px' }}>
-          <h2 style={{ color: '#2c3e50', fontSize: '26px', margin: '0 0 8px 0', fontWeight: '800' }}>
-            Recuperar <span style={{ color: '#3498db' }}>Contraseña</span>
-          </h2>
-          <p style={{ color: '#7f8c8d', margin: 0, fontSize: '14px' }}>
-            {paso === 1 ? "Ingresá tu mail para recibir las instrucciones" : "Ingresá el código y tu nueva contraseña"}
-          </p>
+    <AuthLayout>
+      <span className="eyebrow">RECUPERÁ TU ACCESO</span>
+      <h2 className="auth-title">Volvamos a conectar.</h2>
+      <p className="auth-subtitle">
+        {step === 1
+          ? 'Ingresá el correo de tu cuenta para solicitar un código.'
+          : step === 2
+            ? 'Ingresá el código de prueba y elegí una nueva contraseña.'
+            : 'Tu contraseña se actualizó. Volvé a iniciar sesión.'}
+      </p>
+      {step < 3 && (
+        <div className="notice notice-info" role="status">
+          Modo de prueba: todavía no se envían correos. Si la cuenta existe, el
+          código aparece en la consola del servidor y dura 10 minutos.
         </div>
-
-        {/* Alertas de Mensajes */}
-        {mensaje && (
-          <div style={{ 
-            backgroundColor: tipoMensaje === 'success' ? '#dcfce7' : '#fee2e2', 
-            color: tipoMensaje === 'success' ? '#166534' : '#ef4444', 
-            padding: '12px', 
-            borderRadius: '8px', 
-            marginBottom: '20px', 
-            textAlign: 'center', 
-            fontSize: '14px', 
-            fontWeight: '600',
-            border: `1px solid ${tipoMensaje === 'success' ? '#bbf7d0' : '#f87171'}`
-          }}>
-            {tipoMensaje === 'success' ? '✅ ' : '⚠️ '} {mensaje}
-          </div>
-        )}
-
-        {paso === 1 ? (
-          <form onSubmit={solicitarCodigo} style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-            <div style={{ display: "flex", flexDirection: "column" }}>
-              <label style={{ marginBottom: '8px', fontWeight: '600', color: '#34495e', fontSize: '14px' }}>Correo Electrónico</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                placeholder="ejemplo@correo.com"
-                style={{ padding: '14px 16px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '15px', backgroundColor: '#f8fafc', outline: 'none' }}
-              />
-            </div>
-            
-            <button 
-              type="submit"
-              style={{ padding: '16px', backgroundColor: '#3498db', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px', boxShadow: '0 4px 6px rgba(52, 152, 219, 0.2)' }}
-            >
-              Enviar código
-            </button>
-          </form>
-        ) : (
-          <form onSubmit={resetearPassword} style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-            <div style={{ display: "flex", flexDirection: "column" }}>
-              <label style={{ marginBottom: '8px', fontWeight: '600', color: '#34495e', fontSize: '14px' }}>Código de seguridad</label>
-              <input
-                type="text"
-                value={codigo}
-                onChange={(e) => setCodigo(e.target.value)}
-                required
-                placeholder="Ej: 123456"
-                style={{ padding: '14px 16px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '15px', backgroundColor: '#f8fafc', outline: 'none' }}
-              />
-            </div>
-
-            <div style={{ display: "flex", flexDirection: "column" }}>
-              <label style={{ marginBottom: '8px', fontWeight: '600', color: '#34495e', fontSize: '14px' }}>Nueva contraseña</label>
-              <input
-                type="password"
-                value={nuevaPassword}
-                onChange={(e) => setNuevaPassword(e.target.value)}
-                required
-                placeholder="••••••••"
-                style={{ padding: '14px 16px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '15px', backgroundColor: '#f8fafc', outline: 'none' }}
-              />
-            </div>
-
-            <button 
-              type="submit"
-              style={{ padding: '16px', backgroundColor: '#2ecc71', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px', boxShadow: '0 4px 6px rgba(46, 204, 113, 0.2)' }}
-            >
-              Cambiar contraseña
-            </button>
-          </form>
-        )}
-
-        {/* Enlace para volver al login */}
-        <div style={{ textAlign: 'center', marginTop: '25px', paddingTop: '20px', borderTop: '1px solid #e2e8f0' }}>
-          <button 
-            type="button" 
-            onClick={() => navigate('/login')} 
-            style={{ background: 'none', border: 'none', color: '#64748b', fontWeight: '600', cursor: 'pointer', padding: '0', fontSize: '14px' }}
+      )}
+      {error && (
+        <div className="notice notice-error" role="alert">
+          {error}
+        </div>
+      )}
+      {step < 3 && (
+        <form className="form-stack" onSubmit={submit}>
+          <label className="field">
+            Correo electrónico
+            <input
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              readOnly={step === 2}
+            />
+          </label>
+          {step === 2 && (
+            <>
+              <label className="field">
+                Código
+                <input
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  autoComplete="one-time-code"
+                  required
+                />
+              </label>
+              <label className="field">
+                Nueva contraseña
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="new-password"
+                  required
+                />
+              </label>
+            </>
+          )}
+          <button
+            className="button button-primary button-full"
+            disabled={loading}
           >
-            ← Volver al Login
+            {loading
+              ? 'Procesando…'
+              : step === 1
+                ? 'Solicitar código'
+                : 'Guardar contraseña'}
           </button>
-        </div>
-
-      </div>
-    </div>
+        </form>
+      )}
+      <p className="auth-switch">
+        <Link to="/login">
+          <Icon name="back" size={16} /> Volver a iniciar sesión
+        </Link>
+      </p>
+    </AuthLayout>
   );
 }
