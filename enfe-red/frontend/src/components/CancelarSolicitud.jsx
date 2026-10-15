@@ -27,13 +27,13 @@ export default function CancelarSolicitud({ solicitud, onCancelada }) {
   if (cancelada) return <p role="status">Solicitud cancelada.</p>;
   if (sesionActual()?.rol !== 'paciente' || !solicitud.idSolicitud || !['Pendiente', 'Aceptada'].includes(solicitud.estado)) return null;
   return <div className="solicitud-cancelar">
-    <button type="button" className="solicitud-danger" onClick={(event) => { event.stopPropagation(); setError(''); dialog.current.showModal(); }}>Cancelar solicitud</button>
-    <dialog ref={dialog} aria-label="Confirmar cancelación de solicitud" onClick={event => event.stopPropagation()} onCancel={event => { if (ocupado.current) event.preventDefault(); }}>
+    <button type="button" className="button button-secondary" onClick={(event) => { event.stopPropagation(); setError(''); dialog.current.showModal(); }}>Cancelar solicitud</button>
+    <dialog className="content-panel" ref={dialog} aria-label="Confirmar cancelación de solicitud" onClick={event => event.stopPropagation()} onCancel={event => { if (ocupado.current) event.preventDefault(); }}>
       <h2>¿Cancelar esta solicitud?</h2>
       <p>Se cancelará el turno del {solicitud.fecha} a las {solicitud.hora}.</p>
-      {error && <p className="solicitud-error" role="alert">{error}</p>}
-      <button type="button" autoFocus disabled={enviando} onClick={() => dialog.current.close()}>Conservar solicitud</button>
-      <button type="button" className="solicitud-danger" disabled={enviando} onClick={confirmar}>{enviando ? 'Cancelando…' : 'Sí, cancelar'}</button>
+      {error && <p className="notice notice-error" role="alert">{error}</p>}
+      <button className="button button-secondary" type="button" autoFocus disabled={enviando} onClick={() => dialog.current.close()}>Conservar solicitud</button>
+      <button type="button" className="button button-primary" disabled={enviando} onClick={confirmar}>{enviando ? 'Cancelando…' : 'Sí, cancelar'}</button>
     </dialog>
   </div>;
 }

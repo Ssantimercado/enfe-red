@@ -158,6 +158,17 @@ def _cambiar_estado_solicitud(id_solicitud, *, rol, origen, destino, accion, men
     return jsonify({'mensaje': mensaje, 'solicitud': solicitud.to_dict()}), 200
 
 
+@solicitud_bp.route('/servicios', methods=['GET'])
+@jwt_required()
+def listarServicios():
+    """Catálogo global que utiliza crearSolicitud; no es una oferta por enfermero."""
+    usuario = _usuario_actual()
+    if not usuario:
+        return jsonify({'error': 'La sesión no corresponde a un usuario existente'}), 401
+    servicios = Servicio.query.order_by(Servicio.tipoServicio, Servicio.idServicio).all()
+    return jsonify([servicio.to_dict() for servicio in servicios]), 200
+
+
 # SCRUM-56: creación de una solicitud.
 @solicitud_bp.route('/solicitudes', methods=['POST'])
 @jwt_required()

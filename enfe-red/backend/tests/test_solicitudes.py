@@ -94,6 +94,23 @@ class SolicitudesTest(unittest.TestCase):
         db.session.commit()
         return solicitud.idSolicitud
 
+    def test_catalogo_real_con_precio_y_autenticacion(self):
+        response = self.client.get('/api/servicios', headers=self.headers())
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json, [{'idServicio': 301, 'tipoServicio': 'Curaciones', 'precioEstimado': '8500.50'}])
+        self.assertEqual(self.client.get('/api/servicios').status_code, 401)
+        self.assertEqual(self.client.get('/api/servicios', headers=self.headers(999)).status_code, 401)
+        creado = self.crear(idServicio=response.json[0]['idServicio'])
+        self.assertEqual(creado.status_code, 201)
+        id_solicitud = creado.json['solicitud']['idSolicitud']
+        detalle = self.client.get(f'/api/solicitudes/{id_solicitud}', headers=self.headers())
+        self.assertEqual(detalle.json['servicio'], response.json[0])
+
+    def test_catalogo_vacio(self):
+        Servicio.query.delete()
+        db.session.commit()
+        self.assertEqual(self.client.get('/api/servicios', headers=self.headers()).json, [])
+
     def test_crear_y_consultar_comprobante_sin_cambiar_estado(self):
         response = self.crear()
         self.assertEqual(response.status_code, 201, response.json)

@@ -1,67 +1,26 @@
-# Sprint 4 — Germán
+﻿# Sprint 4 — Integración de solicitudes
 
-Implementado: formulario desde el perfil, POST con Axios/JWT, comprobante mediante GET, cancelación mediante PUT y diálogo nativo de confirmación. Las rutas requieren sesión de paciente. El backend debe validar sesión, rol y propiedad en todas las operaciones; la validación del frontend no reemplaza la autorización.
+## Contrato implementado
 
-## Contrato propuesto, pendiente de acordar con Santiago y Pablo
+- GET /api/usuarios/:id: perfil público; :id es el ID de Usuario. Usar enfermero_id en el POST. Requiere verificado y disponible verdaderos para habilitar el formulario.
+- GET /api/servicios: catálogo global real de la tabla Servicio, con JWT. Devuelve array de { idServicio, tipoServicio, precioEstimado }, ordenado por tipoServicio e ID. Sin servicios devuelve []. El modelo actual no relaciona Servicio con Enfermero: no presentar el catálogo como oferta personalizada de cada profesional.
+- POST /api/solicitudes: { idEnfermero, idServicio, fecha, hora, direccionAtencion }. idEnfermero corresponde al perfil, no al usuario. idPaciente se resuelve desde JWT. Dirección de 1 a 200 caracteres; fecha y hora futuras. El servidor valida disponibilidad, verificación y conflictos de turno.
+- Respuesta POST: HTTP 201 con { mensaje, solicitud: { idSolicitud, ... } }. El formulario toma solicitud.idSolicitud y navega al comprobante.
+- GET /api/solicitudes/:idSolicitud: comprobante directo con estado, fecha, hora, direccionAtencion, enfermero y servicio (tipoServicio y precioEstimado).
+- PUT /api/solicitudes/:idSolicitud/cancelar: sin body; solo el paciente dueño puede cancelar estados Pendiente o Aceptada. El componente actualiza la pantalla únicamente tras éxito.
 
-El backend local todavía no implementa SolicitudServicio ni Servicio. No se agregaron datos ficticios ni cambios al backend. No es posible completar una reserva real hasta integrar estos endpoints.
+Todos los pedidos envían Authorization: Bearer <token>. VITE_API_URL es el origen sin /api; por defecto http://localhost:5000. Se conserva la gestión de sesión de src/api.js.
 
-GET /api/usuarios/:id sigue recibiendo el ID de usuario del profesional. Para habilitar el formulario necesita `enfermero_id` (ID de la tabla enfermeros), `verificado: true`, `disponible: true` y `servicios: [{ idServicio: 1, tipoServicio: "Curaciones", precioEstimado: 8500 }]`. El catálogo debe contener únicamente servicios ofrecidos por ese profesional. Si el equipo define un endpoint separado para el catálogo, adaptar services/solicitudes.js y la carga del formulario.
+## Interfaz
 
-POST /api/solicitudes recibe:
+Perfil → Solicitar servicio → formulario → comprobante. No se inventan servicios si el catálogo está vacío o falla su carga. La carga fallida ofrece reintentar. Se usan page-container, page-heading, content-panel, field, form-stack, button y notice del diseño existente; Solicitudes.css solo agrega disposición y espaciado.
 
-```json
-{
-  "idEnfermero": 2,
-  "idServicio": 1,
-  "fecha": "2026-11-10",
-  "hora": "10:30",
-  "direccionAtencion": "Dirección ingresada por el paciente"
-}
-```
+CancelarSolicitud puede incluirse en las tarjetas de Renzo pasando solicitud y onCancelada(idSolicitud), que debe actualizar el estado a Cancelada en el listado. El comprobante ya lo utiliza. Conserva el turno si se cierra el diálogo; confirmar hace PUT. Durante la petición bloquea dobles clics.
 
-Se propone que el backend resuelva idPaciente desde el JWT, sin confundir el ID de usuario con el ID de paciente. Validar servicio ofrecido, verificación, disponibilidad, fecha/hora futura y conflictos de horario en servidor. Respuesta POST exitosa: HTTP 201 y `{ "idSolicitud": 15 }`. No devolver éxito si la creación falló.
+## Pruebas
 
-GET /api/solicitudes/15 devuelve el objeto directo:
+Frontend: npm test. Cobertura con React/JSDOM y adaptador Axios simulado: carga de catálogo separado del perfil, POST con IDs correctos, respuesta anidada y navegación a comprobante, dirección máxima, catálogo vacío, creación rechazada, conservar turno, cancelar exitosamente y error de cancelación. Los contratos simulados reproducen el backend; no son pruebas contra MySQL vivo.
 
-```json
-{
-  "idSolicitud": 15,
-  "estado": "Pendiente",
-  "fecha": "2026-11-10",
-  "hora": "10:30",
-  "direccionAtencion": "Dirección ingresada por el paciente",
-  "enfermero": { "nombre": "Laura", "apellido": "Gómez" },
-  "servicio": { "tipoServicio": "Curaciones", "precioEstimado": 8500 }
-}
-```
+Backend: python -m unittest discover -s tests -q. Verifica catálogo de BD, precio serializado, autenticación, catálogo vacío y creación/detalle usando su ID, además de los casos previos de solicitudes. Usa SQLite en memoria.
 
-PUT /api/solicitudes/15/cancelar: sin body; HTTP 200 o 204 tras cancelar. El servidor debe exigir que sea el paciente dueño y que el estado sea Pendiente o Aceptada. Errores: `{ "error": "mensaje" }` con estado HTTP adecuado. Fechas y horas locales de atención; precios expresados en ARS.
-
-## Integración con Renzo
-
-No se creó EstadoSolicitudes.jsx, que corresponde a Renzo. En cada tarjeta del paciente incluir:
-
-```jsx
-<CancelarSolicitud
-  key={solicitud.idSolicitud}
-  solicitud={solicitud}
-  onCancelada={(id) => setSolicitudes(actuales => actuales.map(item =>
-    item.idSolicitud === id ? { ...item, estado: 'Cancelada' } : item
-  ))}
-/>
-```
-
-El componente ya está conectado al comprobante para poder cancelar desde allí. Oculta la acción en estados terminales, evita dobles clics y conserva el estado anterior ante errores. Renzo puede enlazar cada tarjeta a `/solicitudes/${solicitud.idSolicitud}`.
-
-## Prueba manual tras integrar el backend
-
-1. Entrar como paciente, abrir un perfil y pulsar Solicitar servicio.
-2. Verificar que sin catálogo, verificación o disponibilidad el envío esté bloqueado.
-3. Elegir servicio, fecha y hora futuras y dirección; enviar y verificar una sola creación.
-4. Comprobar que el comprobante carga desde GET incluso después de recargar la página; Pendiente no debe presentarse como turno aceptado.
-5. Cancelar: conservar en el diálogo no hace PUT; confirmar sí hace PUT y muestra Cancelada tras el éxito.
-6. Probar error de red, sesión vencida y cancelación rechazada; verificar que no se indique éxito.
-7. Verificar en servidor que otro paciente no pueda consultar ni cancelar una solicitud ajena.
-
-Configuración opcional: VITE_API_URL contiene el origen del backend sin /api, como en src/api.js. Por defecto se usa http://localhost:5000; el cliente de solicitudes agrega /api y comparte el cierre de sesión ante respuestas 401.
+Para comprobar visualmente: entrar como paciente, abrir perfil verificado/disponible, seleccionar un servicio real, fecha/hora futuras y dirección. Enviar, recargar el comprobante y probar conservar/cancelar. Confirmar el resultado contra MySQL en el entorno compartido al integrar.

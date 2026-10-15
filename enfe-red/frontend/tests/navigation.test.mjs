@@ -5,6 +5,18 @@ import { build } from 'esbuild';
 import { pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
 import React, { act } from 'react';
+import axios from 'axios';
+
+const originalAdapter = axios.defaults.adapter;
+let solicitudRequests = [];
+let solicitudHandler;
+axios.defaults.adapter = async config => {
+  solicitudRequests.push(config);
+  const { data, status = 200 } = await solicitudHandler(config);
+  const result = { data, status, statusText: String(status), headers: {}, config };
+  if (status >= 400) throw new axios.AxiosError('Request failed', 'ERR_BAD_RESPONSE', config, null, result);
+  return result;
+};
 
 const dom = new JSDOM('<div id="root"></div>', {
   url: 'http://localhost:5173',
@@ -26,6 +38,8 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const { createRoot } = await import('react-dom/client');
 window.scrollTo = () => {};
 window.HTMLElement.prototype.scrollIntoView = function () {};
+window.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
+window.HTMLDialogElement.prototype.close = function () { this.open = false; };
 let App, root;
 const profile = {
   id: 1,
@@ -121,9 +135,11 @@ afterEach(async () => {
   root = null;
   localStorage.clear();
   requests = [];
+  solicitudRequests = [];
+  solicitudHandler = undefined;
 });
 
-after(() => dom.window.close());
+after(() => { axios.defaults.adapter = originalAdapter; dom.window.close(); });
 
 globalThis.fetch = async (url, options = {}) => {
   requests.push({ url: String(url), options });
@@ -418,4 +434,100 @@ test('Mi disponibilidad navega y desplaza a la sección cargada de horarios', as
     assert.equal(window.location.hash, '#horarios');
     assert.ok(scrolled.includes('horarios'));
   } finally { window.HTMLElement.prototype.scrollIntoView = original; }
+});
+
+const comprobante = {
+  idSolicitud: 15, estado: 'Pendiente', fecha: '2099-12-10', hora: '14:30',
+  direccionAtencion: 'San Martín 123', enfermero: { nombre: 'Laura', apellido: 'Gómez' },
+  servicio: { idServicio: 301, tipoServicio: 'Curaciones', precioEstimado: '8500.50' },
+};
+function solicitudesAPI({ catalogo = [comprobante.servicio], crearError = false, cancelarError = false } = {}) {
+  solicitudHandler = async config => {
+    assert.match(config.headers.Authorization, /^Bearer /);
+    if (config.url === '/usuarios/21') return { data: { id: 21, enfermero_id: 201, nombre: 'Laura', rol: 'enfermero', verificado: true, disponible: true } };
+    if (config.url === '/servicios') return { data: catalogo };
+    if (config.url === '/solicitudes' && config.method === 'post') return crearError
+      ? { status: 409, data: { error: 'Ese horario ya tiene una solicitud activa.' } }
+      : { status: 201, data: { mensaje: 'Solicitud creada', solicitud: comprobante } };
+    if (config.url === '/solicitudes/15') return { data: comprobante };
+    if (config.url === '/solicitudes/15/cancelar') return cancelarError
+      ? { status: 409, data: { error: 'No se puede cancelar este turno.' } }
+      : { data: { mensaje: 'Solicitud cancelada', solicitud: { ...comprobante, estado: 'Cancelada' } } };
+    throw new Error(`Petición inesperada: ${config.method} ${config.url}`);
+  };
+}
+async function completarSolicitud(direccion = 'San Martín 123') {
+  const select = document.querySelector('select[name="idServicio"]');
+  await act(async () => {
+    select.value = '301';
+    select.dispatchEvent(new window.Event('change', { bubbles: true }));
+  });
+  await type(document.querySelector('input[name="fecha"]'), '2099-12-10');
+  await type(document.querySelector('input[name="hora"]'), '14:30');
+  await type(document.querySelector('input[name="direccionAtencion"]'), direccion);
+}
+
+test('solicitud usa catálogo real, crea con IDs de perfil y abre el comprobante anidado', async () => {
+  session();
+  solicitudesAPI();
+  await mount('/perfil/21/solicitar');
+  assert.ok(solicitudRequests.some(r => r.url === '/servicios'));
+  assert.equal(document.querySelector('input[name="direccionAtencion"]').maxLength, 200);
+  await completarSolicitud();
+  await submitForm();
+  const posts = solicitudRequests.filter(r => r.method === 'post');
+  assert.equal(posts.length, 1);
+  assert.deepEqual(JSON.parse(posts[0].data), {
+    idServicio: 301, idEnfermero: 201, fecha: '2099-12-10', hora: '14:30', direccionAtencion: 'San Martín 123',
+  });
+  assert.equal(window.location.pathname, '/solicitudes/15');
+  assert.match(document.body.textContent, /Comprobante de solicitud/);
+  assert.match(document.body.textContent, /Laura Gómez/);
+  assert.match(document.body.textContent, /Pendiente/);
+  assert.ok(solicitudRequests.some(r => r.url === '/solicitudes/15' && r.method === 'get'));
+});
+
+test('catálogo vacío bloquea el envío', async () => {
+  session(); solicitudesAPI({ catalogo: [] });
+  await mount('/perfil/21/solicitar');
+  assert.equal(button('Enviar solicitud').disabled, true);
+  await submitForm();
+  assert.equal(solicitudRequests.some(r => r.method === 'post'), false);
+});
+
+test('dirección mayor a 200 no se envía aunque se fuerce el formulario', async () => {
+  session(); solicitudesAPI(); await mount('/perfil/21/solicitar');
+  await completarSolicitud('a'.repeat(201)); await submitForm();
+  assert.match(document.querySelector('[role="alert"]').textContent, /200/);
+  assert.equal(solicitudRequests.some(r => r.method === 'post'), false);
+});
+
+test('creación rechazada mantiene el formulario y permite reintentar', async () => {
+  session(); solicitudesAPI({ crearError: true }); await mount('/perfil/21/solicitar');
+  await completarSolicitud(); await submitForm();
+  assert.equal(window.location.pathname, '/perfil/21/solicitar');
+  assert.match(document.querySelector('[role="alert"]').textContent, /horario/);
+  assert.equal(button('Enviar solicitud').disabled, false);
+});
+
+test('cancelación requiere confirmar y actualiza el comprobante tras el PUT', async () => {
+  session(); solicitudesAPI(); await mount('/solicitudes/15');
+  await click(button('Cancelar solicitud'));
+  assert.equal(document.querySelector('dialog').open, true);
+  await click(button('Conservar solicitud'));
+  assert.equal(solicitudRequests.some(r => r.method === 'put'), false);
+  await click(button('Cancelar solicitud'));
+  await click(button('Sí, cancelar'));
+  assert.equal(solicitudRequests.filter(r => r.method === 'put').length, 1);
+  assert.match(document.body.textContent, /Estado: Cancelada/);
+  assert.equal(document.querySelector('dialog'), null);
+});
+
+test('cancelación rechazada conserva estado y muestra el error', async () => {
+  session(); solicitudesAPI({ cancelarError: true }); await mount('/solicitudes/15');
+  await click(button('Cancelar solicitud')); await click(button('Sí, cancelar'));
+  assert.match(document.body.textContent, /Estado: Pendiente/);
+  assert.match(document.querySelector('dialog [role="alert"]').textContent, /No se puede cancelar/);
+  assert.equal(document.querySelector('dialog').open, true);
+  assert.equal(button('Sí, cancelar').disabled, false);
 });
