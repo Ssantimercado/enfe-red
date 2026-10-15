@@ -6,7 +6,7 @@ export default function Brand({ to = '/home' }) {
         <span />
       </span>
       <span>
-        enfe<span className="brand-light">red</span>
+        Enfe<span className="brand-light">red</span>
         <span className="brand-dot">.</span>
       </span>
     </Link>
