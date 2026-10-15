@@ -36,6 +36,7 @@ class Paciente(db.Model):
     
     def to_dict(self):
         return {
+            "idPaciente": self.id,
             "nombre": self.nombre,
             "apellido": self.apellido,
             "direccion": self.direccion,
@@ -63,6 +64,7 @@ class Enfermero(db.Model):
     ciudad = db.Column(db.String(100), nullable=True, index=True)
     tarifa_hora = db.Column(db.Float, default=0.0, index=True)
     disponible = db.Column(db.Boolean, default=True, index=True)
+    verificado = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
     latitud = db.Column(db.Float, nullable=True)
     longitud = db.Column(db.Float, nullable=True)
 
@@ -73,6 +75,7 @@ class Enfermero(db.Model):
             "id": self.usuario_id,          # Para VerPerfiles.jsx
             "usuario_id": self.usuario_id,  # Para ListaEnfermeros.jsx y Mapa de Germán
             "enfermero_id": self.id,
+            "idEnfermero": self.id,
             "nombre": self.nombre,
             "apellido": self.apellido,
             "matricula": self.matricula,
@@ -84,6 +87,7 @@ class Enfermero(db.Model):
             "ciudad": self.ciudad,
             "tarifa_hora": self.tarifa_hora,
             "disponible": self.disponible,
+            "verificado": self.verificado,
             "latitud": self.latitud,
             "longitud": self.longitud
         }

@@ -1,16 +1,39 @@
-# React + Vite
+# Frontend de Enfe-red
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Único proyecto React/Vite de la aplicación. El código que se ejecuta está en
+`src/`; `index.html` carga `src/main.jsx`, que monta `App.jsx`.
 
-Currently, two official plugins are available:
+Consultar el [README general](../../README.md) para instalación, backend,
+configuración, contratos, ramas y estado del proyecto.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Organización
 
-## React Compiler
+- `src/App.jsx`: rutas, sesión y restricciones de navegación por rol.
+- `src/api.js`: URL del backend, clientes HTTP, JWT y respuestas 401.
+- `src/components/`: pantallas y componentes funcionales.
+- `src/components/ui/`: componentes compartidos de presentación.
+- `src/assets/`: imágenes; `public/`: archivos servidos directamente.
+- `src/App.css`, `src/index.css` y CSS de componentes: estilos.
+- `tests/navigation.test.mjs`: pruebas de navegación con Node/JSDOM.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+No crear `frontend/frontend/`. El registro activo es
+`src/components/Register.jsx`; los horarios activos están en
+`src/components/GestionHorarios.jsx`. Las copias antiguas desconectadas se
+retiraron y permanecen recuperables en el historial Git.
 
-## Expanding the Oxlint configuration
+## Comandos desde esta carpeta
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+```powershell
+npm.cmd ci
+npm.cmd run dev
+npm.cmd run lint
+npm.cmd test
+npm.cmd run build
+```
+
+La API predeterminada está en `http://localhost:5000`. Opcionalmente copiar
+`.env.example` a `.env` y configurar `VITE_API_URL` sin `/api` al final.
+Backend y frontend se ejecutan en terminales separadas.
+
+`node_modules/`, `dist/` y `.test-build/` son generados y no se versionan.
+Para integrar las solicitudes, leer el [contrato de Sprint 4](../../docs/sprint-4-santiago.md).

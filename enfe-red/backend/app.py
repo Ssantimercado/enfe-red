@@ -8,6 +8,8 @@ from database import db
 from extensions import bcrypt
 from routes.usuario_routes import usuario_bp
 from routes.auth_routes import auth_bp
+from routes.solicitud_routes import solicitud_bp
+from schema_sprint4 import inicializar_bd_sprint4
 from seed_sprint3 import inicializar_bd_sprint3
 
 load_dotenv()
@@ -32,10 +34,11 @@ def token_invalido(_motivo):
 # Registro de Blueprints del equipo
 app.register_blueprint(usuario_bp, url_prefix='/api')
 app.register_blueprint(auth_bp, url_prefix='/api')
+app.register_blueprint(solicitud_bp, url_prefix='/api')
 
-# Crea tablas, agrega columnas nuevas del Sprint 3 y carga datos de prueba automáticamente
+# Prepara el esquema de solicitudes antes de consultar/sembrar los perfiles existentes.
 with app.app_context():
-    db.create_all()
+    inicializar_bd_sprint4()
     inicializar_bd_sprint3()
 
 @app.route('/', methods=['GET'])

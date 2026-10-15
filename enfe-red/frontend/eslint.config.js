@@ -3,7 +3,7 @@ import globals from 'globals';
 import reactHooks from 'eslint-plugin-react-hooks';
 
 export default [
-  { ignores: ['node_modules/**', '.npm-cache/**', 'dist/**', 'frontend/**'] },
+  { ignores: ['node_modules/**', '.npm-cache/**', 'dist/**', '.test-build/**'] },
   {
     files: ['src/**/*.{js,jsx}', 'vite.config.js'],
     languageOptions: {

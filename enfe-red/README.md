@@ -1,17 +1,20 @@
-Proyecto Enfe-red
+# Enfe-red: aplicación
 
-## Ejecutar y validar
+La documentación general está en el [README de la raíz](../README.md).
+Allí se explican la estructura, los recorridos, la API, la configuración local,
+las pruebas y el estado de cada rama.
 
-- Backend: con el entorno virtual activo, instalar `backend/requirements.txt`, configurar `DATABASE_URL` y `JWT_SECRET_KEY` en `.env`, y ejecutar `python app.py` desde `backend`.
-- Frontend: ejecutar `npm install` y `npm run dev` desde `frontend`. La API se consulta en `http://localhost:5000`; se puede cambiar con `VITE_API_URL`.
-- Backend QA: desde `backend`, ejecutar `python -m unittest discover -s tests -v`. Las pruebas usan SQLite en memoria y no modifican la base configurada.
-- Frontend QA: desde `frontend`, ejecutar `npm run lint`, `npm test` y `npm run build`.
+- [Backend de solicitudes de Santiago](../docs/sprint-4-santiago.md).
+- [Comparación con el PDF: sprints 1 a 3 y Sprint 4 de Santiago](../docs/comparacion-sprints-1-4.md).
 
-La recuperación de contraseña funciona en modo local: el código aparece en la consola del backend, vence a los diez minutos, admite cinco intentos y se consume al cambiar la contraseña. Todavía no se envía por correo. Los datos iniciales del Sprint 3 ya no reemplazan las contraseñas de usuarios existentes.
+## Carpetas activas
 
-## Configuración inicial de la base de datos (una sola vez)
+- `backend/`: Flask, SQLAlchemy, modelos, rutas y pruebas Python.
+- `frontend/`: único proyecto React/Vite; su código está en `frontend/src/`.
 
-1. Abrí MySQL: `mysql -u root -p`
-2. Corré: `CREATE DATABASE enfe_red;`
-3. Salí con `exit;`
-4. Corré `python app.py` — las tablas se crean solas.
+Desde esta carpeta, abrir una terminal en `backend/` para ejecutar
+`venv\Scripts\python.exe app.py` y otra en `frontend/` para `npm.cmd run dev`,
+después de configurar e instalar según la guía general.
+
+Este directorio conserva su ubicación histórica para no cambiar los comandos
+ni las rutas compartidas por el equipo. No contiene otro frontend anidado.
