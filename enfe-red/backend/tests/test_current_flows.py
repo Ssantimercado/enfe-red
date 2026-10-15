@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 from datetime import datetime, timedelta, timezone
 
 from flask import Flask
@@ -105,6 +106,59 @@ class CurrentFlowsTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.json)
         self.assertEqual(response.json['nombre'], 'Actualizado')
 
+    def test_address_change_clears_old_map_point(self):
+        nurse = db.session.get(Enfermero, 1)
+        nurse.direccion, nurse.ciudad = 'Vieja 123', 'Mendoza'
+        nurse.latitud, nurse.longitud = -32.89, -68.84
+        db.session.commit()
+        response = self.client.put('/api/perfil/enfermero', headers=self.headers,
+                                   json={'direccion': 'Nueva 456', 'ciudad': 'Córdoba'})
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.json['latitud'])
+        self.assertIsNone(response.json['longitud'])
+
+    def test_new_map_point_is_saved_with_address(self):
+        response = self.client.put('/api/perfil/enfermero', headers=self.headers,
+                                   json={'direccion': 'Nueva 456', 'ciudad': 'Córdoba',
+                                         'latitud': -31.42, 'longitud': -64.18})
+        self.assertEqual(response.status_code, 200)
+        nurse = db.session.get(Enfermero, 1)
+        self.assertEqual((nurse.latitud, nurse.longitud), (-31.42, -64.18))
+        listed = self.client.get('/api/enfermeros/buscar?q=Nurse%200').json['enfermeros'][0]
+        self.assertEqual((listed['latitud'], listed['longitud']), (-31.42, -64.18))
+
+    def test_unchanged_address_preserves_map_point(self):
+        nurse = db.session.get(Enfermero, 1)
+        nurse.direccion, nurse.ciudad = 'Casa 123', 'Mendoza'
+        nurse.latitud, nurse.longitud = -32.89, -68.84
+        db.session.commit()
+        response = self.client.put('/api/perfil/enfermero', headers=self.headers,
+                                   json={'direccion': 'Casa 123', 'ciudad': 'Mendoza', 'telefono': '123'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual((response.json['latitud'], response.json['longitud']), (-32.89, -68.84))
+
+    def test_map_point_requires_complete_pair(self):
+        for values in ({'latitud': -32}, {'longitud': -68}, {'latitud': None, 'longitud': -68},
+                       {'latitud': 91, 'longitud': -68}, {'latitud': -32, 'longitud': 181}):
+            with self.subTest(values=values):
+                response = self.client.put('/api/perfil/enfermero', headers=self.headers, json=values)
+                self.assertEqual(response.status_code, 400)
+        response = self.client.put('/api/perfil/enfermero', headers=self.headers,
+                                   json={'latitud': None, 'longitud': None})
+        self.assertEqual(response.status_code, 200)
+
+    def test_single_name_registration_and_profile_update(self):
+        response = self.client.post('/api/registro', json={
+            'nombre': 'Ana', 'email': 'ana@test.local', 'password': 'test-password', 'rol': 'paciente',
+        })
+        self.assertEqual(response.status_code, 201)
+        user = Usuario.query.filter_by(email='ana@test.local').one()
+        headers = {'Authorization': 'Bearer ' + create_access_token(identity=str(user.id))}
+        response = self.client.put('/api/perfil/paciente', headers=headers,
+                                   json={'nombre': 'Ana', 'apellido': '', 'telefono': '123'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json['apellido'], '')
+
     def test_invalid_matricula_is_400(self):
         for value in (None, '', ' ' * 2, 123, 'x' * 51):
             with self.subTest(value=value):
@@ -141,6 +195,16 @@ class CurrentFlowsTest(unittest.TestCase):
             self.assertEqual(self.client.post('/api/reset-password', json=payload).status_code, 400)
         self.assertNotIn(email, codigos_recuperacion)
         self.assertEqual(self.client.post('/api/login', json=dict(email=email, password='original')).status_code, 200)
+
+    def test_requesting_new_code_invalidates_previous_code(self):
+        email = 'nurse0@test.local'
+        with patch('routes.auth_routes.secrets.randbelow', side_effect=[123456, 654321]):
+            self.client.post('/api/recuperar-password', json={'email': email})
+            self.client.post('/api/recuperar-password', json={'email': email})
+        payload = dict(email=email, codigo='123456', nueva_password='nueva-clave')
+        self.assertEqual(self.client.post('/api/reset-password', json=payload).status_code, 400)
+        payload['codigo'] = '654321'
+        self.assertEqual(self.client.post('/api/reset-password', json=payload).status_code, 200)
 
     def test_unknown_recovery_email_has_same_public_response(self):
         known = self.client.post('/api/recuperar-password', json={'email': 'nurse0@test.local'})

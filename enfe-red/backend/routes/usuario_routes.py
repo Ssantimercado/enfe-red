@@ -202,6 +202,18 @@ def perfil_enfermero():
                 data[campo] = int(numero) if campo == 'experiencia_anios' else numero
             except (TypeError, ValueError):
                 return jsonify({'error': f'El campo {campo} no es válido'}), 400
+        coordenadas = ('latitud', 'longitud')
+        if any(campo in data for campo in coordenadas):
+            if not all(campo in data for campo in coordenadas):
+                return jsonify({'error': 'Indicá latitud y longitud juntas'}), 400
+            if (data['latitud'] is None) != (data['longitud'] is None):
+                return jsonify({'error': 'Elegí un punto completo en el mapa o quitá la ubicación'}), 400
+        direccion_cambiada = any(
+            campo in data and (data[campo] or '') != (getattr(enfermero, campo) or '')
+            for campo in ('direccion', 'ciudad')
+        )
+        if direccion_cambiada and not any(campo in data for campo in coordenadas):
+            data.update(latitud=None, longitud=None)
         if enfermero:
             enfermero.nombre = data.get('nombre', enfermero.nombre)
             enfermero.apellido = data.get('apellido', enfermero.apellido)

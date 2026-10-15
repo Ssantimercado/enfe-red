@@ -294,6 +294,12 @@
   resize: vertical;
   min-height: 120px;
 }
+.location-field { gap: 12px; }
+.location-picker { display: grid; gap: 12px; min-width: 0; }
+.location-picker p { font-size: 13px; font-weight: 400; color: var(--muted); }
+.location-picker-map { height: 280px; width: 100%; border-radius: 10px; z-index: 0; }
+.recovery-actions { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 20px; }
+#horarios { scroll-margin-top: 24px; }
 .input-icon {
   display: flex;
   align-items: center;

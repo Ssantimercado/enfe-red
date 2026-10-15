@@ -26,9 +26,25 @@ function EntryRoute() {
 function ScrollToTop() {
   const { pathname, hash } = useLocation();
   useEffect(() => {
-    if (pathname === '/' && hash) {
-      document.getElementById(hash.slice(1))?.scrollIntoView();
-      return;
+    if (hash) {
+      const target = () => document.getElementById(hash.slice(1));
+      const scroll = () => target()?.scrollIntoView({ block: 'start' });
+      if (target()) {
+        scroll();
+        return;
+      }
+      // El perfil carga sus secciones después de consultar la API.
+      const observer = new window.MutationObserver(() => {
+        if (target()) {
+          scroll();
+          observer.disconnect();
+        }
+      });
+      observer.observe(document.getElementById('root'), {
+        childList: true,
+        subtree: true,
+      });
+      return () => observer.disconnect();
     }
     window.scrollTo({ top: 0, behavior: 'instant' });
   }, [pathname, hash]);

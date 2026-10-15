@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { requestApi as api, formatPrice } from '../api';
 import Avatar from './ui/Avatar';
 import Icon from './ui/Icon';
 import ProfileSkeleton from './ui/ProfileSkeleton';
 import GestionHorarios from './GestionHorarios';
+const LocationPicker = lazy(() => import('./LocationPicker'));
 
 const COMMON = [
   ['nombre', 'Nombre', 'text', 'given-name'],
@@ -29,6 +30,7 @@ export default function ProfileEditor({ role }) {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [retry, setRetry] = useState(0);
+  const [locationOpen, setLocationOpen] = useState(false);
   const fields = [...COMMON, ...(nurse ? PROFESSIONAL : [])];
 
   useEffect(() => {
@@ -60,6 +62,8 @@ export default function ProfileEditor({ role }) {
     if (nurse) {
       payload.descripcion = form.descripcion || '';
       payload.disponible = Boolean(form.disponible);
+      payload.latitud = form.latitud ?? null;
+      payload.longitud = form.longitud ?? null;
     } else payload.historial_medico = form.historial_medico || '';
     try {
       const updated = await api(`/perfil/${role}`, {
@@ -142,6 +146,7 @@ export default function ProfileEditor({ role }) {
                       setEditing(true);
                       setSuccess('');
                       setError('');
+                      setLocationOpen(false);
                     }}
                   >
                     Editar datos
@@ -154,7 +159,7 @@ export default function ProfileEditor({ role }) {
                   <div className="form-grid">
                     {fields.map(([key, label, type = 'text', complete]) => (
                       <label className="field" key={key}>
-                        {label}
+                        {key === 'apellido' ? 'Apellido (opcional)' : label}
                         <input
                           name={key}
                           type={type}
@@ -164,13 +169,12 @@ export default function ProfileEditor({ role }) {
                             setForm((current) => ({
                               ...current,
                               [key]: e.target.value,
+                              ...(nurse && ['direccion', 'ciudad'].includes(key)
+                                ? { latitud: null, longitud: null }
+                                : {}),
                             }))
                           }
-                          required={[
-                            'nombre',
-                            'apellido',
-                            'matricula',
-                          ].includes(key)}
+                          required={['nombre', 'matricula'].includes(key)}
                           min={type === 'number' ? '0' : undefined}
                           step={key === 'tarifa_hora' ? '0.01' : undefined}
                           maxLength={key === 'telefono' ? 20 : undefined}
@@ -178,6 +182,53 @@ export default function ProfileEditor({ role }) {
                         />
                       </label>
                     ))}
+                    {nurse && (
+                      <div className="field full-width location-field">
+                        <span>Ubicación en el mapa (opcional)</span>
+                        <p className="filter-hint" role="status">
+                          {form.latitud != null && form.longitud != null
+                            ? 'Hay un punto seleccionado. Se guardará junto con tus datos.'
+                            : 'Sin punto seleccionado. Elegí tu ubicación para aparecer en el mapa; podés guardar el perfil sin publicarla.'}
+                        </p>
+                        <button
+                          type="button"
+                          className="button button-secondary"
+                          disabled={saving}
+                          onClick={() => setLocationOpen(!locationOpen)}
+                          aria-expanded={locationOpen}
+                          aria-controls="profile-location"
+                        >
+                          {locationOpen
+                            ? 'Cerrar mapa'
+                            : 'Elegir ubicación en el mapa'}
+                        </button>
+                        {form.latitud != null && form.longitud != null && (
+                          <button
+                            type="button"
+                            className="text-link"
+                            disabled={saving}
+                            onClick={() => setForm((current) => ({
+                              ...current, latitud: null, longitud: null,
+                            }))}
+                          >
+                            Quitar ubicación
+                          </button>
+                        )}
+                        {locationOpen && (
+                          <div id="profile-location" inert={saving ? true : undefined}>
+                            <Suspense fallback={<p role="status">Cargando mapa…</p>}>
+                              <LocationPicker
+                                latitude={form.latitud}
+                                longitude={form.longitud}
+                                onChange={(latitud, longitud) => setForm((current) => ({
+                                  ...current, latitud, longitud,
+                                }))}
+                              />
+                            </Suspense>
+                          </div>
+                        )}
+                      </div>
+                    )}
                     <label className="field full-width">
                       {nurse ? 'Tu presentación' : 'Información de salud'}
                       <textarea

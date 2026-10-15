@@ -5,7 +5,6 @@ import { build } from 'esbuild';
 import { pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
 import React, { act } from 'react';
-import { createRoot } from 'react-dom/client';
 
 const dom = new JSDOM('<div id="root"></div>', {
   url: 'http://localhost:5173',
@@ -23,7 +22,10 @@ for (const key of [
   globalThis[key] = dom.window[key];
 }
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+// React DOM debe detectar el DOM antes de inicializar sus eventos de formulario.
+const { createRoot } = await import('react-dom/client');
 window.scrollTo = () => {};
+window.HTMLElement.prototype.scrollIntoView = function () {};
 let App, root;
 const profile = {
   id: 1,
@@ -85,6 +87,12 @@ async function type(element, value) {
   });
 }
 
+async function submitForm() {
+  await act(async () => document.querySelector('form').dispatchEvent(
+    new window.Event('submit', { bubbles: true, cancelable: true }),
+  ));
+}
+
 async function mount(path, state = null) {
   window.history.replaceState(state, '', path);
   root = createRoot(document.getElementById('root'));
@@ -102,7 +110,7 @@ before(async () => {
     splitting: true,
     packages: 'external',
     jsx: 'automatic',
-    loader: { '.png': 'file' },
+    loader: { '.png': 'file', '.webp': 'file' },
     define: { 'import.meta.env.VITE_API_URL': 'undefined' },
   });
   App = (await import(pathToFileURL(resolve('.test-build/app.mjs')))).default;
@@ -286,4 +294,128 @@ test('cerrar sesión elimina también los datos del usuario', async () => {
   await click(button('Cerrar Sesión'));
   assert.equal(window.location.pathname, '/login');
   assert.equal(localStorage.length, 0);
+});
+
+test('un perfil con solo nombre puede guardar el teléfono sin exigir apellido', async () => {
+  session();
+  const original = globalThis.fetch;
+  let payload;
+  globalThis.fetch = async (url, options) => {
+    if (options?.method === 'PUT') {
+      payload = JSON.parse(options.body);
+      return response({ ...profile, ...payload });
+    }
+    return response({ ...profile, apellido: '' });
+  };
+  try {
+    await mount('/perfil-paciente');
+    await click(button('Editar datos'));
+    assert.equal(document.querySelector('input[name="apellido"]').required, false);
+    await type(document.querySelector('input[name="telefono"]'), '2615551234');
+    assert.equal(document.querySelector('form').checkValidity(), true);
+    await submitForm();
+    assert.equal(payload.apellido, '');
+    assert.equal(payload.telefono, '2615551234');
+    assert.match(document.body.textContent, /Tus cambios se guardaron/);
+  } finally { globalThis.fetch = original; }
+});
+
+test('cambiar ciudad descarta el punto anterior antes de guardar', async () => {
+  session('enfermero');
+  const original = globalThis.fetch;
+  let payload;
+  globalThis.fetch = async (url, options) => {
+    if (options?.method === 'PUT') {
+      payload = JSON.parse(options.body);
+      return response({ ...profile, ...payload });
+    }
+    return String(url).endsWith('/horarios') ? response([]) : response({
+      ...profile, ciudad: 'Mendoza', direccion: 'Vieja 123', latitud: -32.89, longitud: -68.84,
+    });
+  };
+  try {
+    await mount('/perfil-enfermero');
+    await click(button('Editar datos'));
+    assert.match(document.body.textContent, /Hay un punto seleccionado/);
+    await type(document.querySelector('input[name="ciudad"]'), 'Córdoba');
+    assert.match(document.body.textContent, /Sin punto seleccionado/);
+    await submitForm();
+    assert.equal(payload.ciudad, 'Córdoba');
+    assert.equal(payload.latitud, null);
+    assert.equal(payload.longitud, null);
+  } finally { globalThis.fetch = original; }
+});
+
+test('guardar otros datos conserva el punto y permite quitarlo explícitamente', async () => {
+  session('enfermero');
+  const original = globalThis.fetch;
+  const payloads = [];
+  globalThis.fetch = async (url, options) => {
+    if (options?.method === 'PUT') {
+      const payload = JSON.parse(options.body);
+      payloads.push(payload);
+      return response({ ...profile, ...payload });
+    }
+    return String(url).endsWith('/horarios') ? response([]) : response({
+      ...profile, latitud: -32.89, longitud: -68.84,
+    });
+  };
+  try {
+    await mount('/perfil-enfermero');
+    await click(button('Editar datos'));
+    await type(document.querySelector('input[name="telefono"]'), '1234');
+    await submitForm();
+    assert.equal(payloads[0].latitud, -32.89);
+    assert.equal(payloads[0].longitud, -68.84);
+    await click(button('Editar datos'));
+    await click(button('Quitar ubicación'));
+    await submitForm();
+    assert.equal(payloads[1].latitud, null);
+    assert.equal(payloads[1].longitud, null);
+  } finally { globalThis.fetch = original; }
+});
+
+test('la recuperación permite solicitar otro código y cambiar correo sin salir', async () => {
+  const original = globalThis.fetch;
+  const recoveryRequests = [];
+  globalThis.fetch = async (url, options) => {
+    recoveryRequests.push({ url: String(url), body: JSON.parse(options.body) });
+    return String(url).endsWith('/reset-password')
+      ? response({ error: 'Código incorrecto o vencido' }, 400) : response({ mensaje: 'Solicitud procesada' });
+  };
+  try {
+    await mount('/recuperar-password');
+    await type(document.querySelector('input[type="email"]'), 'ana@test.local');
+    await submitForm();
+    assert.equal(document.querySelector('input[type="email"]').readOnly, true);
+    await type(document.querySelector('input[autocomplete="one-time-code"]'), '000000');
+    await type(document.querySelector('input[type="password"]'), 'nueva');
+    await submitForm();
+    assert.match(document.body.textContent, /Código incorrecto o vencido/);
+    await click(button('Solicitar otro código'));
+    assert.equal(document.querySelector('input[autocomplete="one-time-code"]').value, '');
+    assert.equal(document.querySelector('input[type="password"]').value, '');
+    assert.equal(recoveryRequests.filter((entry) => entry.url.endsWith('/recuperar-password')).length, 2);
+    assert.equal(document.querySelector('[role="alert"]'), null);
+    await click(button('Cambiar correo'));
+    assert.equal(document.querySelector('input[type="email"]').readOnly, false);
+    assert.equal(document.querySelector('input[autocomplete="one-time-code"]'), null);
+    await type(document.querySelector('input[type="email"]'), 'otro@test.local');
+    await submitForm();
+    assert.equal(recoveryRequests.at(-1).body.email, 'otro@test.local');
+  } finally { globalThis.fetch = original; }
+});
+
+test('Mi disponibilidad navega y desplaza a la sección cargada de horarios', async () => {
+  session('enfermero');
+  const original = window.HTMLElement.prototype.scrollIntoView;
+  const scrolled = [];
+  window.HTMLElement.prototype.scrollIntoView = function () { scrolled.push(this.id); };
+  try {
+    await mount('/home');
+    await click(link('Mi disponibilidad'));
+    assert.equal(window.location.pathname, '/perfil-enfermero');
+    assert.equal(window.location.hash, '#horarios');
+    assert.ok(scrolled.includes('horarios'));
+  } finally { window.HTMLElement.prototype.scrollIntoView = original; }
 });

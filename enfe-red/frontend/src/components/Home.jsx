@@ -128,7 +128,7 @@ export default function Home() {
                   'calendar',
                   'Mi disponibilidad',
                   'Organizá tus días y horarios de atención.',
-                  '/perfil-enfermero',
+                  '/perfil-enfermero#horarios',
                 ],
                 [
                   'search',

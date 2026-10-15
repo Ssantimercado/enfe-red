@@ -9,3 +9,5 @@ Use case: photorealistic-natural. Asset type: wide editorial photograph for the 
 
 Testimonials are fictional examples authorized for the academic demo. Keep the visible demo label with the testimonials until they are replaced with authorized real reviews.
 
+
+Optimized delivery assets: home-care.webp, home-care-640.webp, nursing-professional.webp and nursing-professional-640.webp are WebP derivatives of the original PNGs above (quality 80, widths 1120 and 640). Original compositions and provenance are preserved.

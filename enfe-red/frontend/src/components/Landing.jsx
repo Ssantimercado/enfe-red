@@ -3,8 +3,10 @@ import { Link } from 'react-router-dom';
 import { sesionActual } from '../api';
 import Brand from './ui/Brand';
 import Icon from './ui/Icon';
-import careImage from '../assets/landing/home-care.png';
-import professionalImage from '../assets/landing/nursing-professional.png';
+import careImage from '../assets/landing/home-care.webp';
+import careImageSmall from '../assets/landing/home-care-640.webp';
+import professionalImage from '../assets/landing/nursing-professional.webp';
+import professionalImageSmall from '../assets/landing/nursing-professional-640.webp';
 import './Landing.css';
 
 const navigation = [
@@ -330,6 +332,8 @@ export default function Landing() {
               <div className="lp-hero-photo">
                 <img
                   src={careImage}
+                  srcSet={`${careImageSmall} 640w, ${careImage} 1120w`}
+                  sizes="(max-width: 700px) calc(100vw - 40px), (max-width: 1000px) 44vw, 540px"
                   alt="Imagen ilustrativa de una enfermera conversando con una mujer mayor en su hogar"
                   width="1122"
                   height="1402"
@@ -493,6 +497,8 @@ export default function Landing() {
             <div className="lp-professional-photo">
               <img
                 src={professionalImage}
+                srcSet={`${professionalImageSmall} 640w, ${professionalImage} 1120w`}
+                sizes="(max-width: 700px) calc(100vw - 40px), (max-width: 1000px) 44vw, 540px"
                 width="1448"
                 height="1086"
                 loading="lazy"
