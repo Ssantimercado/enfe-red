@@ -24,11 +24,15 @@ visual en navegador. Las propuestas para próximos sprints se identifican al fin
 | `/home` | `Home.jsx` dentro de `AppShell` | Paciente: buscar cuidados. Enfermero: gestionar perfil y horarios. |
 | `/cartilla` | `ListaEnfermeros.jsx` y `DirectoryFilters.jsx` | Búsqueda, filtros, lista/mapa y paginación con seis profesionales por página. |
 | `/perfil/:id` | `VerPerfiles.jsx` y `ProfessionalContact.jsx` | Perfil profesional; retorno a la cartilla conservando búsqueda, filtros y página. `id` identifica a Usuario. |
+| `/perfil/:id/solicitar` | `SolicitarServicio.jsx` | El paciente elige un servicio del catálogo real, fecha, hora y dirección; confirma el envío en verde y puede abrir el comprobante. |
+| `/solicitudes/:idSolicitud` | `ConfirmacionSolicitud.jsx` | Comprobante privado del paciente o del enfermero asignado. |
 | `/perfil-paciente` | `PerfilPaciente.jsx` → `ProfileEditor` | Perfil propio, consulta y edición; acceso de paciente. |
-| `/perfil-enfermero` | `PerfilEnfermero.jsx` → `ProfileEditor` | Perfil propio profesional, punto del mapa y `GestionHorarios`; acceso de enfermero. |
+| `/perfil-enfermero` | `PerfilEnfermero.jsx` → `ProfileEditor` | Perfil propio profesional, punto del mapa y `GestionHorarios`; el enfermero puede agregar y editar sus franjas semanales. |
+| `/solicitudes-enfermero` | `SolicitudesEnfermero.jsx` | Bandeja privada del enfermero para consultar los pedidos recibidos y aceptar o rechazar los pendientes; acceso desde el botón Solicitudes en la esquina superior derecha. |
 
 La aplicación interna comparte `AppShell`: marca, Inicio, Buscar profesionales,
-Mi perfil, cuenta y cierre de sesión. Buscar permanece activo al abrir un perfil
+Mi perfil, cuenta y cierre de sesión. El rol enfermero también tiene el acceso
+Solicitudes en la esquina superior derecha. Buscar permanece activo al abrir un perfil
 público. Mi perfil cambia de destino según el rol. No agregar una segunda cabecera
 o un segundo pie dentro de una pantalla interna.
 
