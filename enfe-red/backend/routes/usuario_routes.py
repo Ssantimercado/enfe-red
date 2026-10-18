@@ -1,7 +1,7 @@
 from datetime import datetime
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity, create_access_token
-from sqlalchemy import or_
+from sqlalchemy import and_, or_
 from sqlalchemy.exc import IntegrityError
 import math
 
@@ -517,8 +517,9 @@ def buscar_enfermeros():
     ciudad = request.args.get('ciudad', '').strip()
     precio_max = request.args.get('precio_max', type=float)
     precio_min = request.args.get('precio_min', type=float)
-    disponible = request.args.get('disponible', '').strip()
     dia_semana = request.args.get('dia_semana', '').strip()
+    hora_desde = request.args.get('hora_desde', '').strip()
+    hora_hasta = request.args.get('hora_hasta', '').strip()
 
     pagina = request.args.get('page', 1, type=int)
     por_pagina = request.args.get('per_page', 10, type=int)
@@ -529,6 +530,17 @@ def buscar_enfermeros():
             return jsonify({'error': 'El precio debe ser un número mayor o igual a cero'}), 400
     if precio_min is not None and precio_max is not None and precio_min > precio_max:
         return jsonify({'error': 'El precio mínimo no puede superar al máximo'}), 400
+    if bool(hora_desde) != bool(hora_hasta):
+        return jsonify({'error': 'Debe indicar las horas desde y hasta'}), 400
+    hora_inicio = hora_fin = None
+    if hora_desde:
+        try:
+            hora_inicio = datetime.strptime(hora_desde, '%H:%M').time()
+            hora_fin = datetime.strptime(hora_hasta, '%H:%M').time()
+        except ValueError:
+            return jsonify({'error': 'El horario debe tener formato HH:MM'}), 400
+        if hora_inicio >= hora_fin:
+            return jsonify({'error': 'La hora desde debe ser anterior a la hora hasta'}), 400
 
     query = Enfermero.query.join(Usuario, Enfermero.usuario_id == Usuario.id)
 
@@ -555,15 +567,19 @@ def buscar_enfermeros():
     if precio_min is not None:
         query = query.filter(Enfermero.tarifa_hora >= precio_min)
 
-    if disponible.lower() == 'true':
-        query = query.filter(Enfermero.disponible.is_(True))
-    elif disponible.lower() == 'false':
-        query = query.filter(Enfermero.disponible.is_(False))
-
-    if dia_semana:
-        query = query.join(Disponibilidad).filter(
-            Disponibilidad.dia_semana.ilike(f"%{dia_semana}%"),
-            Disponibilidad.estado == 'Disponible'
+    if dia_semana or hora_inicio:
+        filtros_horario = [Disponibilidad.estado == 'Disponible']
+        if dia_semana:
+            filtros_horario.append(
+                Disponibilidad.dia_semana.ilike(f"%{dia_semana}%")
+            )
+        if hora_inicio:
+            filtros_horario.extend((
+                Disponibilidad.hora_inicio <= hora_inicio,
+                Disponibilidad.hora_fin >= hora_fin,
+            ))
+        query = query.filter(
+            Enfermero.disponibilidades.any(and_(*filtros_horario))
         )
 
     query = query.distinct()

@@ -10,8 +10,9 @@ const FILTERS = [
   'especialidad',
   'precio_min',
   'precio_max',
-  'disponible',
   'dia_semana',
+  'hora_desde',
+  'hora_hasta',
 ];
 const optionalNumber = (value) =>
   value == null || value === '' || !Number.isFinite(Number(value))
@@ -52,10 +53,20 @@ export default function ListaEnfermeros() {
     draftFilters.precio_min !== '' &&
     draftFilters.precio_max !== '' &&
     Number(draftFilters.precio_min) > Number(draftFilters.precio_max);
+  const invalidDraftHours =
+    (draftFilters.hora_desde === '') !== (draftFilters.hora_hasta === '') ||
+    (draftFilters.hora_desde !== '' &&
+      draftFilters.hora_hasta !== '' &&
+      draftFilters.hora_desde >= draftFilters.hora_hasta);
   const invalidRange =
     filterValues.precio_min !== '' &&
     filterValues.precio_max !== '' &&
     Number(filterValues.precio_min) > Number(filterValues.precio_max);
+  const invalidHoursRange =
+    (filterValues.hora_desde === '') !== (filterValues.hora_hasta === '') ||
+    (filterValues.hora_desde !== '' &&
+      filterValues.hora_hasta !== '' &&
+      filterValues.hora_desde >= filterValues.hora_hasta);
 
   useEffect(() => {
     if (!filtersOpen) return;
@@ -97,7 +108,7 @@ export default function ListaEnfermeros() {
     setLoading(true);
     setError('');
     setSelected(null);
-    if (!nurse && invalidRange) {
+    if (!nurse && (invalidRange || invalidHoursRange)) {
       setLoading(false);
       return () => controller.abort();
     }
@@ -124,7 +135,7 @@ export default function ListaEnfermeros() {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [requestKey, page, retry, invalidRange, nurse]);
+  }, [requestKey, page, retry, invalidRange, invalidHoursRange, nurse]);
 
   function update(key, value) {
     setParams(
@@ -143,6 +154,7 @@ export default function ListaEnfermeros() {
       (current) => {
         const next = new URLSearchParams(current);
         FILTERS.forEach((key) => next.delete(key));
+        next.delete('disponible');
         next.delete('page');
         if (!keepQuery) next.delete('q');
         return next;
@@ -152,10 +164,11 @@ export default function ListaEnfermeros() {
   }
   function applyFilters(event) {
     event.preventDefault();
-    if (invalidDraft) return;
+    if (invalidDraft || invalidDraftHours) return;
     setParams(
       (current) => {
         const next = new URLSearchParams(current);
+        next.delete('disponible');
         FILTERS.forEach((key) => {
           if (draftFilters[key]) next.set(key, draftFilters[key]);
           else next.delete(key);
@@ -173,9 +186,9 @@ export default function ListaEnfermeros() {
     especialidad: filterValues.especialidad,
     precio_min: `Desde $${Number(filterValues.precio_min).toLocaleString('es-AR')}`,
     precio_max: `Hasta $${Number(filterValues.precio_max).toLocaleString('es-AR')}`,
-    disponible:
-      filterValues.disponible === 'true' ? 'Disponibles' : 'No disponibles',
     dia_semana: filterValues.dia_semana,
+    hora_desde: `Desde ${filterValues.hora_desde}`,
+    hora_hasta: `Hasta ${filterValues.hora_hasta}`,
   };
   const profileState = {
     from: `/cartilla${params.size ? `?${params}` : ''}`,
@@ -267,7 +280,7 @@ export default function ListaEnfermeros() {
             <p className="results-count" role="status">
               {loading ? (
                 nurse ? 'Buscando pacientes…' : 'Buscando profesionales…'
-              ) : error || (!nurse && invalidRange) ? (
+              ) : error || (!nurse && (invalidRange || invalidHoursRange)) ? (
                 'Revisá tu búsqueda'
               ) : (
                 <>
@@ -321,9 +334,13 @@ export default function ListaEnfermeros() {
               ))}
             </div>
           )}
-          {!nurse && invalidRange ? (
+          {!nurse && (invalidRange || invalidHoursRange) ? (
             <div className="notice notice-error" role="alert">
-              El precio mínimo debe ser menor o igual al máximo.
+              {invalidRange
+                ? 'El precio mínimo debe ser menor o igual al máximo.'
+                : filterValues.hora_desde === '' || filterValues.hora_hasta === ''
+                  ? 'Completá las horas desde y hasta para filtrar por horario.'
+                  : 'La hora desde debe ser anterior a la hora hasta.'}
             </div>
           ) : error ? (
             <div className="empty-state" role="alert">
@@ -610,6 +627,13 @@ export default function ListaEnfermeros() {
               }
               prefix="mobile"
             />
+            {invalidDraftHours && (
+              <p className="field-error" role="alert">
+                {draftFilters.hora_desde === '' || draftFilters.hora_hasta === ''
+                  ? 'Completá las horas desde y hasta.'
+                  : 'La hora desde debe ser anterior a la hora hasta.'}
+              </p>
+            )}
           </div>
           <div className="filter-dialog-actions">
             <button
@@ -623,7 +647,10 @@ export default function ListaEnfermeros() {
             >
               Limpiar filtros
             </button>
-            <button className="button button-primary" disabled={invalidDraft}>
+            <button
+              className="button button-primary"
+              disabled={invalidDraft || invalidDraftHours}
+            >
               Aplicar filtros
               <Icon name="arrow" size={17} />
             </button>

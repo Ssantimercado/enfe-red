@@ -117,7 +117,9 @@ línea o espacios vacíos. Mantener bordes discretos y sombras suaves; el hover
 de una tarjeta destaca su borde sin cambiar la distribución.
 
 La cartilla tiene filtros de 236 px y resultados flexibles separados por 28 px;
-los profesionales aparecen en dos columnas. `.results-map` conserva 22 px de
+incluye un rango horario desde/hasta que solo coincide con franjas publicadas
+que cubren por completo el intervalo, combinable con el día de atención. Los
+profesionales aparecen en dos columnas. `.results-map` conserva 22 px de
 separación inferior: el mapa y las tarjetas no deben quedar pegados.
 Los perfiles usan contenido ancho y columna auxiliar. El panel de contacto
 público permanece visible con `position: sticky` en escritorio.

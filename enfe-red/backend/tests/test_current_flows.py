@@ -138,9 +138,66 @@ class CurrentFlowsTest(unittest.TestCase):
         second = self.client.get('/api/enfermeros/buscar?precio_min=650&per_page=1&page=2')
         self.assertEqual(len(second.json['enfermeros']), 1)
 
+    def test_search_filters_nurses_by_continuous_available_time_range(self):
+        enfermeros = [
+            Enfermero.query.filter_by(matricula=f'MAT-{index}').first()
+            for index in range(4)
+        ]
+        db.session.add_all([
+            Disponibilidad(
+                enfermero_id=enfermeros[0].id,
+                dia_semana='Lunes',
+                hora_inicio=time(8),
+                hora_fin=time(16),
+                estado='Disponible',
+            ),
+            Disponibilidad(
+                enfermero_id=enfermeros[1].id,
+                dia_semana='Lunes',
+                hora_inicio=time(8),
+                hora_fin=time(16),
+                estado='En Pausa / No disponible',
+            ),
+            Disponibilidad(
+                enfermero_id=enfermeros[2].id,
+                dia_semana='Lunes',
+                hora_inicio=time(9),
+                hora_fin=time(15),
+                estado='Disponible',
+            ),
+            Disponibilidad(
+                enfermero_id=enfermeros[3].id,
+                dia_semana='Martes',
+                hora_inicio=time(8),
+                hora_fin=time(16),
+                estado='Disponible',
+            ),
+        ])
+        db.session.commit()
+
+        response = self.client.get(
+            '/api/enfermeros/buscar?hora_desde=08:00&hora_hasta=16:00'
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [person['usuario_id'] for person in response.json['enfermeros']],
+            [enfermeros[0].usuario_id, enfermeros[3].usuario_id],
+        )
+
+        response = self.client.get(
+            '/api/enfermeros/buscar?dia_semana=Lunes&hora_desde=08:00&hora_hasta=16:00'
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [person['usuario_id'] for person in response.json['enfermeros']],
+            [enfermeros[0].usuario_id],
+        )
+
     def test_bad_search_parameters(self):
         for query in ('precio_min=500&precio_max=100', 'precio_min=no', 'precio_min=-1',
-                      'precio_max=nan', 'page=0', 'per_page=0', 'per_page=1000'):
+                      'precio_max=nan', 'page=0', 'per_page=0', 'per_page=1000',
+                      'hora_desde=08:00', 'hora_desde=25:00&hora_hasta=16:00',
+                      'hora_desde=16:00&hora_hasta=08:00'):
             with self.subTest(query=query):
                 self.assertEqual(self.client.get('/api/enfermeros/buscar?' + query).status_code, 400)
 

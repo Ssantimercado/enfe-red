@@ -11,6 +11,11 @@ export default function DirectoryFilters({
     values.precio_max !== '' &&
     Number(values.precio_min) > Number(values.precio_max);
   const priceHint = `${prefix}-precio`;
+  const invalidTimeRange =
+    (values.hora_desde === '') !== (values.hora_hasta === '') ||
+    (values.hora_desde !== '' &&
+      values.hora_hasta !== '' &&
+      values.hora_desde >= values.hora_hasta);
 
   return (
     <div className="filters-fields">
@@ -74,16 +79,32 @@ export default function DirectoryFilters({
         </span>
       </div>
       <div className="field">
-        <label htmlFor={`${prefix}-disponibilidad`}>Disponibilidad</label>
-        <select
-          id={`${prefix}-disponibilidad`}
-          value={values.disponible}
-          onChange={(e) => onChange('disponible', e.target.value)}
-        >
-          <option value="">Todos los profesionales</option>
-          <option value="true">Solo disponibles</option>
-          <option value="false">No disponibles</option>
-        </select>
+        <span>Horario de atención</span>
+        <div className="price-range">
+          <label>
+            <span className="range-label">Desde</span>
+            <input
+              type="time"
+              aria-label="Horario desde"
+              value={values.hora_desde}
+              aria-invalid={invalidTimeRange}
+              onChange={(e) => onChange('hora_desde', e.target.value)}
+            />
+          </label>
+          <label>
+            <span className="range-label">Hasta</span>
+            <input
+              type="time"
+              aria-label="Horario hasta"
+              value={values.hora_hasta}
+              aria-invalid={invalidTimeRange}
+              onChange={(e) => onChange('hora_hasta', e.target.value)}
+            />
+          </label>
+        </div>
+        <span className="filter-hint">
+          Se mostrarán profesionales con una franja que cubra todo el horario.
+        </span>
       </div>
       <div className="field">
         <label htmlFor={`${prefix}-dia`}>Día de atención</label>

@@ -261,6 +261,26 @@ test('el enfermero ve pacientes con solicitudes activas en lugar de la lista de 
   }
 });
 
+test('la cartilla filtra profesionales por un rango horario', async () => {
+  session();
+  await mount('/cartilla');
+  assert.doesNotMatch(document.body.textContent, /Solo disponibles|No disponibles/);
+  const desde = document.querySelector('input[aria-label="Horario desde"]');
+  const hasta = document.querySelector('input[aria-label="Horario hasta"]');
+  assert.ok(desde);
+  assert.ok(hasta);
+  await type(desde, '08:00');
+  assert.match(document.querySelector('[role="alert"]').textContent, /Completá las horas/);
+  await type(hasta, '16:00');
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 350)));
+  const search = requests
+    .filter((entry) => entry.url.includes('/buscar'))
+    .at(-1);
+  assert.ok(search);
+  assert.equal(new URL(search.url).searchParams.get('hora_desde'), '08:00');
+  assert.equal(new URL(search.url).searchParams.get('hora_hasta'), '16:00');
+});
+
 for (const [rol, path] of [
   ['paciente', '/perfil-paciente'],
   ['enfermero', '/perfil-enfermero'],
@@ -728,6 +748,7 @@ test('la solicitud muestra confirmación verde y permite abrir el comprobante', 
   await mount('/perfil/21/solicitar');
   assert.ok(solicitudRequests.some(r => r.url === '/servicios'));
   assert.equal(document.querySelector('select[name="idServicio"]').disabled, false);
+  assert.equal(document.querySelector('input[name="fecha"]').lang, 'es-AR');
   assert.equal(document.querySelector('input[name="direccionAtencion"]').maxLength, 200);
   await completarSolicitud();
   await submitForm();
