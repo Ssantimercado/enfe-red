@@ -22,19 +22,29 @@ visual en navegador. Las propuestas para próximos sprints se identifican al fin
 | `/registro` | `Register.jsx` dentro de `AuthLayout` | Elegir paciente o enfermero; admite `?rol=enfermero`; después del éxito ofrece iniciar sesión. |
 | `/recuperar-password` | `RecuperarPassword.jsx` dentro de `AuthLayout` | Correo, código y nueva contraseña, confirmación final; permite reenviar código y cambiar correo. |
 | `/home` | `Home.jsx` dentro de `AppShell` | Paciente: buscar cuidados. Enfermero: gestionar perfil y horarios. |
-| `/cartilla` | `ListaEnfermeros.jsx` y `DirectoryFilters.jsx` | Búsqueda, filtros, lista/mapa y paginación con seis profesionales por página. |
-| `/perfil/:id` | `VerPerfiles.jsx` y `ProfessionalContact.jsx` | Perfil profesional; retorno a la cartilla conservando búsqueda, filtros y página. `id` identifica a Usuario. |
+| `/cartilla` | `ListaEnfermeros.jsx`, `DirectoryFilters.jsx` y `MapaEnfermeros.jsx` | Paciente: búsqueda de profesionales, filtros, lista/mapa y paginación. Enfermero: lista de pacientes con solicitudes Pendientes o Aceptadas asignadas y mapa solo de los puntos que esos pacientes eligieron compartir. |
+| `/perfil/:id` | `VerPerfiles.jsx` y `ProfessionalContact.jsx` | Perfil profesional; el botón para solicitar servicio queda a la derecha de la tarjeta de encabezado en escritorio y se apila debajo en pantallas angostas. Conserva el retorno a la cartilla con búsqueda, filtros y página. `id` identifica a Usuario. |
 | `/perfil/:id/solicitar` | `SolicitarServicio.jsx` | El paciente elige un servicio del catálogo real, fecha, hora y dirección; confirma el envío en verde y puede abrir el comprobante. |
 | `/solicitudes/:idSolicitud` | `ConfirmacionSolicitud.jsx` | Comprobante privado del paciente o del enfermero asignado. |
-| `/perfil-paciente` | `PerfilPaciente.jsx` → `ProfileEditor` | Perfil propio, consulta y edición; acceso de paciente. |
-| `/perfil-enfermero` | `PerfilEnfermero.jsx` → `ProfileEditor` | Perfil propio profesional, punto del mapa y `GestionHorarios`; el enfermero puede agregar y editar sus franjas semanales. |
+| `/perfil-paciente` | `PerfilPaciente.jsx` → `ProfileEditor` | Perfil propio, consulta y edición; acceso de paciente. Incluye el historial de servicios aceptados o realizados cuya fecha y hora ya pasó, con los datos del enfermero y opción de calificarlo. |
+| `/perfil-enfermero` | `PerfilEnfermero.jsx` → `ProfileEditor` | Perfil propio profesional, punto del mapa y `GestionHorarios`; el enfermero puede agregar y editar sus franjas semanales. Incluye el historial de servicios aceptados o realizados cuya fecha y hora ya pasó, con los datos del paciente y opción de calificarlo. |
 | `/solicitudes-enfermero` | `SolicitudesEnfermero.jsx` | Bandeja privada del enfermero para consultar los pedidos recibidos y aceptar o rechazar los pendientes; acceso desde el botón Solicitudes en la esquina superior derecha. |
 
-La aplicación interna comparte `AppShell`: marca, Inicio, Buscar profesionales,
+La aplicación interna comparte `AppShell`: marca, Inicio, cartilla por rol,
 Mi perfil, cuenta y cierre de sesión. El rol enfermero también tiene el acceso
 Solicitudes en la esquina superior derecha. Buscar permanece activo al abrir un perfil
 público. Mi perfil cambia de destino según el rol. No agregar una segunda cabecera
 o un segundo pie dentro de una pantalla interna.
+
+La ubicación exacta del paciente es opcional. El paciente la elige y habilita su
+compartición desde su perfil; solo se incluye para enfermeros con una solicitud
+Pendiente o Aceptada asignada a ese paciente. La cartilla del enfermero no expone
+domicilio, teléfono ni información de salud del paciente.
+
+Después de la fecha y hora de un servicio aceptado o realizado, cada participante
+puede dejar una calificación de 1 a 5 estrellas y un comentario obligatorio de
+hasta 250 palabras. Cada participante califica una sola vez por servicio; ambas
+calificaciones se muestran en el historial privado de sus participantes.
 
 `App.jsx` protege la sesión y los roles y gestiona el desplazamiento al cambiar de
 ruta. El acceso directo a `/perfil-enfermero#horarios` espera la carga del perfil
@@ -151,6 +161,8 @@ positivo se muestra actualmente como `A consultar`.
 
 La matrícula informada no implica verificación administrativa. La disponibilidad
 general, las franjas semanales y la reserva de una solicitud son conceptos distintos.
+El perfil muestra explícitamente el estado de verificación que entrega el backend;
+una matrícula informada no cambia ese estado.
 El precio estimado de `Servicio` tampoco equivale a `tarifa_hora` del enfermero.
 
 ## Adaptación a celular y accesibilidad

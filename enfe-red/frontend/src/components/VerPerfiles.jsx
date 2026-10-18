@@ -58,7 +58,7 @@ export default function VerPerfiles() {
         <>
           <header className="profile-hero">
             <Avatar person={profile} large />
-            <div>
+            <div className="profile-hero-content">
               <span className="eyebrow">PERFIL PROFESIONAL</span>
               <h1>
                 {profile.nombre} {profile.apellido}
@@ -72,6 +72,13 @@ export default function VerPerfiles() {
                   {profile.especialidad || 'Especialidad sin informar'}
                 </span>
                 <span
+                  className={`verification-status ${profile.verificado === true ? 'verified' : 'pending'}`}
+                >
+                  {profile.verificado === true
+                    ? 'Matrícula verificada'
+                    : 'Verificación pendiente'}
+                </span>
+                <span
                   className={`availability ${profile.disponible ? '' : 'unavailable'}`}
                 >
                   <span className="status-dot" />
@@ -79,12 +86,15 @@ export default function VerPerfiles() {
                 </span>
               </div>
             </div>
+            {sesionActual()?.rol === 'paciente' && profile.rol === 'enfermero' && (
+              <Link
+                className="button button-primary profile-cta"
+                to={`/perfil/${id}/solicitar`}
+              >
+                Solicitar servicio
+              </Link>
+            )}
           </header>
-          {sesionActual()?.rol === 'paciente' && profile.rol === 'enfermero' && (
-            <Link className="button button-primary" to={`/perfil/${id}/solicitar`}>
-              Solicitar servicio
-            </Link>
-          )}
           <div className="profile-columns public-profile-layout">
             <ProfessionalContact profile={profile} />
             <div className="profile-information">
@@ -113,6 +123,14 @@ export default function VerPerfiles() {
                   <div>
                     <dt>Matrícula informada</dt>
                     <dd>{profile.matricula || 'Sin informar'}</dd>
+                  </div>
+                  <div>
+                    <dt>Verificación</dt>
+                    <dd>
+                      {profile.verificado === true
+                        ? 'Matrícula verificada'
+                        : 'Pendiente de verificación'}
+                    </dd>
                   </div>
                 </dl>
               </section>

@@ -32,7 +32,7 @@ export default function ConfirmacionSolicitud() {
         <dt>Fecha</dt><dd>{solicitud.fecha}</dd>
         <dt>Hora</dt><dd>{solicitud.hora}</dd>
         <dt>Dirección</dt><dd>{solicitud.direccionAtencion}</dd>
-        <dt>Precio estimado</dt><dd>{solicitud.servicio?.precioEstimado != null ? new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(solicitud.servicio.precioEstimado) : 'No informado'}</dd>
+        <dt>Precio estimado</dt><dd>{solicitud.servicio?.precioEstimado != null ? new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(solicitud.servicio.precioEstimado) : 'A consultar'}</dd>
       </dl>
       <CancelarSolicitud key={solicitud.idSolicitud} solicitud={solicitud} onCancelada={() => setSolicitud(actual => ({ ...actual, estado: 'Cancelada' }))} />
     </>}

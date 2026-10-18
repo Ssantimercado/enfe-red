@@ -7,11 +7,17 @@ export default function Home() {
   const nurse = sesionActual()?.rol === 'enfermero';
   const [query, setQuery] = useState('');
   const navigate = useNavigate();
-  const steps = [
-    ['Encontrá tu profesional', 'Buscá por nombre, especialidad o zona.'],
-    ['Conocé su experiencia', 'Revisá el perfil, los horarios y la tarifa.'],
-    ['Conectá y coordiná', 'Contactá al profesional para acordar la atención.'],
-  ];
+  const steps = nurse
+    ? [
+        ['Recibí solicitudes', 'Los pacientes van a aparecer cuando pidan una atención.'],
+        ['Revisá cada pedido', 'Consultá los datos y el servicio solicitado.'],
+        ['Coordiná la atención', 'Aceptá las solicitudes que puedas atender.'],
+      ]
+    : [
+        ['Encontrá tu profesional', 'Buscá por nombre, especialidad o zona.'],
+        ['Conocé su experiencia', 'Revisá el perfil, los horarios y la tarifa.'],
+        ['Conectá y coordiná', 'Contactá al profesional para acordar la atención.'],
+      ];
   return (
     <div className="page-container home-page">
       <div className="welcome-row">
@@ -132,8 +138,8 @@ export default function Home() {
                 ],
                 [
                   'search',
-                  'Conocer la red',
-                  'Explorá los profesionales de Enfe-red.',
+                  'Mis pacientes',
+                  'Consultá los pacientes con solicitudes activas.',
                   '/cartilla',
                 ],
               ]

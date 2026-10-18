@@ -101,6 +101,16 @@ async function type(element, value) {
   });
 }
 
+async function typeTextArea(element, value) {
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(
+      window.HTMLTextAreaElement.prototype,
+      'value',
+    ).set.call(element, value);
+    element.dispatchEvent(new window.Event('input', { bubbles: true }));
+  });
+}
+
 async function submitForm() {
   await act(async () => document.querySelector('form').dispatchEvent(
     new window.Event('submit', { bubbles: true, cancelable: true }),
@@ -214,6 +224,43 @@ test('un paciente no entra al editor profesional cambiando la URL', async () => 
   assert.ok(document.querySelector('nav a[href="/cartilla"]'));
 });
 
+test('el enfermero ve pacientes con solicitudes activas en lugar de la lista de profesionales', async () => {
+  session('enfermero');
+  const original = globalThis.fetch;
+  let urlSolicitudes;
+  globalThis.fetch = async (url, options) => {
+    if (String(url).includes('/pacientes/solicitudes-activas')) {
+      urlSolicitudes = String(url);
+      return response({
+        pacientes: [{
+          id: 91,
+          idPaciente: 31,
+          nombre: 'Ana',
+          apellido: 'Paciente',
+          solicitudes_activas: 2,
+          latitud: -32.89,
+          longitud: -68.84,
+        }],
+        total_resultados: 1,
+        total_paginas: 1,
+      });
+    }
+    return original(url, options);
+  };
+  try {
+    await mount('/cartilla');
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 300)));
+    assert.match(urlSolicitudes, /\/api\/pacientes\/solicitudes-activas/);
+    assert.match(document.querySelector('h1').textContent, /Tus pacientes/);
+    assert.match(document.body.textContent, /Ana Paciente/);
+    assert.match(document.body.textContent, /2 solicitudes activas/);
+    assert.doesNotMatch(document.body.textContent, /Todos los profesionales|Especialidad/);
+    assert.ok(document.querySelector('a[href="/solicitudes-enfermero"]'));
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
 for (const [rol, path] of [
   ['paciente', '/perfil-paciente'],
   ['enfermero', '/perfil-enfermero'],
@@ -260,6 +307,7 @@ test('el perfil público excluye horarios pausados y conserva el retorno con fil
     String(url).endsWith('/usuarios/1')
       ? response({
           ...profile,
+          verificado: true,
           horarios: [
             {
               id: 1,
@@ -289,6 +337,11 @@ test('el perfil público excluye horarios pausados y conserva el retorno con fil
     await mount('/perfil/1', {
       usr: { volverA: '/cartilla?precio_min=650&page=2&q=Ana' },
     });
+    assert.match(document.body.textContent, /Matrícula verificada/);
+    const profileHero = document.querySelector('.profile-hero');
+    const serviceLink = link('Solicitar servicio');
+    assert.equal(serviceLink.parentElement, profileHero);
+    assert.equal(profileHero.lastElementChild, serviceLink);
     assert.match(document.body.textContent, /Lunes/);
     assert.doesNotMatch(document.body.textContent, /Martes|Viernes/);
     await click(link('Volver a los profesionales'));
@@ -303,6 +356,58 @@ test('el perfil público excluye horarios pausados y conserva el retorno con fil
   }
 });
 
+test('el perfil muestra cuando la matrícula todavía no está verificada', async () => {
+  session();
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url, options) =>
+    String(url).endsWith('/usuarios/1')
+      ? response({ ...profile, verificado: false })
+      : original(url, options);
+  try {
+    await mount('/perfil/1');
+    assert.match(document.body.textContent, /Verificación pendiente/);
+    assert.match(document.body.textContent, /Pendiente de verificación/);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+for (const [rol, ruta, etiqueta, persona] of [
+  ['enfermero', '/perfil-enfermero', 'Ver historial de pacientes', 'Paciente anterior'],
+  ['paciente', '/perfil-paciente', 'Ver historial de enfermeros', 'Enfermera anterior'],
+]) {
+  test(`${rol} puede consultar el historial de servicios desde su perfil`, async () => {
+    session(rol);
+    const original = globalThis.fetch;
+    let historialUrl;
+    globalThis.fetch = async (url, options) => {
+      if (String(url).endsWith('/usuarios/1/historial')) {
+        historialUrl = String(url);
+        return response([{
+          idSolicitud: 45,
+          fecha: '2020-02-03',
+          hora: '10:30',
+          estado: 'Aceptada',
+          servicio: { tipoServicio: 'Curaciones' },
+          paciente: { nombre: 'Paciente', apellido: 'anterior' },
+          enfermero: { nombre: 'Enfermera', apellido: 'anterior' },
+        }]);
+      }
+      return original(url, options);
+    };
+    try {
+      await mount(ruta);
+      await click(button(etiqueta));
+      assert.equal(historialUrl, 'http://localhost:5000/api/usuarios/1/historial');
+      assert.match(document.body.textContent, new RegExp(persona));
+      assert.match(document.body.textContent, /Curaciones/);
+      assert.match(document.body.textContent, /03\/02\/2020/);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+}
+
 test('cerrar sesión elimina también los datos del usuario', async () => {
   session();
   localStorage.setItem('usuario', '{"nombre":"Ana"}');
@@ -310,6 +415,59 @@ test('cerrar sesión elimina también los datos del usuario', async () => {
   await click(button('Cerrar Sesión'));
   assert.equal(window.location.pathname, '/login');
   assert.equal(localStorage.length, 0);
+});
+
+test('el enfermero puede calificar un paciente desde el historial', async () => {
+  session('enfermero');
+  const original = globalThis.fetch;
+  let payload;
+  globalThis.fetch = async (url, options = {}) => {
+    if (String(url).endsWith('/usuarios/1/historial')) {
+      return response([{
+        idSolicitud: 45,
+        fecha: '2020-02-03',
+        hora: '10:30',
+        estado: 'Aceptada',
+        servicio: { tipoServicio: 'Curaciones' },
+        paciente: { nombre: 'Paciente', apellido: 'anterior' },
+        enfermero: { nombre: 'Enfermera', apellido: 'actual' },
+        calificaciones: [],
+      }]);
+    }
+    if (String(url).endsWith('/solicitudes/45/calificaciones')) {
+      payload = JSON.parse(options.body);
+      return response({
+        mensaje: 'Calificación guardada',
+        calificacion: {
+          idCalificacion: 3,
+          idSolicitud: 45,
+          idUsuarioAutor: 1,
+          idUsuarioCalificado: 2,
+          ...payload,
+        },
+      }, 201);
+    }
+    return original(url, options);
+  };
+  try {
+    await mount('/perfil-enfermero');
+    await click(button('Ver historial de pacientes'));
+    await click(button('Calificar paciente'));
+    await click(document.querySelector('input[type="radio"][value="4"]'));
+    await typeTextArea(document.querySelector('.service-rating-form textarea'), 'Muy buena comunicación.');
+    await act(async () => document.querySelector('.service-rating-form').dispatchEvent(
+      new window.Event('submit', { bubbles: true, cancelable: true }),
+    ));
+    assert.deepEqual(payload, {
+      estrellas: 4,
+      comentario: 'Muy buena comunicación.',
+    });
+    assert.match(document.body.textContent, /Tu calificación:/);
+    assert.match(document.body.textContent, /Muy buena comunicación/);
+    assert.match(document.body.textContent, /Tu calificación se guardó correctamente/);
+  } finally {
+    globalThis.fetch = original;
+  }
 });
 
 test('un perfil con solo nombre puede guardar el teléfono sin exigir apellido', async () => {
@@ -334,6 +492,42 @@ test('un perfil con solo nombre puede guardar el teléfono sin exigir apellido',
     assert.equal(payload.telefono, '2615551234');
     assert.match(document.body.textContent, /Tus cambios se guardaron/);
   } finally { globalThis.fetch = original; }
+});
+
+test('el paciente puede habilitar el punto del mapa para el enfermero asignado', async () => {
+  session('paciente');
+  const original = globalThis.fetch;
+  let payload;
+  globalThis.fetch = async (url, options) => {
+    if (String(url).endsWith('/perfil/paciente')) {
+      if (options?.method === 'PUT') {
+        payload = JSON.parse(options.body);
+        return response({ ...profile, id: 9, ...payload });
+      }
+      return response({
+        ...profile,
+        id: 9,
+        latitud: -32.89,
+        longitud: -68.84,
+        ubicacion_compartida: false,
+      });
+    }
+    return original(url, options);
+  };
+  try {
+    await mount('/perfil-paciente');
+    await click(button('Editar datos'));
+    const sharing = document.querySelector('.location-sharing input');
+    assert.equal(sharing.disabled, false);
+    await click(sharing);
+    await submitForm();
+    assert.equal(payload.latitud, -32.89);
+    assert.equal(payload.longitud, -68.84);
+    assert.equal(payload.ubicacion_compartida, true);
+    assert.match(document.body.textContent, /Con enfermeros que tengan una solicitud activa/);
+  } finally {
+    globalThis.fetch = original;
+  }
 });
 
 test('cambiar ciudad descarta el punto anterior antes de guardar', async () => {
@@ -436,16 +630,77 @@ test('Mi disponibilidad navega y desplaza a la sección cargada de horarios', as
   } finally { window.HTMLElement.prototype.scrollIntoView = original; }
 });
 
+test('permite editar una franja existente y ampliar su horario', async () => {
+  session('enfermero');
+  const original = globalThis.fetch;
+  const schedule = {
+    id: 44,
+    dia_semana: 'Sábado',
+    hora_inicio: '08:00',
+    hora_fin: '16:00',
+    estado: 'Disponible',
+  };
+  let update;
+  globalThis.fetch = async (url, options = {}) => {
+    requests.push({ url: String(url), options });
+    if (String(url).endsWith('/perfil/enfermero/horarios/44')) {
+      update = { method: options.method, body: JSON.parse(options.body) };
+      return response({
+        mensaje: 'Horario guardado con éxito',
+        disponibilidad: { ...schedule, hora_fin: '22:00' },
+      });
+    }
+    if (String(url).endsWith('/perfil/enfermero/horarios'))
+      return response([schedule]);
+    return response(profile);
+  };
+  try {
+    await mount('/perfil-enfermero');
+    await click(button('Editar horario de Sábado'));
+    assert.equal(document.querySelector('.schedule-form h3').textContent, 'Editar horario');
+    assert.equal(document.querySelector('input[name="hora_fin"]').value, '16:00');
+    await click(button('Cancelar edición'));
+    await click(button('Editar horario de Sábado'));
+    await type(document.querySelector('input[name="hora_fin"]'), '22:00');
+    await act(async () => document.querySelector('.schedule-form').dispatchEvent(
+      new window.Event('submit', { bubbles: true, cancelable: true }),
+    ));
+    assert.deepEqual(update, {
+      method: 'PUT',
+      body: {
+        dia_semana: 'Sábado',
+        hora_inicio: '08:00',
+        hora_fin: '22:00',
+        estado: 'Disponible',
+      },
+    });
+    assert.match(document.body.textContent, /08:00 – 22:00/);
+    assert.match(document.body.textContent, /Horario guardado con éxito/);
+  } finally { globalThis.fetch = original; }
+});
+
 const comprobante = {
   idSolicitud: 15, estado: 'Pendiente', fecha: '2099-12-10', hora: '14:30',
   direccionAtencion: 'San Martín 123', enfermero: { nombre: 'Laura', apellido: 'Gómez' },
   servicio: { idServicio: 301, tipoServicio: 'Curaciones', precioEstimado: '8500.50' },
 };
-function solicitudesAPI({ catalogo = [comprobante.servicio], crearError = false, cancelarError = false } = {}) {
+function solicitudesAPI({
+  catalogo = [comprobante.servicio],
+  crearError = false,
+  cancelarError = false,
+  solicitudesEnfermero = [],
+} = {}) {
   solicitudHandler = async config => {
     assert.match(config.headers.Authorization, /^Bearer /);
     if (config.url === '/usuarios/21') return { data: { id: 21, enfermero_id: 201, nombre: 'Laura', rol: 'enfermero', verificado: true, disponible: true } };
     if (config.url === '/servicios') return { data: catalogo };
+    if (config.url === '/solicitudes/enfermero/201') return { data: solicitudesEnfermero };
+    if (config.url === '/solicitudes/15/aceptar') return {
+      data: { mensaje: 'Solicitud aceptada', solicitud: { ...comprobante, estado: 'Aceptada' } },
+    };
+    if (config.url === '/solicitudes/16/rechazar') return {
+      data: { mensaje: 'Solicitud rechazada', solicitud: { ...comprobante, idSolicitud: 16, estado: 'Rechazada' } },
+    };
     if (config.url === '/solicitudes' && config.method === 'post') return crearError
       ? { status: 409, data: { error: 'Ese horario ya tiene una solicitud activa.' } }
       : { status: 201, data: { mensaje: 'Solicitud creada', solicitud: comprobante } };
@@ -467,11 +722,12 @@ async function completarSolicitud(direccion = 'San Martín 123') {
   await type(document.querySelector('input[name="direccionAtencion"]'), direccion);
 }
 
-test('solicitud usa catálogo real, crea con IDs de perfil y abre el comprobante anidado', async () => {
+test('la solicitud muestra confirmación verde y permite abrir el comprobante', async () => {
   session();
   solicitudesAPI();
   await mount('/perfil/21/solicitar');
   assert.ok(solicitudRequests.some(r => r.url === '/servicios'));
+  assert.equal(document.querySelector('select[name="idServicio"]').disabled, false);
   assert.equal(document.querySelector('input[name="direccionAtencion"]').maxLength, 200);
   await completarSolicitud();
   await submitForm();
@@ -480,6 +736,10 @@ test('solicitud usa catálogo real, crea con IDs de perfil y abre el comprobante
   assert.deepEqual(JSON.parse(posts[0].data), {
     idServicio: 301, idEnfermero: 201, fecha: '2099-12-10', hora: '14:30', direccionAtencion: 'San Martín 123',
   });
+  assert.equal(window.location.pathname, '/perfil/21/solicitar');
+  assert.match(document.querySelector('.solicitud-success strong').textContent, /¡Solicitud creada!/);
+  assert.match(document.querySelector('.solicitud-success').getAttribute('class'), /notice-success/);
+  await click(link('Ver comprobante'));
   assert.equal(window.location.pathname, '/solicitudes/15');
   assert.match(document.body.textContent, /Comprobante de solicitud/);
   assert.match(document.body.textContent, /Laura Gómez/);
@@ -487,9 +747,60 @@ test('solicitud usa catálogo real, crea con IDs de perfil y abre el comprobante
   assert.ok(solicitudRequests.some(r => r.url === '/solicitudes/15' && r.method === 'get'));
 });
 
+test('los servicios sin tarifa aparecen como A consultar en el selector', async () => {
+  session();
+  solicitudesAPI({
+    catalogo: [{
+      idServicio: 302,
+      tipoServicio: 'Cuidados Intensivos',
+      precioEstimado: null,
+    }],
+  });
+  await mount('/perfil/21/solicitar');
+  assert.match(
+    document.querySelector('select[name="idServicio"]').textContent,
+    /Cuidados Intensivos · A consultar/,
+  );
+});
+
+test('el enfermero accede arriba a la derecha y acepta o rechaza pedidos pendientes', async () => {
+  session('enfermero');
+  solicitudesAPI({
+    solicitudesEnfermero: [
+      { ...comprobante, paciente: { nombre: 'Ana', apellido: 'Prueba' } },
+      { ...comprobante, idSolicitud: 16, paciente: { nombre: 'Mario', apellido: 'López' } },
+    ],
+  });
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url, options = {}) => {
+    requests.push({ url: String(url), options });
+    return String(url).endsWith('/perfil/enfermero')
+      ? response({ ...profile, idEnfermero: 201 })
+      : response(profile);
+  };
+  try {
+    await mount('/home');
+    assert.ok(link('Solicitudes'));
+    await click(link('Solicitudes'));
+    assert.equal(window.location.pathname, '/solicitudes-enfermero');
+    assert.match(document.body.textContent, /Ana Prueba/);
+    assert.match(document.body.textContent, /Mario López/);
+    await click(button('Aceptar solicitud'));
+    assert.match(document.body.textContent, /Solicitud aceptada/);
+    assert.match(document.body.textContent, /Aceptada/);
+    await click(button('Rechazar'));
+    assert.equal(document.querySelector('dialog').open, true);
+    await click(button('Sí, rechazar'));
+    assert.match(document.body.textContent, /Solicitud rechazada/);
+    assert.equal(solicitudRequests.filter(r => r.method === 'put').length, 2);
+  } finally { globalThis.fetch = original; }
+});
+
 test('catálogo vacío bloquea el envío', async () => {
   session(); solicitudesAPI({ catalogo: [] });
   await mount('/perfil/21/solicitar');
+  assert.equal(document.querySelector('select[name="idServicio"]').disabled, true);
+  assert.match(document.body.textContent, /no hay tipos de servicio cargados/);
   assert.equal(button('Enviar solicitud').disabled, true);
   await submitForm();
   assert.equal(solicitudRequests.some(r => r.method === 'post'), false);

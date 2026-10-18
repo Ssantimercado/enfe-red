@@ -5,6 +5,7 @@ import Avatar from './ui/Avatar';
 import Icon from './ui/Icon';
 import ProfileSkeleton from './ui/ProfileSkeleton';
 import GestionHorarios from './GestionHorarios';
+import HistorialServicios from './HistorialServicios';
 const LocationPicker = lazy(() => import('./LocationPicker'));
 
 const COMMON = [
@@ -65,6 +66,11 @@ export default function ProfileEditor({ role }) {
       payload.latitud = form.latitud ?? null;
       payload.longitud = form.longitud ?? null;
     } else payload.historial_medico = form.historial_medico || '';
+    if (!nurse) {
+      payload.latitud = form.latitud ?? null;
+      payload.longitud = form.longitud ?? null;
+      payload.ubicacion_compartida = Boolean(form.ubicacion_compartida);
+    }
     try {
       const updated = await api(`/perfil/${role}`, {
         method: 'PUT',
@@ -182,53 +188,75 @@ export default function ProfileEditor({ role }) {
                         />
                       </label>
                     ))}
-                    {nurse && (
-                      <div className="field full-width location-field">
-                        <span>Ubicación en el mapa (opcional)</span>
-                        <p className="filter-hint" role="status">
-                          {form.latitud != null && form.longitud != null
-                            ? 'Hay un punto seleccionado. Se guardará junto con tus datos.'
-                            : 'Sin punto seleccionado. Elegí tu ubicación para aparecer en el mapa; podés guardar el perfil sin publicarla.'}
-                        </p>
+                    <div className="field full-width location-field">
+                      <span>Ubicación de atención en el mapa (opcional)</span>
+                      <p className="filter-hint" role="status">
+                        {form.latitud != null && form.longitud != null
+                          ? 'Hay un punto seleccionado. Se guardará junto con tus datos.'
+                          : nurse
+                            ? 'Sin punto seleccionado. Podés guardar el perfil sin publicar una ubicación.'
+                            : 'Sin punto seleccionado. Podés elegir dónde recibir la atención; no se comparte hasta que lo habilites.'}
+                      </p>
+                      <button
+                        type="button"
+                        className="button button-secondary"
+                        disabled={saving}
+                        onClick={() => setLocationOpen(!locationOpen)}
+                        aria-expanded={locationOpen}
+                        aria-controls="profile-location"
+                      >
+                        {locationOpen
+                          ? 'Cerrar mapa'
+                          : 'Elegir ubicación en el mapa'}
+                      </button>
+                      {form.latitud != null && form.longitud != null && (
                         <button
                           type="button"
-                          className="button button-secondary"
+                          className="text-link"
                           disabled={saving}
-                          onClick={() => setLocationOpen(!locationOpen)}
-                          aria-expanded={locationOpen}
-                          aria-controls="profile-location"
+                          onClick={() => setForm((current) => ({
+                            ...current,
+                            latitud: null,
+                            longitud: null,
+                            ubicacion_compartida: false,
+                          }))}
                         >
-                          {locationOpen
-                            ? 'Cerrar mapa'
-                            : 'Elegir ubicación en el mapa'}
+                          Quitar ubicación
                         </button>
-                        {form.latitud != null && form.longitud != null && (
-                          <button
-                            type="button"
-                            className="text-link"
-                            disabled={saving}
-                            onClick={() => setForm((current) => ({
-                              ...current, latitud: null, longitud: null,
+                      )}
+                      {locationOpen && (
+                        <div id="profile-location" inert={saving ? true : undefined}>
+                          <Suspense fallback={<p role="status">Cargando mapa…</p>}>
+                            <LocationPicker
+                              latitude={form.latitud}
+                              longitude={form.longitud}
+                              helpText={
+                                nurse
+                                  ? 'Marcá tu zona de atención haciendo clic en el mapa. Este punto se muestra en tu perfil profesional.'
+                                  : 'Marcá el lugar donde recibirías la atención. Solo se comparte si activás la opción de compartir ubicación.'
+                              }
+                              onChange={(latitud, longitud) => setForm((current) => ({
+                                ...current, latitud, longitud,
+                              }))}
+                            />
+                          </Suspense>
+                        </div>
+                      )}
+                      {!nurse && (
+                        <label className="checkbox-field location-sharing">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(form.ubicacion_compartida)}
+                            onChange={(e) => setForm((current) => ({
+                              ...current,
+                              ubicacion_compartida: e.target.checked,
                             }))}
-                          >
-                            Quitar ubicación
-                          </button>
-                        )}
-                        {locationOpen && (
-                          <div id="profile-location" inert={saving ? true : undefined}>
-                            <Suspense fallback={<p role="status">Cargando mapa…</p>}>
-                              <LocationPicker
-                                latitude={form.latitud}
-                                longitude={form.longitud}
-                                onChange={(latitud, longitud) => setForm((current) => ({
-                                  ...current, latitud, longitud,
-                                }))}
-                              />
-                            </Suspense>
-                          </div>
-                        )}
-                      </div>
-                    )}
+                            disabled={saving || form.latitud == null || form.longitud == null}
+                          />
+                          Compartir este punto con el enfermero asignado mientras haya una solicitud activa
+                        </label>
+                      )}
+                    </div>
                     <label className="field full-width">
                       {nurse ? 'Tu presentación' : 'Información de salud'}
                       <textarea
@@ -316,6 +344,26 @@ export default function ProfileEditor({ role }) {
                       </dd>
                     </div>
                   )}
+                  {nurse && (
+                    <div>
+                      <dt>Verificación de matrícula</dt>
+                      <dd>
+                        {profile.verificado === true
+                          ? 'Verificada'
+                          : 'Pendiente de verificación'}
+                      </dd>
+                    </div>
+                  )}
+                  {!nurse && (
+                    <div>
+                      <dt>Ubicación compartida</dt>
+                      <dd>
+                        {profile.ubicacion_compartida
+                          ? 'Con enfermeros que tengan una solicitud activa asignada'
+                          : 'No compartida'}
+                      </dd>
+                    </div>
+                  )}
                 </dl>
               )}
             </section>
@@ -344,6 +392,7 @@ export default function ProfileEditor({ role }) {
               )}
             </aside>
           </div>
+          <HistorialServicios userId={profile.id} nurse={nurse} />
           {nurse && <GestionHorarios />}
         </>
       )}

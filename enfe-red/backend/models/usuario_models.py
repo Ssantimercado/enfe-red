@@ -33,6 +33,14 @@ class Paciente(db.Model):
     direccion = db.Column(db.String(200), nullable=True)
     telefono = db.Column(db.String(20), nullable=True)
     historial_medico = db.Column(db.Text, nullable=True)
+    latitud = db.Column(db.Float, nullable=True)
+    longitud = db.Column(db.Float, nullable=True)
+    ubicacion_compartida = db.Column(
+        db.Boolean,
+        nullable=False,
+        default=False,
+        server_default=db.false(),
+    )
     
     def to_dict(self):
         return {
@@ -41,7 +49,10 @@ class Paciente(db.Model):
             "apellido": self.apellido,
             "direccion": self.direccion,
             "telefono": self.telefono,
-            "historial_medico": self.historial_medico
+            "historial_medico": self.historial_medico,
+            "latitud": self.latitud,
+            "longitud": self.longitud,
+            "ubicacion_compartida": self.ubicacion_compartida,
         }
 
 class Enfermero(db.Model):

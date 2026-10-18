@@ -7,16 +7,18 @@ function SelectOnMap({ onChange }) {
   return null;
 }
 
-export default function LocationPicker({ latitude, longitude, onChange }) {
+export default function LocationPicker({
+  latitude,
+  longitude,
+  onChange,
+  helpText = 'Marcá tu zona de atención haciendo clic en el mapa. También podés moverlo con las flechas y elegir el centro. Este punto se publica en tu perfil.',
+}) {
   const map = useRef(null);
   const selected = latitude != null && longitude != null;
   const position = selected ? [latitude, longitude] : [-32.8895, -68.8458];
   return (
     <div className="location-picker">
-      <p id="location-help">
-        Marcá tu zona de atención haciendo clic en el mapa. También podés moverlo
-        con las flechas y elegir el centro. Este punto se publica en tu perfil.
-      </p>
+      <p id="location-help">{helpText}</p>
       <MapContainer
         ref={map}
         center={position}

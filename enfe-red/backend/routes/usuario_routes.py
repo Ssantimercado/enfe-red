@@ -8,6 +8,7 @@ import math
 from database import db
 from extensions import bcrypt
 from models.usuario_models import Usuario, Paciente, Enfermero, Disponibilidad
+from models.solicitud_models import ESTADOS_ACTIVOS, SolicitudServicio
 
 usuario_bp = Blueprint('usuario_bp', __name__)
 
@@ -125,13 +126,51 @@ def perfil_paciente():
         return jsonify(datos_completos), 200
 
     if request.method == 'PUT':
-        data = request.get_json()
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return jsonify({"error": "Datos inválidos"}), 400
         if paciente:
+            coordenadas = ('latitud', 'longitud')
+            for campo in coordenadas:
+                if campo not in data or data[campo] is None:
+                    continue
+                try:
+                    if isinstance(data[campo], bool):
+                        raise ValueError()
+                    numero = float(data[campo])
+                    if not math.isfinite(numero):
+                        raise ValueError()
+                    if (campo == 'latitud' and abs(numero) > 90) or (
+                        campo == 'longitud' and abs(numero) > 180
+                    ):
+                        raise ValueError()
+                    data[campo] = numero
+                except (TypeError, ValueError):
+                    return jsonify({"error": f"El campo {campo} no es válido"}), 400
+            if any(campo in data for campo in coordenadas) and (
+                not all(campo in data for campo in coordenadas)
+                or (data['latitud'] is None) != (data['longitud'] is None)
+            ):
+                return jsonify({"error": "Indicá latitud y longitud juntas"}), 400
+            if 'ubicacion_compartida' in data and not isinstance(
+                data['ubicacion_compartida'], bool
+            ):
+                return jsonify({"error": "La opción para compartir ubicación debe ser verdadera o falsa"}), 400
+            if data.get('ubicacion_compartida') and (
+                data.get('latitud', paciente.latitud) is None
+                or data.get('longitud', paciente.longitud) is None
+            ):
+                return jsonify({"error": "Elegí un punto en el mapa antes de compartir tu ubicación"}), 400
             paciente.nombre = data.get('nombre', paciente.nombre)
             paciente.apellido = data.get('apellido', paciente.apellido)
             paciente.direccion = data.get('direccion', paciente.direccion)
             paciente.telefono = data.get('telefono', paciente.telefono)
             paciente.historial_medico = data.get('historial_medico', paciente.historial_medico)
+            paciente.latitud = data.get('latitud', paciente.latitud)
+            paciente.longitud = data.get('longitud', paciente.longitud)
+            paciente.ubicacion_compartida = data.get(
+                'ubicacion_compartida', paciente.ubicacion_compartida
+            )
             db.session.commit()
             
             datos_completos = usuario.to_dict()
@@ -250,8 +289,9 @@ def perfil_enfermero():
 # 5. GESTIÓN DE HORARIOS DE ENFERMERO (Control de duplicados y formato)
 # ==========================================
 @usuario_bp.route('/perfil/enfermero/horarios', methods=['GET', 'POST'])
+@usuario_bp.route('/perfil/enfermero/horarios/<int:horario_id>', methods=['PUT'])
 @jwt_required()
-def gestionar_horarios():
+def gestionar_horarios(horario_id=None):
     usuario_id = int(get_jwt_identity())
     enfermero = Enfermero.query.filter_by(usuario_id=usuario_id).first()
     
@@ -261,79 +301,90 @@ def gestionar_horarios():
     if request.method == 'GET':
         horarios = Disponibilidad.query.filter_by(enfermero_id=enfermero.id).all()
         return jsonify([h.to_dict() for h in horarios]), 200
-        
-    if request.method == 'POST':
-        data = request.get_json(silent=True)
-        if not isinstance(data, dict):
-            return jsonify({'error': 'Datos inválidos'}), 400
 
-        # Soporte por si la clave viene llamada 'dia' o 'dia_semana'
-        dia_semana = data.get('dia_semana') or data.get('dia')
-        str_inicio = data.get('hora_inicio') or data.get('inicio')
-        str_fin = data.get('hora_fin') or data.get('fin')
-        estado = data.get('estado', 'Disponible')
-
-        if dia_semana not in ('Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'):
-            return jsonify({'error': 'Elegí un día válido'}), 400
-        if estado not in ('Disponible', 'Ocupado / Reservado', 'En Pausa / No disponible'):
-            return jsonify({'error': 'Elegí un estado válido'}), 400
-
-        if not (dia_semana and str_inicio and str_fin):
-            return jsonify({
-                "error": "Faltan datos requeridos",
-                "recibido": data
-            }), 400
-
-        try:
-            # Función auxiliar para convertir múltiples formatos de hora
-            def parse_time(time_str):
-                time_str = str(time_str).strip()
-                for fmt in ('%H:%M:%S', '%H:%M', '%I:%M %p', '%I:%M%p'):
-                    try:
-                        return datetime.strptime(time_str, fmt).time()
-                    except ValueError:
-                        pass
-                raise ValueError(f"Formato de hora no válido: {time_str}")
-
-            hora_inicio = parse_time(str_inicio)
-            hora_fin = parse_time(str_fin)
-
-        except ValueError as err:
-            return jsonify({"error": str(err)}), 400
-
-        if hora_fin <= hora_inicio:
-            return jsonify({'error': 'La hora de fin debe ser posterior a la hora de inicio'}), 400
-
-        # Verificamos si ya existe exactamente esa disponibilidad para no duplicar
-        existente = Disponibilidad.query.filter_by(
-            enfermero_id=enfermero.id,
-            dia_semana=dia_semana,
-            hora_inicio=hora_inicio,
-            hora_fin=hora_fin
+    horario = None
+    if request.method == 'PUT':
+        horario = Disponibilidad.query.filter_by(
+            id=horario_id,
+            enfermero_id=enfermero.id
         ).first()
+        if not horario:
+            return jsonify({'error': 'Horario no encontrado'}), 404
 
-        if existente:
-            return jsonify({'error': 'Ese horario ya está registrado'}), 409
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({'error': 'Datos inválidos'}), 400
 
-        superpuesto = Disponibilidad.query.filter(
-            Disponibilidad.enfermero_id == enfermero.id,
-            Disponibilidad.dia_semana == dia_semana,
-            Disponibilidad.hora_inicio < hora_fin,
-            Disponibilidad.hora_fin > hora_inicio,
-        ).first()
-        if superpuesto:
-            return jsonify({'error': 'El horario se superpone con otro del mismo día'}), 409
+    # Soporte por si la clave viene llamada 'dia' o 'dia_semana'
+    dia_semana = data.get('dia_semana') or data.get('dia')
+    str_inicio = data.get('hora_inicio') or data.get('inicio')
+    str_fin = data.get('hora_fin') or data.get('fin')
+    estado = data.get('estado', 'Disponible')
 
-        nueva_disp = Disponibilidad(
-            enfermero_id=enfermero.id,
-            dia_semana=dia_semana,
-            hora_inicio=hora_inicio,
-            hora_fin=hora_fin,
-            estado=estado
-        )
-        db.session.add(nueva_disp)
-        db.session.commit()
-        return jsonify({"mensaje": "Horario guardado con éxito", "disponibilidad": nueva_disp.to_dict()}), 201
+    if dia_semana not in ('Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'):
+        return jsonify({'error': 'Elegí un día válido'}), 400
+    if estado not in ('Disponible', 'Ocupado / Reservado', 'En Pausa / No disponible'):
+        return jsonify({'error': 'Elegí un estado válido'}), 400
+
+    if not (dia_semana and str_inicio and str_fin):
+        return jsonify({
+            "error": "Faltan datos requeridos",
+            "recibido": data
+        }), 400
+
+    try:
+        # Función auxiliar para convertir múltiples formatos de hora
+        def parse_time(time_str):
+            time_str = str(time_str).strip()
+            for fmt in ('%H:%M:%S', '%H:%M', '%I:%M %p', '%I:%M%p'):
+                try:
+                    return datetime.strptime(time_str, fmt).time()
+                except ValueError:
+                    pass
+            raise ValueError(f"Formato de hora no válido: {time_str}")
+
+        hora_inicio = parse_time(str_inicio)
+        hora_fin = parse_time(str_fin)
+
+    except ValueError as err:
+        return jsonify({"error": str(err)}), 400
+
+    if hora_fin <= hora_inicio:
+        return jsonify({'error': 'La hora de fin debe ser posterior a la hora de inicio'}), 400
+
+    # Verificamos si ya existe exactamente esa disponibilidad para no duplicar
+    existente = Disponibilidad.query.filter_by(
+        enfermero_id=enfermero.id,
+        dia_semana=dia_semana,
+        hora_inicio=hora_inicio,
+        hora_fin=hora_fin
+    ).first()
+
+    if existente and (horario is None or existente.id != horario.id):
+        return jsonify({'error': 'Ese horario ya está registrado'}), 409
+
+    superpuesto_query = Disponibilidad.query.filter(
+        Disponibilidad.enfermero_id == enfermero.id,
+        Disponibilidad.dia_semana == dia_semana,
+        Disponibilidad.hora_inicio < hora_fin,
+        Disponibilidad.hora_fin > hora_inicio,
+    )
+    if horario:
+        superpuesto_query = superpuesto_query.filter(Disponibilidad.id != horario.id)
+    if superpuesto_query.first():
+        return jsonify({'error': 'El horario se superpone con otro del mismo día'}), 409
+
+    disponibilidad = horario or Disponibilidad(enfermero_id=enfermero.id)
+    disponibilidad.dia_semana = dia_semana
+    disponibilidad.hora_inicio = hora_inicio
+    disponibilidad.hora_fin = hora_fin
+    disponibilidad.estado = estado
+    db.session.add(disponibilidad)
+    db.session.commit()
+    return jsonify({
+        "mensaje": "Horario guardado con éxito",
+        "disponibilidad": disponibilidad.to_dict()
+    }), 200 if horario else 201
 
 
 # ==========================================
@@ -356,6 +407,70 @@ def obtener_enfermeros():
             lista_enfermeros.append(datos)
             
     return jsonify(lista_enfermeros), 200
+
+
+@usuario_bp.route('/pacientes/solicitudes-activas', methods=['GET'])
+@jwt_required()
+def buscar_pacientes_con_solicitudes_activas():
+    usuario_id = int(get_jwt_identity())
+    usuario = db.session.get(Usuario, usuario_id)
+    if not usuario:
+        return jsonify({'error': 'La sesión no corresponde a un usuario existente'}), 401
+    if usuario.rol != 'enfermero':
+        return jsonify({'error': 'Solo un enfermero puede consultar sus pacientes'}), 403
+    enfermero = Enfermero.query.filter_by(usuario_id=usuario.id).first()
+    if not enfermero:
+        return jsonify({'error': 'Perfil de enfermero no encontrado'}), 404
+
+    texto = request.args.get('q', '').strip()
+    pagina = request.args.get('page', 1, type=int)
+    por_pagina = request.args.get('per_page', 6, type=int)
+    if pagina < 1 or not 1 <= por_pagina <= 100:
+        return jsonify({'error': 'Paginación inválida'}), 400
+
+    query = Paciente.query.join(
+        SolicitudServicio,
+        SolicitudServicio.idPaciente == Paciente.id,
+    ).filter(
+        SolicitudServicio.idEnfermero == enfermero.id,
+        SolicitudServicio.estado.in_(ESTADOS_ACTIVOS),
+    )
+    if texto:
+        patron = f'%{texto}%'
+        query = query.filter(
+            or_(Paciente.nombre.ilike(patron), Paciente.apellido.ilike(patron))
+        )
+    query = query.distinct().order_by(Paciente.nombre, Paciente.apellido, Paciente.id)
+    paginacion = query.paginate(page=pagina, per_page=por_pagina, error_out=False)
+    pacientes = []
+    for paciente in paginacion.items:
+        solicitudes_activas = SolicitudServicio.query.filter(
+            SolicitudServicio.idPaciente == paciente.id,
+            SolicitudServicio.idEnfermero == enfermero.id,
+            SolicitudServicio.estado.in_(ESTADOS_ACTIVOS),
+        ).count()
+        compartir_ubicacion = (
+            paciente.ubicacion_compartida
+            and paciente.latitud is not None
+            and paciente.longitud is not None
+        )
+        pacientes.append({
+            'id': paciente.usuario_id,
+            'idPaciente': paciente.id,
+            'nombre': paciente.nombre,
+            'apellido': paciente.apellido,
+            'solicitudes_activas': solicitudes_activas,
+            'latitud': paciente.latitud if compartir_ubicacion else None,
+            'longitud': paciente.longitud if compartir_ubicacion else None,
+        })
+
+    return jsonify({
+        'pacientes': pacientes,
+        'pagina_actual': paginacion.page,
+        'por_pagina': paginacion.per_page,
+        'total_resultados': paginacion.total,
+        'total_paginas': paginacion.pages,
+    }), 200
 
 
 # ==========================================

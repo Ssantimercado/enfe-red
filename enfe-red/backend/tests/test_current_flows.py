@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import patch
 from datetime import datetime, timedelta, timezone
+from datetime import date, time
 
 from flask import Flask
 from flask_jwt_extended import JWTManager, create_access_token
@@ -8,6 +9,8 @@ from flask_jwt_extended import JWTManager, create_access_token
 from database import db
 from extensions import bcrypt
 from models.usuario_models import Disponibilidad, Enfermero, Paciente, Usuario
+from models.servicio_models import Servicio
+from models.solicitud_models import SolicitudServicio
 from routes.auth_routes import auth_bp, codigos_recuperacion
 from routes.usuario_routes import usuario_bp
 from seed_sprint3 import inicializar_bd_sprint3
@@ -39,7 +42,8 @@ class CurrentFlowsTest(unittest.TestCase):
         user = Usuario(email='patient@test.local', rol='paciente', password_hash='unused')
         db.session.add(user)
         db.session.flush()
-        db.session.add(Paciente(usuario_id=user.id))
+        self.patient = Paciente(usuario_id=user.id, nombre='Ana', apellido='Paciente')
+        db.session.add(self.patient)
         db.session.commit()
         self.headers = {'Authorization': 'Bearer ' + create_access_token(identity='1')}
         self.client = self.app.test_client()
@@ -77,6 +81,47 @@ class CurrentFlowsTest(unittest.TestCase):
         self.assertEqual(self.horario(hora_inicio='10:00', hora_fin='14:00').status_code, 409)
         self.assertEqual(self.horario(hora_inicio='12:00', hora_fin='14:00').status_code, 201)
 
+    def test_schedule_can_be_edited_without_conflicting_with_itself(self):
+        created = self.horario(dia='Sábado', hora_inicio='08:00', hora_fin='16:00')
+        schedule_id = created.json['disponibilidad']['id']
+        response = self.client.put(
+            f'/api/perfil/enfermero/horarios/{schedule_id}',
+            headers=self.headers,
+            json=dict(dia_semana='Sábado', hora_inicio='08:00', hora_fin='22:00',
+                      estado='Disponible'),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json['disponibilidad']['hora_fin'], '22:00')
+        self.assertEqual(Disponibilidad.query.count(), 1)
+
+    def test_schedule_edit_rejects_overlap_and_other_nurse_schedule(self):
+        first = self.horario(dia='Sábado', hora_inicio='08:00', hora_fin='12:00')
+        self.horario(dia='Sábado', hora_inicio='12:00', hora_fin='16:00')
+        first_id = first.json['disponibilidad']['id']
+        response = self.client.put(
+            f'/api/perfil/enfermero/horarios/{first_id}',
+            headers=self.headers,
+            json=dict(dia='Sábado', hora_inicio='10:00', hora_fin='14:00'),
+        )
+        self.assertEqual(response.status_code, 409)
+        saved_first = Disponibilidad.query.filter_by(id=first_id).first()
+        self.assertEqual(saved_first.hora_fin.strftime('%H:%M'), '12:00')
+
+        other_nurse_headers = {
+            'Authorization': 'Bearer ' + create_access_token(identity='2')
+        }
+        other_nurse_schedule = self.client.post(
+            '/api/perfil/enfermero/horarios',
+            headers=other_nurse_headers,
+            json=dict(dia='Sábado', hora_inicio='08:00', hora_fin='16:00'),
+        ).json['disponibilidad']
+        response = self.client.put(
+            f"/api/perfil/enfermero/horarios/{other_nurse_schedule['id']}",
+            headers=self.headers,
+            json=dict(dia='Sábado', hora_inicio='08:00', hora_fin='22:00'),
+        )
+        self.assertEqual(response.status_code, 404)
+
     def test_schedule_requires_nurse_session(self):
         self.assertEqual(self.client.get('/api/perfil/enfermero/horarios').status_code, 401)
         headers = {'Authorization': 'Bearer ' + create_access_token(identity='9')}
@@ -98,6 +143,127 @@ class CurrentFlowsTest(unittest.TestCase):
                       'precio_max=nan', 'page=0', 'per_page=0', 'per_page=1000'):
             with self.subTest(query=query):
                 self.assertEqual(self.client.get('/api/enfermeros/buscar?' + query).status_code, 400)
+
+    def test_nurse_directory_only_returns_patients_with_own_active_requests(self):
+        segundo_usuario = Usuario(
+            email='otro-paciente@test.local',
+            rol='paciente',
+            password_hash='unused',
+        )
+        db.session.add(segundo_usuario)
+        db.session.flush()
+        segundo_paciente = Paciente(
+            usuario_id=segundo_usuario.id,
+            nombre='Bruno',
+            apellido='Paciente',
+        )
+        servicio = Servicio(tipoServicio='Curaciones', precioEstimado=None)
+        db.session.add_all([segundo_paciente, servicio])
+        db.session.flush()
+        self.patient.direccion = 'Dirección privada'
+        self.patient.telefono = '2615550000'
+        self.patient.historial_medico = 'Dato médico privado'
+        self.patient.latitud = -32.89
+        self.patient.longitud = -68.84
+        self.patient.ubicacion_compartida = True
+        db.session.add_all([
+            SolicitudServicio(
+                idPaciente=self.patient.id,
+                idEnfermero=1,
+                idServicio=servicio.idServicio,
+                fecha=date(2030, 1, 10),
+                hora=time(10),
+                estado='Pendiente',
+                direccionAtencion='Dirección del servicio',
+            ),
+            SolicitudServicio(
+                idPaciente=segundo_paciente.id,
+                idEnfermero=1,
+                idServicio=servicio.idServicio,
+                fecha=date(2030, 1, 11),
+                hora=time(10),
+                estado='Aceptada',
+                direccionAtencion='Dirección del servicio',
+            ),
+            SolicitudServicio(
+                idPaciente=self.patient.id,
+                idEnfermero=2,
+                idServicio=servicio.idServicio,
+                fecha=date(2030, 1, 12),
+                hora=time(10),
+                estado='Aceptada',
+                direccionAtencion='Otra dirección',
+            ),
+            SolicitudServicio(
+                idPaciente=segundo_paciente.id,
+                idEnfermero=3,
+                idServicio=servicio.idServicio,
+                fecha=date(2030, 1, 13),
+                hora=time(10),
+                estado='Rechazada',
+                direccionAtencion='Otra dirección',
+            ),
+        ])
+        db.session.commit()
+
+        result = self.client.get('/api/pacientes/solicitudes-activas', headers=self.headers)
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(result.json['total_resultados'], 2)
+        ana, bruno = result.json['pacientes']
+        self.assertEqual((ana['nombre'], ana['solicitudes_activas']), ('Ana', 1))
+        self.assertEqual((ana['latitud'], ana['longitud']), (-32.89, -68.84))
+        self.assertEqual((bruno['nombre'], bruno['latitud'], bruno['longitud']), ('Bruno', None, None))
+        response_text = result.get_data(as_text=True)
+        for dato_privado in ('Dirección privada', '2615550000', 'Dato médico privado'):
+            self.assertNotIn(dato_privado, response_text)
+        nurse_two = self.client.get(
+            '/api/pacientes/solicitudes-activas',
+            headers={'Authorization': 'Bearer ' + create_access_token(identity='2')},
+        )
+        self.assertEqual([item['nombre'] for item in nurse_two.json['pacientes']], ['Ana'])
+        patient_response = self.client.get(
+            '/api/pacientes/solicitudes-activas',
+            headers={'Authorization': 'Bearer ' + create_access_token(identity='9')},
+        )
+        self.assertEqual(patient_response.status_code, 403)
+        self.assertEqual(self.client.get('/api/pacientes/solicitudes-activas').status_code, 401)
+        nurse_three = self.client.get(
+            '/api/pacientes/solicitudes-activas',
+            headers={'Authorization': 'Bearer ' + create_access_token(identity='3')},
+        )
+        self.assertEqual(nurse_three.status_code, 200)
+        self.assertEqual(nurse_three.json['pacientes'], [])
+
+    def test_patient_can_save_and_revoke_optional_location_sharing(self):
+        patient_headers = {
+            'Authorization': 'Bearer ' + create_access_token(identity='9')
+        }
+        missing_location = self.client.put(
+            '/api/perfil/paciente',
+            headers=patient_headers,
+            json={'ubicacion_compartida': True},
+        )
+        self.assertEqual(missing_location.status_code, 400)
+        response = self.client.put(
+            '/api/perfil/paciente',
+            headers=patient_headers,
+            json={
+                'latitud': -32.89,
+                'longitud': -68.84,
+                'ubicacion_compartida': True,
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json['ubicacion_compartida'])
+        self.assertEqual((response.json['latitud'], response.json['longitud']), (-32.89, -68.84))
+
+        revoke = self.client.put(
+            '/api/perfil/paciente',
+            headers=patient_headers,
+            json={'ubicacion_compartida': False},
+        )
+        self.assertEqual(revoke.status_code, 200)
+        self.assertFalse(revoke.json['ubicacion_compartida'])
 
     def test_full_profile_round_trip_accepts_nullable_fields(self):
         profile = self.client.get('/api/perfil/enfermero', headers=self.headers).json

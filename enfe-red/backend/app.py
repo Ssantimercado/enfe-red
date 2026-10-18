@@ -10,7 +10,7 @@ from routes.usuario_routes import usuario_bp
 from routes.auth_routes import auth_bp
 from routes.solicitud_routes import solicitud_bp
 from routes.comunicacion_routes import comunicacion_bp
-from schema_sprint4 import inicializar_bd_sprint4
+from schema_sprint4 import inicializar_bd_sprint4, inicializar_catalogo_servicios
 from seed_sprint3 import inicializar_bd_sprint3
 
 load_dotenv()
@@ -42,6 +42,7 @@ app.register_blueprint(comunicacion_bp, url_prefix='/api')
 with app.app_context():
     inicializar_bd_sprint4()
     inicializar_bd_sprint3()
+    inicializar_catalogo_servicios()
 
 @app.route('/', methods=['GET'])
 def home():

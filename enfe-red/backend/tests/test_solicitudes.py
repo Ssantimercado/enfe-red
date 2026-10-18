@@ -15,7 +15,7 @@ from models.solicitud_models import ESTADOS_SOLICITUD, SolicitudServicio
 from models.usuario_models import Enfermero, Paciente, Usuario
 from routes.solicitud_routes import solicitud_bp
 from routes.usuario_routes import usuario_bp
-from schema_sprint4 import inicializar_bd_sprint4
+from schema_sprint4 import inicializar_bd_sprint4, inicializar_catalogo_servicios
 from seed_sprint3 import inicializar_bd_sprint3
 
 
@@ -110,6 +110,36 @@ class SolicitudesTest(unittest.TestCase):
         Servicio.query.delete()
         db.session.commit()
         self.assertEqual(self.client.get('/api/servicios', headers=self.headers()).json, [])
+
+    def test_catalogo_inicial_sin_tarifas_es_idempotente_y_se_puede_solicitar(self):
+        inicializar_catalogo_servicios()
+        inicializar_catalogo_servicios()
+        servicios = self.client.get('/api/servicios', headers=self.headers()).json
+        self.assertEqual(
+            [servicio['tipoServicio'] for servicio in servicios],
+            [
+                'Acompañamiento de adultos mayores',
+                'Control de signos vitales',
+                'Cuidados Intensivos',
+                'Curaciones',
+                'Higiene y confort',
+                'Inyecciones',
+            ],
+        )
+        curaciones = next(
+            servicio for servicio in servicios
+            if servicio['tipoServicio'] == 'Curaciones'
+        )
+        inyecciones = next(
+            servicio for servicio in servicios
+            if servicio['tipoServicio'] == 'Inyecciones'
+        )
+        self.assertEqual(curaciones['precioEstimado'], '8500.50')
+        self.assertIsNone(inyecciones['precioEstimado'])
+        solicitud = self.crear(idServicio=inyecciones['idServicio'])
+        self.assertEqual(solicitud.status_code, 201)
+        self.assertIsNone(solicitud.json['solicitud']['servicio']['precioEstimado'])
+        self.assertEqual(Servicio.query.count(), 6)
 
     def test_crear_y_consultar_comprobante_sin_cambiar_estado(self):
         response = self.crear()
@@ -568,6 +598,9 @@ class MigracionSprint4Test(unittest.TestCase):
         })
         self.assertEqual({fk['referred_table'] for fk in inspector.get_foreign_keys('solicitudes_servicio')},
                          {'pacientes', 'enfermeros', 'servicios'})
+        precio = next(column for column in inspector.get_columns('servicios')
+                       if column['name'] == 'precioEstimado')
+        self.assertTrue(precio['nullable'])
 
     def test_base_existente_preserva_datos_y_verificacion_al_repetir(self):
         Usuario.__table__.create(db.engine)
@@ -578,6 +611,14 @@ class MigracionSprint4Test(unittest.TestCase):
                 apellido VARCHAR(100), matricula VARCHAR(50) NOT NULL, especialidad VARCHAR(100)
             )'''))
             connection.execute(text("INSERT INTO enfermeros (id, usuario_id, nombre, matricula) VALUES (1, 1, 'Previo', 'MAT-PREVIA')"))
+            connection.execute(text('''CREATE TABLE pacientes (
+                id INTEGER PRIMARY KEY, usuario_id INTEGER NOT NULL UNIQUE,
+                nombre VARCHAR(100), apellido VARCHAR(100), direccion VARCHAR(200),
+                telefono VARCHAR(20), historial_medico TEXT
+            )'''))
+            connection.execute(text(
+                "INSERT INTO pacientes (id, usuario_id, nombre) VALUES (1, 2, 'Paciente previo')"
+            ))
         inicializar_bd_sprint4()
         inicializar_bd_sprint3()
         enfermero = db.session.get(Enfermero, 1)
@@ -590,6 +631,11 @@ class MigracionSprint4Test(unittest.TestCase):
         db.session.expire_all()
         self.assertTrue(db.session.get(Enfermero, 1).verificado)
         self.assertEqual(Servicio.query.count(), 0)  # No inventa catálogo ni precios.
+        columnas_paciente = {
+            columna['name'] for columna in inspect(db.engine).get_columns('pacientes')
+        }
+        self.assertTrue({'latitud', 'longitud', 'ubicacion_compartida'} <= columnas_paciente)
+        self.assertEqual(db.session.get(Paciente, 1).nombre, 'Paciente previo')
 
 
 if __name__ == '__main__':

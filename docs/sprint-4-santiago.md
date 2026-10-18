@@ -54,7 +54,8 @@ fecha; esta entrega no implementa vencimiento automático.
 - No se encontró el modelo Servicio del Sprint 2 en las ramas disponibles del
   equipo. Se incorporó en `models/servicio_models.py` una definición mínima con
   los datos mencionados en la consigna: `idServicio`, `tipoServicio` y
-  `precioEstimado` (`Numeric(10, 2)`, no negativo), tabla `servicios`.
+  `precioEstimado` (`Numeric(10, 2)`, no negativo y opcional cuando queda
+  «A consultar»), tabla `servicios`.
   Es un catálogo general; no había una relación servicio-profesional definida.
 - Se agregó `Enfermero.verificado`, por defecto `False`. La disponibilidad se
   consulta en el campo ya existente `Enfermero.disponible`; no se creó otro
@@ -63,10 +64,15 @@ fecha; esta entrega no implementa vencimiento automático.
   faltantes y agrega `verificado` si la base era anterior. Puede ejecutarse otra
   vez sin borrar datos ni reemplazar verificaciones existentes. La cuenta de BD
   necesita permisos de creación de tablas y de `ALTER TABLE`, como en Sprint 3.
-- Los enfermeros existentes **no se verifican automáticamente** y el catálogo
-  de servicios comienza vacío. La verificación y los precios deben ser cargados
-  por quien administra la base; no se aceptan desde el formulario del paciente
+- Los enfermeros existentes **no se verifican automáticamente**. Al iniciar la
+  aplicación, se agregan idempotentemente al catálogo los seis servicios
+  acordados: Curaciones, Inyecciones, Control de signos vitales, Higiene y
+  confort, Acompañamiento de adultos mayores y Cuidados Intensivos. Sus precios
+  quedan nulos y se muestran como «A consultar» hasta que un administrador
+  cargue tarifas reales; no se aceptan precios desde el formulario del paciente
   ni desde la edición del perfil del enfermero.
+- Al iniciar, `inicializar_bd_sprint4()` permite que `precioEstimado` sea nulo en
+  bases MySQL y PostgreSQL anteriores, conservando los importes que ya existían.
 
 ### IDs para Germán y Renzo
 
@@ -140,11 +146,11 @@ Respuesta del POST:
 
 El header `Location` del POST apunta a `/api/solicitudes/1`. El GET de detalle
 devuelve directamente el objeto interior `solicitud`; las listas contienen
-objetos con esa misma estructura. El precio viene de `Servicio`, no de
-`tarifa_hora` ni del cliente. Se envía como texto decimal para conservar los
-centavos; la interfaz puede usar `Number(solicitud.servicio.precioEstimado)` para
-mostrarlo. Es el precio estimado actual del catálogo, no un precio histórico
-congelado. No se devuelve historial médico ni credenciales en el comprobante.
+objetos con esa misma estructura. El precio viene de `Servicio`, no de `tarifa_hora` ni del cliente. Cuando existe,
+se envía como texto decimal para conservar los centavos; si aún no se cargó,
+`precioEstimado` es `null` y la interfaz muestra «A consultar». Es el precio
+estimado actual del catálogo, no un precio histórico congelado. No se devuelve
+historial médico ni credenciales en el comprobante.
 
 Errores de estas rutas: `400` por datos inválidos, `401` por falta de sesión,
 sesión vencida o usuario eliminado, `403` por rol o titularidad incorrectos,

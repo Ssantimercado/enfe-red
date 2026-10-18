@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import Avatar from './ui/Avatar';
 import Icon from './ui/Icon';
 import DirectoryFilters from './DirectoryFilters';
-import { requestApi as api, formatPrice } from '../api';
+import { requestApi as api, formatPrice, sesionActual } from '../api';
 const MapaEnfermeros = lazy(() => import('./MapaEnfermeros'));
 
 const FILTERS = [
@@ -19,6 +19,7 @@ const optionalNumber = (value) =>
     : Number(value);
 
 export default function ListaEnfermeros() {
+  const nurse = sesionActual()?.rol === 'enfermero';
   const [params, setParams] = useSearchParams();
   const query = params.get('q') || '';
   const page = Math.max(1, Math.floor(Number(params.get('page'))) || 1);
@@ -26,8 +27,10 @@ export default function ListaEnfermeros() {
     FILTERS.map((key) => [key, params.get(key) || '']),
   );
   const requestKey = new URLSearchParams(
-    [...params].filter(
-      ([key]) => FILTERS.includes(key) || key === 'q' || key === 'page',
+    [...params].filter(([key]) =>
+      nurse
+        ? key === 'q' || key === 'page'
+        : FILTERS.includes(key) || key === 'q' || key === 'page',
     ),
   ).toString();
   const [data, setData] = useState({
@@ -73,6 +76,7 @@ export default function ListaEnfermeros() {
   }, [filtersOpen]);
 
   useEffect(() => {
+    if (nurse) return undefined;
     const controller = new AbortController();
     api('/enfermeros', { signal: controller.signal })
       .then((list) => {
@@ -86,14 +90,14 @@ export default function ListaEnfermeros() {
       })
       .catch(() => {});
     return () => controller.abort();
-  }, []);
+  }, [nurse]);
 
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
     setError('');
     setSelected(null);
-    if (invalidRange) {
+    if (!nurse && invalidRange) {
       setLoading(false);
       return () => controller.abort();
     }
@@ -102,9 +106,13 @@ export default function ListaEnfermeros() {
         const search = new URLSearchParams(requestKey);
         search.set('per_page', '6');
         search.set('page', String(page));
-        const results = await api(`/enfermeros/buscar?${search}`, {
-          signal: controller.signal,
-        });
+        const results = nurse
+          ? await api(`/pacientes/solicitudes-activas?${search}`, {
+            signal: controller.signal,
+          }).then((response) => ({ ...response, enfermeros: response.pacientes }))
+          : await api(`/enfermeros/buscar?${search}`, {
+            signal: controller.signal,
+          });
         if (!controller.signal.aborted) setData(results);
       } catch (err) {
         if (!controller.signal.aborted) setError(err.message);
@@ -116,7 +124,7 @@ export default function ListaEnfermeros() {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [requestKey, page, retry, invalidRange]);
+  }, [requestKey, page, retry, invalidRange, nurse]);
 
   function update(key, value) {
     setParams(
@@ -159,7 +167,7 @@ export default function ListaEnfermeros() {
     );
     setFiltersOpen(false);
   }
-  const active = FILTERS.filter((key) => filterValues[key]);
+  const active = nurse ? [] : FILTERS.filter((key) => filterValues[key]);
   const hasFilters = Boolean(query || active.length);
   const labels = {
     especialidad: filterValues.especialidad,
@@ -177,11 +185,14 @@ export default function ListaEnfermeros() {
     <div className="page-container">
       <header className="page-heading">
         <div>
-          <span className="eyebrow">ENCONTRÁ TU PROFESIONAL</span>
-          <h1>El cuidado empieza acá.</h1>
+          <span className="eyebrow">
+            {nurse ? 'PACIENTES ASIGNADOS' : 'ENCONTRÁ TU PROFESIONAL'}
+          </span>
+          <h1>{nurse ? 'Tus pacientes.' : 'El cuidado empieza acá.'}</h1>
           <p>
-            Explorá perfiles y encontrá atención de enfermería para vos o tu
-            familia.
+            {nurse
+              ? 'Consultá las personas que tienen una solicitud activa con vos y la ubicación que decidieron compartir.'
+              : 'Explorá perfiles y encontrá atención de enfermería para vos o tu familia.'}
           </p>
         </div>
       </header>
@@ -189,12 +200,12 @@ export default function ListaEnfermeros() {
         <Icon name="search" size={22} />
         <input
           type="search"
-          aria-label="Buscar por nombre, zona o especialidad"
-          placeholder="Nombre, zona o especialidad"
+          aria-label={nurse ? 'Buscar pacientes por nombre' : 'Buscar por nombre, zona o especialidad'}
+          placeholder={nurse ? 'Nombre del paciente' : 'Nombre, zona o especialidad'}
           value={query}
           onChange={(e) => update('q', e.target.value)}
         />
-        <button
+        {!nurse && <button
           type="button"
           className="button button-secondary mobile-filter-button"
           aria-label={`Mostrar filtros${active.length ? `, ${active.length} activos` : ''}`}
@@ -211,9 +222,10 @@ export default function ListaEnfermeros() {
           {active.length > 0 && (
             <span className="filter-count">{active.length}</span>
           )}
-        </button>
+        </button>}
       </div>
-      <div className="directory-layout">
+      <div className={`directory-layout ${nurse ? 'patient-directory-layout' : ''}`}>
+        {!nurse && (
         <aside
           id="filtros"
           className="filters-panel"
@@ -249,19 +261,20 @@ export default function ListaEnfermeros() {
             </p>
           </div>
         </aside>
+        )}
         <section aria-label="Resultados de búsqueda" aria-busy={loading}>
           <div className="results-toolbar">
             <p className="results-count" role="status">
               {loading ? (
-                'Buscando profesionales…'
-              ) : error || invalidRange ? (
+                nurse ? 'Buscando pacientes…' : 'Buscando profesionales…'
+              ) : error || (!nurse && invalidRange) ? (
                 'Revisá tu búsqueda'
               ) : (
                 <>
                   <strong>{data.total_resultados}</strong>{' '}
                   {data.total_resultados === 1
-                    ? 'profesional encontrado'
-                    : 'profesionales encontrados'}
+                    ? (nurse ? 'paciente encontrado' : 'profesional encontrado')
+                    : (nurse ? 'pacientes encontrados' : 'profesionales encontrados')}
                 </>
               )}
             </p>
@@ -308,7 +321,7 @@ export default function ListaEnfermeros() {
               ))}
             </div>
           )}
-          {invalidRange ? (
+          {!nurse && invalidRange ? (
             <div className="notice notice-error" role="alert">
               El precio mínimo debe ser menor o igual al máximo.
             </div>
@@ -339,14 +352,17 @@ export default function ListaEnfermeros() {
               <span className="soft-icon">
                 <Icon name="search" size={26} />
               </span>
-              <h2>Probemos con otra búsqueda.</h2>
+              <h2>{nurse ? 'Todavía no hay pacientes asignados.' : 'Probemos con otra búsqueda.'}</h2>
               <p>
-                No encontramos profesionales con estos criterios. Podés cambiar
-                la zona o quitar algún filtro.
+                {nurse
+                  ? 'Los pacientes aparecerán cuando tengan una solicitud pendiente o aceptada con vos.'
+                  : 'No encontramos profesionales con estos criterios. Podés cambiar la zona o quitar algún filtro.'}
               </p>
-              <button className="button button-primary" onClick={() => clear()}>
-                Ver todos los profesionales
-              </button>
+              {!nurse && (
+                <button className="button button-primary" onClick={() => clear()}>
+                  Ver todos los profesionales
+                </button>
+              )}
             </div>
           ) : (
             <>
@@ -354,19 +370,21 @@ export default function ListaEnfermeros() {
                 <div className="results-map" ref={mapRef}>
                   <Suspense fallback={<p role="status">Cargando mapa…</p>}>
                     <MapaEnfermeros
-                      enfermeros={data.enfermeros}
+                      personas={data.enfermeros}
+                      tipoPersona={nurse ? 'paciente' : 'enfermero'}
                       selectedId={selected}
                       onSelect={setSelected}
                       volverA={profileState.from}
                     />
                   </Suspense>
                   <p className="map-results-note">
-                    El mapa muestra los profesionales de esta página con
-                    ubicación informada.
+                    {nurse
+                      ? 'El mapa muestra únicamente ubicaciones que cada paciente eligió compartir y solo para enfermeros con una solicitud activa asignada.'
+                      : 'El mapa muestra los profesionales de esta página con ubicación informada.'}
                   </p>
                 </div>
               )}
-              <div className="professional-grid">
+              <div className={`professional-grid ${nurse ? 'patient-results-grid' : ''}`}>
                 {data.enfermeros.map((person) => {
                   const id = person.usuario_id ?? person.id;
                   const rating = optionalNumber(
@@ -385,6 +403,47 @@ export default function ListaEnfermeros() {
                       className={`professional-card ${String(selected) === String(id) ? 'is-selected' : ''}`}
                       key={id}
                     >
+                      {nurse ? (
+                        <>
+                          <div className="card-identity">
+                            <Avatar person={person} />
+                            <div>
+                              <h3>{person.nombre} {person.apellido}</h3>
+                              <p className="card-location">
+                                <Icon name="briefcase" size={13} />
+                                {person.solicitudes_activas === 1
+                                  ? '1 solicitud activa'
+                                  : `${person.solicitudes_activas} solicitudes activas`}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="card-bottom">
+                            <Link className="button button-primary" to="/solicitudes-enfermero">
+                              Revisar solicitudes
+                              <Icon name="arrow" size={15} />
+                            </Link>
+                          </div>
+                          {hasCoordinates && (
+                            <button
+                              className="text-link map-card-link"
+                              onClick={() => {
+                                setSelected(id);
+                                update('vista', 'mapa');
+                                requestAnimationFrame(() =>
+                                  mapRef.current?.scrollIntoView({
+                                    behavior: 'smooth',
+                                    block: 'center',
+                                  }),
+                                );
+                              }}
+                            >
+                              <Icon name="pin" size={14} />
+                              Ver ubicación compartida
+                            </button>
+                          )}
+                        </>
+                      ) : (
+                        <>
                       <div className="card-identity">
                         <Avatar person={person} />
                         <div>
@@ -468,6 +527,8 @@ export default function ListaEnfermeros() {
                           Ver en el mapa
                         </button>
                       )}
+                        </>
+                      )}
                     </article>
                   );
                 })}
@@ -499,7 +560,7 @@ export default function ListaEnfermeros() {
           )}
         </section>
       </div>
-      <dialog
+      {!nurse && <dialog
         ref={filterDialog}
         id="filtros-mobile"
         className="filter-dialog"
@@ -568,7 +629,7 @@ export default function ListaEnfermeros() {
             </button>
           </div>
         </form>
-      </dialog>
+      </dialog>}
     </div>
   );
 }

@@ -26,6 +26,14 @@ const nurseIcon = new L.DivIcon({
   popupAnchor: [0, -36],
 });
 
+const patientIcon = new L.DivIcon({
+  className: 'paciente-marker',
+  html: '<span>●</span>',
+  iconSize: [36, 36],
+  iconAnchor: [18, 36],
+  popupAnchor: [0, -36],
+});
+
 function FlyToSelected({ position }) {
   const map = useMap();
 
@@ -53,6 +61,23 @@ function FitRoute({ positions }) {
         maxZoom: 16,
         animate: true,
       });
+    }
+  }, [map, positions]);
+
+  return null;
+}
+
+function FitLocations({ positions }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (positions.length > 1) {
+      map.fitBounds(L.latLngBounds(positions), {
+        padding: [40, 40],
+        maxZoom: 14,
+      });
+    } else if (positions.length === 1) {
+      map.setView(positions[0], 14);
     }
   }, [map, positions]);
 
@@ -173,18 +198,20 @@ function useRutaReal(origen, destino) {
 }
 
 export default function MapaEnfermeros({
-  enfermeros,
+  personas,
+  tipoPersona = 'enfermero',
   selectedId,
   onSelect,
   volverA = '/cartilla',
 }) {
+  const mostrandoPacientes = tipoPersona === 'paciente';
   const [userPosition, setUserPosition] = useState(null);
   const [locationState, setLocationState] = useState('idle');
   const [locationError, setLocationError] = useState('');
 
   const navigate = useNavigate();
 
-  const selected = enfermeros.find(
+  const selected = personas.find(
     (item) =>
       String(item.usuario_id ?? item.id) === String(selectedId)
   );
@@ -199,18 +226,22 @@ export default function MapaEnfermeros({
 
   const markers = useMemo(
     () =>
-      enfermeros
-        .map((enfermero) => ({
-          enfermero,
-          position: coordinatesOf(enfermero),
+      personas
+        .map((persona) => ({
+          persona,
+          position: coordinatesOf(persona),
         }))
         .filter((item) => item.position),
-    [enfermeros]
+    [personas]
+  );
+  const markerPositions = useMemo(
+    () => markers.map((item) => item.position),
+    [markers]
   );
 
   // La distancia y el tiempo ahora provienen de la ruta real.
   const { ruta, loadingRoute, routeError } = useRutaReal(
-    userPosition,
+    mostrandoPacientes ? null : userPosition,
     selectedPosition
   );
 
@@ -270,21 +301,20 @@ export default function MapaEnfermeros({
 
   return (
     <section
-      className="mapa-enfermeros"
-      aria-label="Mapa de enfermeros"
+      className={`mapa-enfermeros ${mostrandoPacientes ? 'mapa-pacientes' : ''}`}
+      aria-label={mostrandoPacientes ? 'Mapa de pacientes asignados' : 'Mapa de enfermeros'}
       style={{ position: 'relative' }}
     >
       <div className="mapa-toolbar">
         <div>
-          <h2>Enfermeros cercanos</h2>
-          <p>
-            {markers.length} profesional
-            {markers.length === 1 ? '' : 'es'} con ubicación
-            disponible
+          <h2>{mostrandoPacientes ? 'Ubicaciones compartidas' : 'Enfermeros cercanos'}</h2>
+          <p>{mostrandoPacientes
+            ? `${markers.length} paciente${markers.length === 1 ? '' : 's'} compartió su ubicación`
+            : `${markers.length} profesional${markers.length === 1 ? '' : 'es'} con ubicación disponible`}
           </p>
         </div>
 
-        <button
+        {!mostrandoPacientes && <button
           type="button"
           onClick={locateUser}
           disabled={locationState === 'loading'}
@@ -292,11 +322,11 @@ export default function MapaEnfermeros({
           {locationState === 'loading'
             ? 'Buscando ubicación…'
             : 'Usar mi ubicación'}
-        </button>
+        </button>}
       </div>
 
       {/* Panel de información de la ruta real */}
-      {userPosition && selectedPosition && (
+      {!mostrandoPacientes && userPosition && selectedPosition && (
         <div
           style={{
             position: 'absolute',
@@ -378,11 +408,15 @@ export default function MapaEnfermeros({
           position={selectedPosition || userPosition}
         />
 
+        {mostrandoPacientes && (
+          <FitLocations positions={markerPositions} />
+        )}
+
         {/* Ajustar la vista al recorrido completo */}
         {ruta && <FitRoute positions={ruta.positions} />}
 
         {/* Marcador de la ubicación del usuario */}
-        {userPosition && (
+        {!mostrandoPacientes && userPosition && (
           <>
             <CircleMarker
               center={userPosition}
@@ -408,7 +442,7 @@ export default function MapaEnfermeros({
         )}
 
         {/* Recorrido real: sigue las calles, no una línea recta */}
-        {ruta && (
+        {!mostrandoPacientes && ruta && (
           <Polyline
             positions={ruta.positions}
             pathOptions={{
@@ -419,15 +453,15 @@ export default function MapaEnfermeros({
           />
         )}
 
-        {/* Marcadores de los enfermeros */}
-        {markers.map(({ enfermero, position }) => {
-          const id = enfermero.usuario_id ?? enfermero.id;
+        {/* Los marcadores de pacientes solo se reciben del endpoint autorizado para el enfermero. */}
+        {markers.map(({ persona, position }) => {
+          const id = persona.usuario_id ?? persona.id;
 
           return (
             <Marker
               key={id}
               position={position}
-              icon={nurseIcon}
+              icon={mostrandoPacientes ? patientIcon : nurseIcon}
               eventHandlers={{
                 click: () => onSelect?.(id),
               }}
@@ -446,7 +480,7 @@ export default function MapaEnfermeros({
                       color: '#1e293b',
                     }}
                   >
-                    {enfermero.nombre} {enfermero.apellido}
+                    {persona.nombre} {persona.apellido}
                   </strong>
 
                   <p
@@ -456,11 +490,12 @@ export default function MapaEnfermeros({
                       fontSize: '13px',
                     }}
                   >
-                    {enfermero.especialidad ||
-                      'Enfermería general'}
+                    {mostrandoPacientes
+                      ? `${persona.solicitudes_activas} solicitud${persona.solicitudes_activas === 1 ? '' : 'es'} activa${persona.solicitudes_activas === 1 ? '' : 's'}`
+                      : persona.especialidad || 'Enfermería general'}
                   </p>
 
-                  <button
+                  {!mostrandoPacientes && <button
                     type="button"
                     onClick={() => navigate(`/perfil/${id}`, { state: { volverA } })}
                     style={{
@@ -478,7 +513,7 @@ export default function MapaEnfermeros({
                     }}
                   >
                     Ver Perfil Completo
-                  </button>
+                  </button>}
                 </div>
               </Popup>
             </Marker>
@@ -486,10 +521,11 @@ export default function MapaEnfermeros({
         })}
       </MapContainer>
 
-      {markers.length < enfermeros.length && (
+      {markers.length < personas.length && (
         <p className="mapa-nota">
-          Algunos profesionales no tienen coordenadas cargadas
-          y no pueden mostrarse en el mapa.
+          {mostrandoPacientes
+            ? 'Algunos pacientes todavía no eligieron compartir una ubicación y no aparecen en el mapa.'
+            : 'Algunos profesionales no tienen coordenadas cargadas y no pueden mostrarse en el mapa.'}
         </p>
       )}
     </section>

@@ -1,5 +1,39 @@
 ﻿.solicitud-page { max-width: 760px; }
 .solicitud-page .form-stack { margin-top: 24px; }
+.solicitud-page .field-hint { color: var(--muted); font-size: 12px; }
+.solicitud-toast {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 50;
+  max-width: 360px;
+  box-shadow: 0 18px 38px rgb(25 82 63 / 18%);
+  animation: toast-slide-in 0.25s ease;
+}
+.solicitud-success {
+  display: grid;
+  gap: 14px;
+  margin-top: 20px;
+  padding: 20px;
+}
+.solicitud-success > strong {
+  text-align: center;
+  font-size: 18px;
+}
+.solicitud-success .text-link {
+  justify-self: start;
+  margin-top: 2px;
+}
+@keyframes toast-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
 .solicitud-summary { display: grid; grid-template-columns: auto 1fr; gap: 12px 24px; margin: 24px 0; }
 .solicitud-summary dt { font-weight: 600; }
 .solicitud-summary dd { margin: 0; overflow-wrap: anywhere; }
@@ -7,7 +41,44 @@
 .solicitud-cancelar dialog { max-width: 440px; width: calc(100% - 48px); box-sizing: border-box; }
 .solicitud-cancelar dialog::backdrop { background: rgb(0 0 0 / 45%); }
 .solicitud-cancelar dialog .button { margin: 16px 8px 0 0; }
+.solicitudes-inbox .page-heading { align-items: center; }
+.solicitudes-grid { display: grid; gap: 18px; }
+.solicitud-card { margin-bottom: 0; }
+.solicitud-card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.solicitud-card-heading h2 { margin: 6px 0 0; }
+.solicitud-status {
+  flex-shrink: 0;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--blue-soft);
+  color: var(--blue-dark);
+  font-size: 12px;
+  font-weight: 650;
+}
+.solicitud-status.pendiente { background: #fff6e8; color: #815615; }
+.solicitud-status.aceptada,
+.solicitud-status.realizada { background: #eef9f3; color: #176a50; }
+.solicitud-status.rechazada,
+.solicitud-status.cancelada { background: #f1f5f8; color: var(--muted); }
+.solicitud-card .solicitud-summary { margin-bottom: 0; }
+.solicitud-card-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
+.solicitud-reject-dialog {
+  width: min(440px, calc(100% - 32px));
+  box-sizing: border-box;
+}
+.solicitud-reject-dialog::backdrop { background: rgb(0 0 0 / 45%); }
+.solicitud-reject-dialog .solicitud-card-actions { justify-content: flex-end; }
+.nurse-requests-link { min-height: 40px; gap: 7px; white-space: nowrap; }
 @media (max-width: 480px) {
   .solicitud-summary { grid-template-columns: 1fr; gap: 6px; }
   .solicitud-summary dd { margin-bottom: 12px; }
+}
+@media (max-width: 800px) {
+  .nurse-requests-link { min-width: 42px; padding: 8px; justify-content: center; }
+  .nurse-requests-label { display: none; }
 }

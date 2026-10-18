@@ -39,8 +39,12 @@ export default function AppShell() {
               }
             >
               <Icon name="search" size={18} />
-              <span className="nav-long-label">Buscar profesionales</span>
-              <span className="nav-short-label">Buscar</span>
+              <span className="nav-long-label">
+                {nurse ? 'Pacientes asignados' : 'Buscar profesionales'}
+              </span>
+              <span className="nav-short-label">
+                {nurse ? 'Pacientes' : 'Buscar'}
+              </span>
             </NavLink>
             <NavLink to={profile}>
               <Icon name="user" size={18} />
@@ -48,6 +52,16 @@ export default function AppShell() {
             </NavLink>
           </nav>
           <div className="account-actions">
+            {nurse && (
+              <Link
+                className="button button-secondary nurse-requests-link"
+                to="/solicitudes-enfermero"
+                aria-label="Ver solicitudes recibidas"
+              >
+                <Icon name="briefcase" size={17} />
+                <span className="nurse-requests-label">Solicitudes</span>
+              </Link>
+            )}
             <Link className="account-link" to={profile}>
               <span className="account-avatar">
                 <Icon name="user" size={18} />

@@ -1,16 +1,72 @@
 from sqlalchemy import inspect, text
 
 from database import db
+from models.servicio_models import Servicio
 from models.solicitud_models import SolicitudServicio
+
+SERVICIOS_INICIALES = (
+    'Curaciones',
+    'Inyecciones',
+    'Control de signos vitales',
+    'Higiene y confort',
+    'Acompañamiento de adultos mayores',
+    'Cuidados Intensivos',
+)
 
 
 def inicializar_bd_sprint4():
-    """Crear las tablas y ampliar bases previas sin borrar ni verificar usuarios."""
+    """Crear tablas y agregar columnas optativas sin borrar datos de perfiles."""
     # Importar SolicitudServicio registra también Servicio en los metadatos.
     db.create_all()
     with db.engine.begin() as connection:
+        columnas_paciente = {
+            columna['name']
+            for columna in inspect(connection).get_columns('pacientes')
+        }
+        if 'latitud' not in columnas_paciente:
+            connection.execute(text('ALTER TABLE pacientes ADD COLUMN latitud FLOAT'))
+        if 'longitud' not in columnas_paciente:
+            connection.execute(text('ALTER TABLE pacientes ADD COLUMN longitud FLOAT'))
+        if 'ubicacion_compartida' not in columnas_paciente:
+            connection.execute(text(
+                'ALTER TABLE pacientes ADD COLUMN ubicacion_compartida BOOLEAN NOT NULL DEFAULT FALSE'
+            ))
         columnas = {columna['name'] for columna in inspect(connection).get_columns('enfermeros')}
         if 'verificado' not in columnas:
             connection.execute(text(
                 'ALTER TABLE enfermeros ADD COLUMN verificado BOOLEAN NOT NULL DEFAULT FALSE'
             ))
+        precio = next(
+            (columna for columna in inspect(connection).get_columns('servicios')
+             if columna['name'] == 'precioEstimado'),
+            None,
+        )
+        if precio and not precio['nullable']:
+            if connection.dialect.name == 'mysql':
+                connection.execute(text(
+                    'ALTER TABLE servicios MODIFY COLUMN precioEstimado NUMERIC(10, 2) NULL'
+                ))
+            elif connection.dialect.name == 'postgresql':
+                connection.execute(text(
+                    'ALTER TABLE servicios ALTER COLUMN "precioEstimado" DROP NOT NULL'
+                ))
+            else:
+                raise RuntimeError(
+                    'No se puede migrar precioEstimado a opcional en esta base de datos.'
+                )
+
+
+def inicializar_catalogo_servicios():
+    """Agregar los servicios elegidos si faltan, sin asignar precios inventados."""
+    existentes = {
+        servicio.tipoServicio
+        for servicio in Servicio.query.filter(
+            Servicio.tipoServicio.in_(SERVICIOS_INICIALES)
+        ).all()
+    }
+    db.session.add_all(
+        Servicio(tipoServicio=tipo, precioEstimado=None)
+        for tipo in SERVICIOS_INICIALES
+        if tipo not in existentes
+    )
+    db.session.commit()

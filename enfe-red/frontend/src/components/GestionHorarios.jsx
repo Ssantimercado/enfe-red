@@ -4,6 +4,7 @@ import Icon from './ui/Icon';
 
 export default function GestionHorarios() {
   const [schedules, setSchedules] = useState([]);
+  const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({
     dia_semana: 'Lunes',
     hora_inicio: '08:00',
@@ -42,21 +43,54 @@ export default function GestionHorarios() {
     if (saving) return;
     setSaving(true);
     try {
-      const result = await api('/perfil/enfermero/horarios', {
-        method: 'POST',
-        body: form,
-      });
-      if (result.disponibilidad)
+      const result = await api(
+        `/perfil/enfermero/horarios${editingId ? `/${editingId}` : ''}`,
+        {
+          method: editingId ? 'PUT' : 'POST',
+          body: form,
+        },
+      );
+      if (result.disponibilidad) {
         setSchedules((current) => [
           ...current.filter((item) => item.id !== result.disponibilidad.id),
           result.disponibilidad,
         ]);
+      }
+      setEditingId(null);
+      setForm({
+        dia_semana: 'Lunes',
+        hora_inicio: '08:00',
+        hora_fin: '16:00',
+        estado: 'Disponible',
+      });
       setMessage(result.mensaje || 'Horario guardado.');
     } catch (err) {
       setError(err.message);
     } finally {
       setSaving(false);
     }
+  }
+  function editSchedule(item) {
+    setEditingId(item.id);
+    setForm({
+      dia_semana: item.dia_semana,
+      hora_inicio: item.hora_inicio,
+      hora_fin: item.hora_fin,
+      estado: item.estado,
+    });
+    setError('');
+    setMessage('');
+  }
+  function cancelEdit() {
+    setEditingId(null);
+    setForm({
+      dia_semana: 'Lunes',
+      hora_inicio: '08:00',
+      hora_fin: '16:00',
+      estado: 'Disponible',
+    });
+    setError('');
+    setMessage('');
   }
   return (
     <section className="content-panel" id="horarios">
@@ -90,11 +124,22 @@ export default function GestionHorarios() {
                       {item.hora_inicio} – {item.hora_fin}
                     </p>
                   </div>
-                  <span
-                    className={`availability ${item.estado !== 'Disponible' ? 'unavailable' : ''}`}
-                  >
-                    {item.estado}
-                  </span>
+                  <div className="schedule-row-actions">
+                    <span
+                      className={`availability ${item.estado !== 'Disponible' ? 'unavailable' : ''}`}
+                    >
+                      {item.estado}
+                    </span>
+                    <button
+                      className="text-link"
+                      type="button"
+                      disabled={saving}
+                      onClick={() => editSchedule(item)}
+                      aria-label={`Editar horario de ${item.dia_semana}, ${item.hora_inicio} a ${item.hora_fin}`}
+                    >
+                      Editar
+                    </button>
+                  </div>
                 </div>
               ))
           ) : (
@@ -118,7 +163,7 @@ export default function GestionHorarios() {
           )}
         </div>
         <form className="schedule-form" onSubmit={save} aria-busy={saving}>
-          <h3>Agregar horario</h3>
+          <h3>{editingId ? 'Editar horario' : 'Agregar horario'}</h3>
           <div className="form-grid">
             <label className="field">
               Día
@@ -126,6 +171,7 @@ export default function GestionHorarios() {
                 name="dia_semana"
                 value={form.dia_semana}
                 onChange={change}
+                disabled={saving}
               >
                 {DAYS.map((day) => (
                   <option key={day}>{day}</option>
@@ -134,7 +180,12 @@ export default function GestionHorarios() {
             </label>
             <label className="field">
               Estado
-              <select name="estado" value={form.estado} onChange={change}>
+              <select
+                name="estado"
+                value={form.estado}
+                onChange={change}
+                disabled={saving}
+              >
                 {[
                   'Disponible',
                   'Ocupado / Reservado',
@@ -154,6 +205,7 @@ export default function GestionHorarios() {
                 value={form.hora_inicio}
                 onChange={change}
                 required
+                disabled={saving}
               />
             </label>
             <label className="field">
@@ -164,6 +216,7 @@ export default function GestionHorarios() {
                 value={form.hora_fin}
                 onChange={change}
                 required
+                disabled={saving}
               />
             </label>
           </div>
@@ -171,8 +224,22 @@ export default function GestionHorarios() {
             className="button button-primary button-full"
             disabled={saving}
           >
-            {saving ? 'Guardando…' : 'Agregar horario'}
+            {saving
+              ? 'Guardando…'
+              : editingId
+                ? 'Guardar cambios'
+                : 'Agregar horario'}
           </button>
+          {editingId && (
+            <button
+              className="text-link schedule-cancel-edit"
+              type="button"
+              onClick={cancelEdit}
+              disabled={saving}
+            >
+              Cancelar edición
+            </button>
+          )}
         </form>
       </div>
     </section>

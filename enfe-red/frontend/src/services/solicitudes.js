@@ -19,6 +19,9 @@ export const obtenerServicios = (signal) => api.get('/servicios', { signal }).th
 export const crearSolicitud = (datos) => api.post('/solicitudes', datos).then(r => r.data);
 export const obtenerSolicitud = (id, signal) => api.get(`/solicitudes/${id}`, { signal }).then(r => r.data);
 export const cancelarSolicitud = (id) => api.put(`/solicitudes/${id}/cancelar`).then(r => r.data);
+export const obtenerSolicitudesEnfermero = (id, signal) => api.get(`/solicitudes/enfermero/${id}`, { signal }).then(r => r.data);
+export const aceptarSolicitud = (id) => api.put(`/solicitudes/${id}/aceptar`).then(r => r.data);
+export const rechazarSolicitud = (id) => api.put(`/solicitudes/${id}/rechazar`).then(r => r.data);
 export function errorSolicitud(error) {
   if (error.response?.status === 401) return 'Tu sesión venció. Volvé a iniciar sesión.';
   if (error.response?.status === 404) return 'No se encontró el recurso o esta función todavía no está disponible en el servidor.';
