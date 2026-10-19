@@ -9,6 +9,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload
 
 from database import db
+from models.notificacion_models import notificar
 from models.servicio_models import Servicio
 from models.solicitud_models import ESTADOS_ACTIVOS, SolicitudServicio
 from models.usuario_models import Enfermero, Paciente, Usuario
@@ -19,6 +20,7 @@ ZONA_HORARIA_ARGENTINA = timezone(timedelta(hours=-3))
 CAMPOS_SOLICITUD = {
     'idPaciente', 'idEnfermero', 'idServicio', 'fecha', 'hora', 'direccionAtencion',
 }
+NOTIFICACIONES_ESTADO = {'Aceptada': ('aceptada', 'aceptó'), 'Rechazada': ('rechazada', 'rechazó')}
 
 
 # Funciones auxiliares de este módulo.
@@ -111,6 +113,26 @@ def _turno_ocupado(id_enfermero, fecha, hora, estados=ESTADOS_ACTIVOS, excluir=N
     return consulta.with_for_update().first() is not None
 
 
+def _nombre_completo(perfil, alternativo):
+    return ' '.join(filter(None, [perfil.nombre, perfil.apellido])) or alternativo
+
+
+def _notificar_cambio_estado(solicitud, destino):
+    """SCRUM-64.2: avisar al paciente cuando el enfermero acepta o rechaza su turno."""
+    if destino not in NOTIFICACIONES_ESTADO:
+        return
+    tipo, verbo = NOTIFICACIONES_ESTADO[destino]
+    enfermero = _nombre_completo(solicitud.enfermero, 'El profesional')
+    servicio = solicitud.servicio.tipoServicio if solicitud.servicio else 'servicio'
+    notificar(
+        solicitud.paciente.usuario_id,
+        tipo,
+        f'{enfermero} {verbo} tu solicitud de {servicio} del '
+        f'{solicitud.fecha:%d/%m} a las {solicitud.hora:%H:%M}.',
+        solicitud.idSolicitud,
+    )
+
+
 def _cambiar_estado_solicitud(id_solicitud, *, rol, origen, destino, accion, mensaje):
     """Validar titularidad y guardar una transición de estado de forma atómica."""
     usuario = _usuario_actual()
@@ -149,6 +171,8 @@ def _cambiar_estado_solicitud(id_solicitud, *, rol, origen, destino, accion, men
         if actualizadas != 1:
             db.session.rollback()
             return jsonify({'error': 'La solicitud cambió de estado. Volvé a consultarla.'}), 400
+        # La alerta se guarda en la misma transacción que el cambio de estado.
+        _notificar_cambio_estado(solicitud, destino)
         db.session.commit()
     except SQLAlchemyError:
         db.session.rollback()

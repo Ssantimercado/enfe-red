@@ -36,12 +36,30 @@ Solo participantes. HTTP 200 con array de mensajes en orden ascendente de idMens
 
 Errores de aplicación usan `{ "error": "mensaje" }`: 400 body inválido, 401 usuario inexistente, 403 acceso ajeno, 404 solicitud inexistente, 409 estado no habilitado, 500 error de persistencia (con rollback). Flask-JWT-Extended puede devolver `msg` en errores de token ausente/vencido. Manejar siempre el estado HTTP.
 
-## Punto de integración con Renzo
+## Notificaciones (SCRUM-64, para la campana de Pablo)
 
-La creación de Mensaje hace flush y commit en `mensajesSolicitud`. Si Renzo agrega notificaciones, insertar la notificación al destinatario en esa misma transacción antes del commit. Actualmente no se emiten notificaciones.
+Tabla `notificaciones` (`models/notificacion_models.py`): `idNotificacion`, `idUsuario` (Usuario, no perfil), `idSolicitud`, `tipo` (`aceptada`, `rechazada` o `mensaje`), `mensaje` (hasta 255 caracteres), `leida` y `fechaHora` (UTC). `db.create_all()` la crea al iniciar si falta, sin tocar otras tablas.
+
+Disparadores, siempre en la misma transacción que el cambio (si falla la alerta, se revierte todo):
+
+- El enfermero acepta o rechaza una solicitud: aviso al paciente, por ejemplo `Laura Gómez aceptó tu solicitud de Curaciones del 10/01 a las 10:30.`
+- Llega un mensaje: aviso al otro participante. Si ya tiene un aviso de mensaje sin leer de esa solicitud, se actualiza en lugar de acumular uno por mensaje.
+- Cancelar y finalizar no generan avisos.
+
+`GET /api/notificaciones/<idUsuario>`: solo las propias (403 si no). HTTP 200 con las últimas 50, de la más nueva a la más vieja, o `[]`.
+
+```json
+{ "idNotificacion": 7, "idUsuario": 11, "idSolicitud": 15, "tipo": "aceptada",
+  "mensaje": "Laura Gómez aceptó tu solicitud de Curaciones del 10/01 a las 10:30.",
+  "leida": false, "fechaHora": "2026-10-19T23:55:00Z" }
+```
+
+`PUT /api/notificaciones/<idNotificacion>/leer`: solo el dueño (403 ajena, 404 inexistente). Idempotente; responde 200 con `{ "mensaje": "Notificación leída", "notificacion": {...} }`.
+
+Ambos requieren `Authorization: Bearer <token>` y usan `{ "error": "..." }` para errores de aplicación.
 
 ## Validación
 
 Desde backend: `python -m unittest discover -s tests -q`.
 
-Se agregaron 10 pruebas de historial privado, estados terminales, envío bidireccional, aislamiento entre solicitudes, permisos, autenticación, validación, bloqueo de suplantación, timestamps UTC, rollback y esquema. Las pruebas usan SQLite en memoria: no alteran MySQL local. El bloqueo `FOR UPDATE` del envío está destinado a MySQL/InnoDB; la concurrencia real debe validarse allí al integrar. No hay todavía pruebas de interfaz de chat ni de notificaciones.
+Se agregaron 10 pruebas de historial privado, estados terminales, envío bidireccional, aislamiento entre solicitudes, permisos, autenticación, validación, bloqueo de suplantación, timestamps UTC, rollback y esquema. Las pruebas usan SQLite en memoria: no alteran MySQL local. El bloqueo `FOR UPDATE` del envío está destinado a MySQL/InnoDB; la concurrencia real debe validarse allí al integrar. `tests/test_notificaciones.py` agrega 9 pruebas: aviso al aceptar y rechazar, transiciones sin aviso, rollback si falla la alerta, mensajes sin acumulación, privacidad, lectura idempotente, orden y esquema.

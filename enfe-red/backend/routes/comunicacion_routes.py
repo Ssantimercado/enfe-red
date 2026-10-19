@@ -12,6 +12,7 @@ from models.usuario_models import Usuario, Paciente, Enfermero
 from models.solicitud_models import SolicitudServicio
 from models.calificacion_models import Calificacion
 from models.mensaje_models import Mensaje
+from models.notificacion_models import notificar
 
 
 comunicacion_bp = Blueprint('comunicacion', __name__)
@@ -157,6 +158,17 @@ def calificarSolicitud(idSolicitud):
     }), 201
 
 
+def _notificar_mensaje(solicitud, emisor):
+    if emisor.rol == 'paciente':
+        perfil, destinatario, alternativo = solicitud.paciente, solicitud.enfermero.usuario_id, 'tu paciente'
+    else:
+        perfil, destinatario, alternativo = solicitud.enfermero, solicitud.paciente.usuario_id, 'tu enfermero'
+    nombre = ' '.join(filter(None, [perfil.nombre, perfil.apellido])) or alternativo
+    notificar(destinatario, 'mensaje',
+              f'Nuevo mensaje de {nombre} sobre la solicitud #{solicitud.idSolicitud}.',
+              solicitud.idSolicitud)
+
+
 @comunicacion_bp.route('/solicitudes/<int:idSolicitud>/mensajes', methods=['GET', 'POST'])
 @jwt_required()
 def mensajesSolicitud(idSolicitud):
@@ -198,6 +210,8 @@ def mensajesSolicitud(idSolicitud):
         db.session.add(mensaje)
         db.session.flush()
         resultado = mensaje.to_dict()
+        # SCRUM-64.2: avisar al otro participante en la misma transacción.
+        _notificar_mensaje(solicitud, usuario)
         db.session.commit()
         return jsonify(resultado), 201
     except SQLAlchemyError:
