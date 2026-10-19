@@ -1603,6 +1603,130 @@
 .service-history-empty {
   margin: 20px 0 0;
 }
+.service-history-filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 18px;
+  margin-top: 22px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #f7f9fb;
+  font-size: 13px;
+}
+.service-history-filters select,
+.service-history-filters input {
+  font-size: 13px;
+  padding: 11px 9px;
+}
+.service-history-filters-summary {
+  display: grid;
+  justify-items: end;
+  gap: 4px;
+}
+.service-history-filters-summary p {
+  color: var(--muted);
+  margin: 0;
+}
+.notification-menu {
+  position: relative;
+}
+.notification-trigger {
+  position: relative;
+}
+.notification-count {
+  position: absolute;
+  top: 3px;
+  right: 2px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border: 2px solid #fff;
+  border-radius: 9px;
+  background: var(--blue);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+}
+.notification-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 1600;
+  width: min(360px, calc(100vw - 32px));
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 16px 40px #0f354b1f;
+}
+.notification-panel h2 {
+  font-size: 15px;
+  margin-bottom: 10px;
+}
+.notification-panel .notice {
+  margin-bottom: 0;
+  font-size: 13px;
+}
+.notification-list {
+  display: grid;
+  max-height: 360px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.notification-item {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 11px 10px;
+  border: 0;
+  border-top: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.notification-item.unread {
+  border-left: 3px solid var(--blue);
+  background: var(--blue-soft);
+  color: var(--ink);
+  font-weight: 600;
+  cursor: pointer;
+}
+.notification-item.unread:hover {
+  background: #e2f0f9;
+}
+.notification-item time {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+.notification-empty {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0;
+}
+@media (max-width: 800px) {
+  .service-history-filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .service-history-filters-summary {
+    justify-items: start;
+  }
+  .notification-panel {
+    position: fixed;
+    top: 76px;
+    right: 16px;
+    left: 16px;
+    width: auto;
+  }
+}
 .public-profile-layout {
   grid-template-areas: 'information contact';
 }

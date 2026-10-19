@@ -8,10 +8,12 @@ import {
 import { cerrarSesion, sesionActual } from '../api';
 import Brand from './ui/Brand';
 import Icon from './ui/Icon';
+import Notificaciones from './Notificaciones';
 export default function AppShell() {
   const navigate = useNavigate();
   const location = useLocation();
-  const nurse = sesionActual()?.rol === 'enfermero';
+  const session = sesionActual();
+  const nurse = session?.rol === 'enfermero';
   const profile = nurse ? '/perfil-enfermero' : '/perfil-paciente';
   function logout() {
     cerrarSesion();
@@ -62,6 +64,7 @@ export default function AppShell() {
                 <span className="nurse-requests-label">Solicitudes</span>
               </Link>
             )}
+            <Notificaciones userId={Number(session?.sub)} />
             <Link className="account-link" to={profile}>
               <span className="account-avatar">
                 <Icon name="user" size={18} />

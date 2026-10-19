@@ -11,8 +11,11 @@ function fechaLegible(fecha) {
   });
 }
 
+const FILTROS_VACIOS = { desde: '', hasta: '', estado: '' };
+
 export default function HistorialServicios({ userId, nurse }) {
   const [abierto, setAbierto] = useState(false);
+  const [filtros, setFiltros] = useState(FILTROS_VACIOS);
   const [solicitudes, setSolicitudes] = useState([]);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState('');
@@ -45,6 +48,22 @@ export default function HistorialServicios({ userId, nurse }) {
 
   const titulo = nurse ? 'Historial de pacientes' : 'Historial de enfermeros';
   const palabras = comentario.trim() ? comentario.trim().split(/\s+/).length : 0;
+  // Las opciones salen de la respuesta: el backend decide qué estados integran el historial.
+  const estados = [...new Set(solicitudes.map((item) => item.estado).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, 'es'));
+  const rangoInvalido = Boolean(filtros.desde && filtros.hasta && filtros.desde > filtros.hasta);
+  const filtrando = Boolean(filtros.desde || filtros.hasta || filtros.estado);
+  const visibles = rangoInvalido
+    ? solicitudes
+    : solicitudes.filter((item) => (
+      (!filtros.desde || item.fecha >= filtros.desde)
+      && (!filtros.hasta || item.fecha <= filtros.hasta)
+      && (!filtros.estado || item.estado === filtros.estado)
+    ));
+
+  function cambiarFiltro(campo, valor) {
+    setFiltros((actuales) => ({ ...actuales, [campo]: valor }));
+  }
 
   function iniciarCalificacion(idSolicitud) {
     setCalificando(idSolicitud);
@@ -116,8 +135,71 @@ export default function HistorialServicios({ userId, nurse }) {
               </button>
             </div>
           ) : solicitudes.length ? (
+            <>
+            <div className="service-history-filters" role="group" aria-label="Filtrar historial">
+              <div className="field">
+                <span>Fecha de atención</span>
+                <div className="price-range">
+                  <label>
+                    <span className="range-label">Desde</span>
+                    <input
+                      type="date"
+                      aria-label="Fecha desde"
+                      aria-describedby={rangoInvalido ? 'historial-fechas' : undefined}
+                      aria-invalid={rangoInvalido}
+                      max={filtros.hasta || undefined}
+                      value={filtros.desde}
+                      onChange={(event) => cambiarFiltro('desde', event.target.value)}
+                    />
+                  </label>
+                  <label>
+                    <span className="range-label">Hasta</span>
+                    <input
+                      type="date"
+                      aria-label="Fecha hasta"
+                      aria-describedby={rangoInvalido ? 'historial-fechas' : undefined}
+                      aria-invalid={rangoInvalido}
+                      min={filtros.desde || undefined}
+                      value={filtros.hasta}
+                      onChange={(event) => cambiarFiltro('hasta', event.target.value)}
+                    />
+                  </label>
+                </div>
+                {rangoInvalido && (
+                  <span id="historial-fechas" className="field-error" role="alert">
+                    La fecha desde no puede ser posterior a la fecha hasta.
+                  </span>
+                )}
+              </div>
+              <div className="field">
+                <label htmlFor="historial-estado">Estado</label>
+                <select
+                  id="historial-estado"
+                  value={filtros.estado}
+                  onChange={(event) => cambiarFiltro('estado', event.target.value)}
+                >
+                  <option value="">Todos los estados</option>
+                  {estados.map((estado) => (
+                    <option key={estado}>{estado}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="service-history-filters-summary">
+                <p role="status">
+                  {filtrando
+                    ? `${visibles.length} de ${solicitudes.length} servicios`
+                    : `${solicitudes.length} ${solicitudes.length === 1 ? 'servicio' : 'servicios'}`}
+                </p>
+                {filtrando && (
+                  <button className="text-link" type="button" onClick={() => setFiltros(FILTROS_VACIOS)}>
+                    Limpiar filtros
+                  </button>
+                )}
+              </div>
+            </div>
+            {visibles.length ? (
             <div className="service-history-list">
-              {solicitudes.map((solicitud) => {
+              {visibles.map((solicitud) => {
                 const persona = nurse ? solicitud.paciente : solicitud.enfermero;
                 const calificaciones = solicitud.calificaciones || [];
                 const propia = calificaciones.find((item) => item.idUsuarioAutor === userId);
@@ -222,6 +304,12 @@ export default function HistorialServicios({ userId, nurse }) {
                 );
               })}
             </div>
+            ) : (
+              <p className="service-history-empty">
+                Ningún servicio coincide con los filtros elegidos.
+              </p>
+            )}
+            </>
           ) : (
             <p className="service-history-empty">
               Todavía no hay servicios aceptados cuya fecha y hora hayan pasado.

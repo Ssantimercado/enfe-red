@@ -864,3 +864,102 @@ test('cancelación rechazada conserva estado y muestra el error', async () => {
   assert.equal(document.querySelector('dialog').open, true);
   assert.equal(button('Sí, cancelar').disabled, false);
 });
+
+test('el historial filtra por fecha y estado y permite limpiar los filtros', async () => {
+  session('paciente');
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url, options) => {
+    if (String(url).endsWith('/usuarios/1/historial')) {
+      return response([
+        { idSolicitud: 3, fecha: '2026-09-20', hora: '10:00', estado: 'Realizada', servicio: { tipoServicio: 'Curaciones' }, enfermero: { nombre: 'Lucia', apellido: 'Gomez' } },
+        { idSolicitud: 2, fecha: '2026-08-10', hora: '09:00', estado: 'Cancelada', servicio: { tipoServicio: 'Inyectables' }, enfermero: { nombre: 'Marta', apellido: 'Diaz' } },
+        { idSolicitud: 1, fecha: '2026-07-01', hora: '08:00', estado: 'Realizada', servicio: { tipoServicio: 'Control' }, enfermero: { nombre: 'Juan', apellido: 'Sosa' } },
+      ]);
+    }
+    return original(url, options);
+  };
+  try {
+    await mount('/perfil-paciente');
+    await click(button('Ver historial de enfermeros'));
+    const estado = document.querySelector('#historial-estado');
+    assert.deepEqual([...estado.options].map((option) => option.value), ['', 'Cancelada', 'Realizada']);
+    await act(async () => {
+      estado.value = 'Realizada';
+      estado.dispatchEvent(new window.Event('change', { bubbles: true }));
+    });
+    assert.match(document.body.textContent, /2 de 3 servicios/);
+    assert.doesNotMatch(document.body.textContent, /Marta/);
+    await type(document.querySelector('[aria-label="Fecha desde"]'), '2026-09-01');
+    assert.match(document.body.textContent, /1 de 3 servicios/);
+    assert.match(document.body.textContent, /Lucia/);
+    assert.doesNotMatch(document.body.textContent, /Juan/);
+    await type(document.querySelector('[aria-label="Fecha hasta"]'), '2026-08-01');
+    assert.match(document.body.textContent, /no puede ser posterior/);
+    await type(document.querySelector('[aria-label="Fecha desde"]'), '2026-10-01');
+    await type(document.querySelector('[aria-label="Fecha hasta"]'), '2026-10-05');
+    assert.match(document.body.textContent, /Ningún servicio coincide/);
+    await click(button('Limpiar filtros'));
+    assert.match(document.body.textContent, /3 servicios/);
+    assert.match(document.body.textContent, /Marta/);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test('la campana no aparece mientras no exista el endpoint de notificaciones', async () => {
+  session('paciente');
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url, options) => {
+    if (String(url).includes('/notificaciones/')) return response({ error: 'Not Found' }, 404);
+    return original(url, options);
+  };
+  try {
+    await mount('/home');
+    assert.equal(document.querySelector('.notification-trigger'), null);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test('la campana cuenta las no leídas y marca una como leída con el PUT', async () => {
+  session('enfermero');
+  const original = globalThis.fetch;
+  const llamadas = [];
+  globalThis.fetch = async (url, options = {}) => {
+    const ruta = String(url);
+    if (ruta.endsWith('/notificaciones/1')) {
+      llamadas.push(['GET', ruta]);
+      return response([
+        { idNotificacion: 7, mensaje: 'Aceptaron tu turno', leida: false, fechaHora: '2026-10-18T13:00:00Z' },
+        { idNotificacion: 8, mensaje: 'Tenés un mensaje nuevo', leida: false, fechaHora: '2026-10-18T14:00:00Z' },
+        { idNotificacion: 6, mensaje: 'Turno rechazado', leida: true, fechaHora: '2026-10-17T10:00:00Z' },
+      ]);
+    }
+    if (ruta.endsWith('/notificaciones/7/leer')) {
+      llamadas.push([options.method, ruta, options.headers?.Authorization]);
+      return response({ mensaje: 'Notificación leída' });
+    }
+    return original(url, options);
+  };
+  try {
+    await mount('/home');
+    const campana = button('Notificaciones');
+    assert.equal(campana.getAttribute('aria-label'), 'Notificaciones, 2 sin leer');
+    assert.equal(document.querySelector('.notification-count').textContent, '2');
+    await click(campana);
+    assert.equal(campana.getAttribute('aria-expanded'), 'true');
+    assert.match(document.body.textContent, /Turno rechazado/);
+    await click(button('Aceptaron tu turno'));
+    assert.deepEqual(llamadas.at(-1), [
+      'PUT',
+      'http://localhost:5000/api/notificaciones/7/leer',
+      `Bearer ${localStorage.getItem('token')}`,
+    ]);
+    assert.equal(document.querySelector('.notification-count').textContent, '1');
+    assert.equal(campana.getAttribute('aria-label'), 'Notificaciones, 1 sin leer');
+    await act(async () => document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape' })));
+    assert.equal(document.querySelector('.notification-panel'), null);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
