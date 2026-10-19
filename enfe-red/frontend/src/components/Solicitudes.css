@@ -74,6 +74,35 @@
 .solicitud-reject-dialog::backdrop { background: rgb(0 0 0 / 45%); }
 .solicitud-reject-dialog .solicitud-card-actions { justify-content: flex-end; }
 .nurse-requests-link { min-height: 40px; gap: 7px; white-space: nowrap; }
+.chat-servicio { margin-top: 22px; }
+.solicitud-card .chat-servicio { padding: 18px 0 0; border: 0; border-top: 1px solid var(--border); border-radius: 0; box-shadow: none; }
+.chat-mensajes {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 340px;
+  min-height: 120px;
+  overflow-y: auto;
+  margin: 16px 0;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #f8fbfc;
+}
+.chat-mensaje {
+  max-width: min(78%, 520px);
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: #fff;
+  border: 1px solid var(--border);
+}
+.chat-mensaje.propio { align-self: flex-end; background: var(--blue-soft); border-color: #cfe6f5; }
+.chat-mensaje.recibido { align-self: flex-start; }
+.chat-mensaje p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink); }
+.chat-mensaje time { display: block; margin-top: 4px; color: var(--muted); font-size: 12px; text-align: right; }
+.chat-vacio { margin: auto; color: var(--muted); text-align: center; }
+.chat-formulario { display: grid; gap: 8px; }
+.chat-formulario .button { justify-self: end; }
 @media (max-width: 480px) {
   .solicitud-summary { grid-template-columns: 1fr; gap: 6px; }
   .solicitud-summary dd { margin-bottom: 12px; }

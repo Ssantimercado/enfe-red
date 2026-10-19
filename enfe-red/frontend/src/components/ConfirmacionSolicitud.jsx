@@ -2,7 +2,11 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { obtenerSolicitud, errorSolicitud } from '../services/solicitudes';
 import CancelarSolicitud from './CancelarSolicitud';
+import ChatServicio from './ChatServicio';
 import './Solicitudes.css';
+
+// El chat se habilita al aceptar; después de cerrar queda como registro de lectura.
+const CHAT_VISIBLE = ['Aceptada', 'Realizada', 'Cancelada'];
 
 export default function ConfirmacionSolicitud() {
   const { idSolicitud } = useParams();
@@ -38,5 +42,12 @@ export default function ConfirmacionSolicitud() {
     </>}
     <Link className="button button-secondary" to="/cartilla">Volver a la cartilla</Link>
     </section>
+    {solicitud && CHAT_VISIBLE.includes(solicitud.estado) && (
+      <ChatServicio
+        key={solicitud.idSolicitud}
+        solicitud={solicitud}
+        contraparte={[solicitud.enfermero?.nombre, solicitud.enfermero?.apellido].filter(Boolean).join(' ')}
+      />
+    )}
   </main>;
 }

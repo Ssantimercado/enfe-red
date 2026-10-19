@@ -963,3 +963,127 @@ test('la campana cuenta las no leídas y marca una como leída con el PUT', asyn
     globalThis.fetch = original;
   }
 });
+
+// SCRUM-63 (Santiago): chat asociado al servicio con polling cada 3 segundos.
+async function conChat(mensajesServidor, prueba, { estado = 'Aceptada', envio } = {}) {
+  solicitudHandler = async config => {
+    if (config.url === '/solicitudes/15') return { data: { ...comprobante, estado } };
+    if (config.url === '/solicitudes/enfermero/201') return {
+      data: [{ ...comprobante, estado, paciente: { nombre: 'Ana', apellido: 'Prueba' } }],
+    };
+    throw new Error(`Petición inesperada: ${config.method} ${config.url}`);
+  };
+  const original = globalThis.fetch;
+  const originalSetInterval = window.setInterval;
+  const originalClearInterval = window.clearInterval;
+  const intervalos = new Map();
+  const chat = [];
+  // JSDOM informa la pestaña como oculta; el chat pausa el polling en ese caso.
+  Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
+  window.setInterval = (callback, ms) => {
+    const id = intervalos.size + 1;
+    intervalos.set(id, { callback, ms });
+    return id;
+  };
+  window.clearInterval = id => intervalos.delete(id);
+  globalThis.fetch = async (url, options = {}) => {
+    const ruta = String(url);
+    if (ruta.endsWith('/perfil/enfermero')) return response({ ...profile, idEnfermero: 201 });
+    if (!ruta.endsWith('/solicitudes/15/mensajes')) return original(url, options);
+    chat.push({ method: options.method || 'GET', body: options.body });
+    if (options.method === 'POST') return envio ? envio(JSON.parse(options.body)) : response({}, 500);
+    return response(mensajesServidor());
+  };
+  const poll = async () => {
+    for (const { callback } of intervalos.values()) await act(async () => callback());
+  };
+  try {
+    await prueba({ chat, intervalos, poll });
+  } finally {
+    globalThis.fetch = original;
+    window.setInterval = originalSetInterval;
+    window.clearInterval = originalClearInterval;
+    delete document.hidden;
+  }
+}
+
+const mensajeChat = (idMensaje, idEmisor, contenido) => ({
+  idMensaje, idSolicitud: 15, idEmisor, contenido, fechaHora: '2026-10-15T20:30:00.000000Z',
+});
+
+test('el paciente chatea en una solicitud aceptada y el polling no duplica mensajes', async () => {
+  session();
+  let servidor = [mensajeChat(1, 21, 'Hola, llego a las 14:30.')];
+  await conChat(() => servidor, async ({ chat, intervalos, poll }) => {
+    await mount('/solicitudes/15');
+    assert.match(document.body.textContent, /Mensajes del servicio/);
+    assert.match(document.body.textContent, /con Laura Gómez/);
+    assert.equal(document.querySelectorAll('.chat-mensaje.recibido').length, 1);
+    assert.equal([...intervalos.values()][0].ms, 3000);
+
+    await typeTextArea(document.querySelector('.chat-formulario textarea'), '  Perfecto, te espero.  ');
+    await submitForm();
+    const post = chat.find(llamada => llamada.method === 'POST');
+    assert.deepEqual(JSON.parse(post.body), { contenido: 'Perfecto, te espero.' });
+    assert.equal(document.querySelector('.chat-formulario textarea').value, '');
+    assert.equal(document.querySelectorAll('.chat-mensaje.propio').length, 1);
+
+    // El polling trae el mismo mensaje propio más uno nuevo: no se duplica.
+    servidor = [...servidor, mensajeChat(2, 1, 'Perfecto, te espero.'), mensajeChat(3, 21, 'Gracias.')];
+    await poll();
+    assert.equal(document.querySelectorAll('.chat-mensaje').length, 3);
+    assert.match(document.querySelector('.chat-mensajes').lastElementChild.textContent, /Gracias\./);
+  }, { envio: datos => response(mensajeChat(2, 1, datos.contenido), 201) });
+});
+
+test('un envío rechazado conserva el texto y muestra el error del servidor', async () => {
+  session();
+  await conChat(() => [], async () => {
+    await mount('/solicitudes/15');
+    assert.match(document.body.textContent, /Todavía no hay mensajes/);
+    await typeTextArea(document.querySelector('.chat-formulario textarea'), 'Hola');
+    await submitForm();
+    assert.match(document.querySelector('.chat-formulario [role="alert"]').textContent, /Aceptada/);
+    assert.equal(document.querySelector('.chat-formulario textarea').value, 'Hola');
+  }, {
+    envio: () => response({ error: 'Solo podés enviar mensajes cuando la solicitud está Aceptada' }, 409),
+  });
+});
+
+test('una solicitud realizada muestra el chat solo para leer y sin polling', async () => {
+  session();
+  await conChat(() => [mensajeChat(1, 1, 'Gracias por la atención.')], async ({ intervalos }) => {
+    await mount('/solicitudes/15');
+    assert.match(document.body.textContent, /La conversación quedó cerrada/);
+    assert.equal(document.querySelectorAll('.chat-mensaje.propio').length, 1);
+    assert.equal(document.querySelector('.chat-formulario'), null);
+    assert.equal(intervalos.size, 0);
+  }, { estado: 'Realizada' });
+});
+
+test('un pedido pendiente todavía no muestra el chat', async () => {
+  session();
+  await conChat(() => [], async ({ chat }) => {
+    await mount('/solicitudes/15');
+    assert.match(document.body.textContent, /Comprobante de solicitud/);
+    assert.equal(document.querySelector('.chat-servicio'), null);
+    assert.equal(chat.length, 0);
+  }, { estado: 'Pendiente' });
+});
+
+test('el enfermero abre los mensajes de una solicitud aceptada y el polling se detiene al cerrarlos', async () => {
+  session('enfermero');
+  await conChat(() => [mensajeChat(1, 1, '¿Tocás el timbre del 2B?')], async ({ chat, intervalos }) => {
+    await mount('/solicitudes-enfermero');
+    assert.equal(document.querySelector('.chat-servicio'), null);
+    await click(button('Ver mensajes'));
+    assert.equal(button('Ocultar mensajes').getAttribute('aria-expanded'), 'true');
+    assert.match(document.body.textContent, /con Ana Prueba/);
+    assert.match(document.querySelector('.chat-mensajes').textContent, /timbre del 2B/);
+    assert.equal(chat.filter(llamada => llamada.method === 'GET').length, 1);
+    assert.equal(intervalos.size, 1);
+    await click(button('Ocultar mensajes'));
+    assert.equal(document.querySelector('.chat-servicio'), null);
+    assert.equal(intervalos.size, 0);
+  });
+});

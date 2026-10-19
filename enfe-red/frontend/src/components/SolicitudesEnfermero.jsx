@@ -7,7 +7,11 @@ import {
   obtenerSolicitudesEnfermero,
   rechazarSolicitud,
 } from '../services/solicitudes';
+import ChatServicio from './ChatServicio';
 import './Solicitudes.css';
+
+// El chat se habilita al aceptar; después de cerrar queda como registro de lectura.
+const CHAT_VISIBLE = ['Aceptada', 'Realizada', 'Cancelada'];
 
 function mensajeError(error) {
   if (!error.response && error.message && error.message !== 'Network Error') {
@@ -24,6 +28,7 @@ export default function SolicitudesEnfermero() {
   const [error, setError] = useState('');
   const [mensaje, setMensaje] = useState('');
   const [intento, setIntento] = useState(0);
+  const [chatAbierto, setChatAbierto] = useState(null);
   const dialog = useRef(null);
   const ocupado = useRef(false);
 
@@ -123,6 +128,27 @@ export default function SolicitudesEnfermero() {
                 <dt>Dirección</dt>
                 <dd>{solicitud.direccionAtencion}</dd>
               </dl>
+              {CHAT_VISIBLE.includes(solicitud.estado) && (
+                <div className="solicitud-card-actions">
+                  <button
+                    className="button button-secondary"
+                    type="button"
+                    aria-expanded={chatAbierto === solicitud.idSolicitud}
+                    onClick={() => setChatAbierto((actual) => (
+                      actual === solicitud.idSolicitud ? null : solicitud.idSolicitud
+                    ))}
+                  >
+                    {chatAbierto === solicitud.idSolicitud ? 'Ocultar mensajes' : 'Ver mensajes'}
+                  </button>
+                </div>
+              )}
+              {chatAbierto === solicitud.idSolicitud && CHAT_VISIBLE.includes(solicitud.estado) && (
+                <ChatServicio
+                  key={`${solicitud.idSolicitud}-${solicitud.estado}`}
+                  solicitud={solicitud}
+                  contraparte={[solicitud.paciente?.nombre, solicitud.paciente?.apellido].filter(Boolean).join(' ')}
+                />
+              )}
               {solicitud.estado === 'Pendiente' && (
                 <div className="solicitud-card-actions">
                   <button
