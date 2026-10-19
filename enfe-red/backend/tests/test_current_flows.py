@@ -201,21 +201,34 @@ class CurrentFlowsTest(unittest.TestCase):
             with self.subTest(query=query):
                 self.assertEqual(self.client.get('/api/enfermeros/buscar?' + query).status_code, 400)
 
-    def test_nurse_directory_only_returns_patients_with_own_active_requests(self):
+    def test_nurse_directory_returns_patients_with_any_own_request(self):
         segundo_usuario = Usuario(
             email='otro-paciente@test.local',
             rol='paciente',
             password_hash='unused',
         )
-        db.session.add(segundo_usuario)
+        tercer_usuario = Usuario(
+            email='tercer-paciente@test.local',
+            rol='paciente',
+            password_hash='unused',
+        )
+        db.session.add_all([segundo_usuario, tercer_usuario])
         db.session.flush()
         segundo_paciente = Paciente(
             usuario_id=segundo_usuario.id,
             nombre='Bruno',
             apellido='Paciente',
         )
+        tercer_paciente = Paciente(
+            usuario_id=tercer_usuario.id,
+            nombre='Carla',
+            apellido='Paciente',
+            latitud=-32.90,
+            longitud=-68.85,
+            ubicacion_compartida=True,
+        )
         servicio = Servicio(tipoServicio='Curaciones', precioEstimado=None)
-        db.session.add_all([segundo_paciente, servicio])
+        db.session.add_all([segundo_paciente, tercer_paciente, servicio])
         db.session.flush()
         self.patient.direccion = 'Dirección privada'
         self.patient.telefono = '2615550000'
@@ -260,16 +273,27 @@ class CurrentFlowsTest(unittest.TestCase):
                 estado='Rechazada',
                 direccionAtencion='Otra dirección',
             ),
+            SolicitudServicio(
+                idPaciente=tercer_paciente.id,
+                idEnfermero=1,
+                idServicio=servicio.idServicio,
+                fecha=date(2030, 1, 14),
+                hora=time(10),
+                estado='Rechazada',
+                direccionAtencion='Otra dirección',
+            ),
         ])
         db.session.commit()
 
         result = self.client.get('/api/pacientes/solicitudes-activas', headers=self.headers)
         self.assertEqual(result.status_code, 200)
-        self.assertEqual(result.json['total_resultados'], 2)
-        ana, bruno = result.json['pacientes']
-        self.assertEqual((ana['nombre'], ana['solicitudes_activas']), ('Ana', 1))
+        self.assertEqual(result.json['total_resultados'], 3)
+        ana, bruno, carla = result.json['pacientes']
+        self.assertEqual((ana['nombre'], ana['solicitudes'], ana['solicitudes_activas']), ('Ana', 1, 1))
         self.assertEqual((ana['latitud'], ana['longitud']), (-32.89, -68.84))
-        self.assertEqual((bruno['nombre'], bruno['latitud'], bruno['longitud']), ('Bruno', None, None))
+        self.assertEqual((bruno['nombre'], bruno['solicitudes']), ('Bruno', 1))
+        self.assertEqual((carla['nombre'], carla['solicitudes'], carla['solicitudes_activas']), ('Carla', 1, 0))
+        self.assertEqual((carla['latitud'], carla['longitud']), (None, None))
         response_text = result.get_data(as_text=True)
         for dato_privado in ('Dirección privada', '2615550000', 'Dato médico privado'):
             self.assertNotIn(dato_privado, response_text)
@@ -289,7 +313,8 @@ class CurrentFlowsTest(unittest.TestCase):
             headers={'Authorization': 'Bearer ' + create_access_token(identity='3')},
         )
         self.assertEqual(nurse_three.status_code, 200)
-        self.assertEqual(nurse_three.json['pacientes'], [])
+        self.assertEqual([item['nombre'] for item in nurse_three.json['pacientes']], ['Bruno'])
+        self.assertEqual(nurse_three.json['pacientes'][0]['solicitudes_activas'], 0)
 
     def test_patient_can_save_and_revoke_optional_location_sharing(self):
         patient_headers = {

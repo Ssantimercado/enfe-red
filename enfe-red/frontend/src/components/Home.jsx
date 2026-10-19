@@ -139,7 +139,7 @@ export default function Home() {
                 [
                   'search',
                   'Mis pacientes',
-                  'Consultá los pacientes con solicitudes activas.',
+                  'Consultá a quienes te enviaron solicitudes.',
                   '/cartilla',
                 ],
               ]

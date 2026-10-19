@@ -22,7 +22,7 @@ visual en navegador. Las propuestas para próximos sprints se identifican al fin
 | `/registro` | `Register.jsx` dentro de `AuthLayout` | Elegir paciente o enfermero; admite `?rol=enfermero`; después del éxito ofrece iniciar sesión. |
 | `/recuperar-password` | `RecuperarPassword.jsx` dentro de `AuthLayout` | Correo, código y nueva contraseña, confirmación final; permite reenviar código y cambiar correo. |
 | `/home` | `Home.jsx` dentro de `AppShell` | Paciente: buscar cuidados. Enfermero: gestionar perfil y horarios. |
-| `/cartilla` | `ListaEnfermeros.jsx`, `DirectoryFilters.jsx` y `MapaEnfermeros.jsx` | Paciente: búsqueda de profesionales, filtros, lista/mapa y paginación. Enfermero: lista de pacientes con solicitudes Pendientes o Aceptadas asignadas y mapa solo de los puntos que esos pacientes eligieron compartir. |
+| `/cartilla` | `ListaEnfermeros.jsx`, `DirectoryFilters.jsx` y `MapaEnfermeros.jsx` | Paciente: búsqueda de profesionales, filtros, lista/mapa y paginación. Enfermero: lista de pacientes que le enviaron solicitudes en cualquier estado; en el mapa solo aparecen puntos compartidos de pacientes con una solicitud Pendiente o Aceptada asignada. Al seleccionar un punto y usar la ubicación propia, ambos roles ven ruta por calles, distancia y tiempo estimado. |
 | `/perfil/:id` | `VerPerfiles.jsx` y `ProfessionalContact.jsx` | Perfil profesional; el botón para solicitar servicio queda a la derecha de la tarjeta de encabezado en escritorio y se apila debajo en pantallas angostas. Conserva el retorno a la cartilla con búsqueda, filtros y página. `id` identifica a Usuario. |
 | `/perfil/:id/solicitar` | `SolicitarServicio.jsx` | El paciente elige un servicio del catálogo real, fecha, hora y dirección; confirma el envío en verde y puede abrir el comprobante. |
 | `/solicitudes/:idSolicitud` | `ConfirmacionSolicitud.jsx` | Comprobante privado del paciente o del enfermero asignado. |
@@ -208,7 +208,10 @@ teléfono/correo; no anunciar reserva o pago integrado hasta implementar ese flu
 El mapa real usa Leaflet, OpenStreetMap y OSRM; no reemplazarlo por la ilustración
 de la landing. La vista se carga de forma diferida. Mantener atribución, selección
 entre tarjeta y marcador, explicación del alcance de la página y errores de ubicación
-o recorrido. Solicitar geolocalización al accionar Usar mi ubicación.
+o recorrido. Solicitar geolocalización al accionar Usar mi ubicación. En la cartilla
+del enfermero, calcular el recorrido desde su ubicación actual hasta el paciente
+seleccionado; mostrar sus coordenadas únicamente cuando las haya compartido y tenga
+una solicitud Pendiente o Aceptada con ese enfermero.
 
 `LocationPicker` permite marcar o quitar un punto opcional del profesional;
 cambiar dirección/ciudad descarta el punto anterior. No publicar coordenadas de

@@ -224,7 +224,7 @@ test('un paciente no entra al editor profesional cambiando la URL', async () => 
   assert.ok(document.querySelector('nav a[href="/cartilla"]'));
 });
 
-test('el enfermero ve pacientes con solicitudes activas en lugar de la lista de profesionales', async () => {
+test('el enfermero ve pacientes que enviaron solicitudes en lugar de la lista de profesionales', async () => {
   session('enfermero');
   const original = globalThis.fetch;
   let urlSolicitudes;
@@ -237,7 +237,8 @@ test('el enfermero ve pacientes con solicitudes activas en lugar de la lista de 
           idPaciente: 31,
           nombre: 'Ana',
           apellido: 'Paciente',
-          solicitudes_activas: 2,
+          solicitudes: 2,
+          solicitudes_activas: 0,
           latitud: -32.89,
           longitud: -68.84,
         }],
@@ -253,7 +254,7 @@ test('el enfermero ve pacientes con solicitudes activas en lugar de la lista de 
     assert.match(urlSolicitudes, /\/api\/pacientes\/solicitudes-activas/);
     assert.match(document.querySelector('h1').textContent, /Tus pacientes/);
     assert.match(document.body.textContent, /Ana Paciente/);
-    assert.match(document.body.textContent, /2 solicitudes activas/);
+    assert.match(document.body.textContent, /2 solicitudes enviadas/);
     assert.doesNotMatch(document.body.textContent, /Todos los profesionales|Especialidad/);
     assert.ok(document.querySelector('a[href="/solicitudes-enfermero"]'));
   } finally {

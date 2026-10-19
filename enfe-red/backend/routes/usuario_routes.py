@@ -411,7 +411,7 @@ def obtener_enfermeros():
 
 @usuario_bp.route('/pacientes/solicitudes-activas', methods=['GET'])
 @jwt_required()
-def buscar_pacientes_con_solicitudes_activas():
+def buscar_pacientes_con_solicitudes():
     usuario_id = int(get_jwt_identity())
     usuario = db.session.get(Usuario, usuario_id)
     if not usuario:
@@ -433,7 +433,6 @@ def buscar_pacientes_con_solicitudes_activas():
         SolicitudServicio.idPaciente == Paciente.id,
     ).filter(
         SolicitudServicio.idEnfermero == enfermero.id,
-        SolicitudServicio.estado.in_(ESTADOS_ACTIVOS),
     )
     if texto:
         patron = f'%{texto}%'
@@ -449,8 +448,13 @@ def buscar_pacientes_con_solicitudes_activas():
             SolicitudServicio.idEnfermero == enfermero.id,
             SolicitudServicio.estado.in_(ESTADOS_ACTIVOS),
         ).count()
+        solicitudes = SolicitudServicio.query.filter_by(
+            idPaciente=paciente.id,
+            idEnfermero=enfermero.id,
+        ).count()
         compartir_ubicacion = (
-            paciente.ubicacion_compartida
+            solicitudes_activas > 0
+            and paciente.ubicacion_compartida
             and paciente.latitud is not None
             and paciente.longitud is not None
         )
@@ -459,6 +463,7 @@ def buscar_pacientes_con_solicitudes_activas():
             'idPaciente': paciente.id,
             'nombre': paciente.nombre,
             'apellido': paciente.apellido,
+            'solicitudes': solicitudes,
             'solicitudes_activas': solicitudes_activas,
             'latitud': paciente.latitud if compartir_ubicacion else None,
             'longitud': paciente.longitud if compartir_ubicacion else None,

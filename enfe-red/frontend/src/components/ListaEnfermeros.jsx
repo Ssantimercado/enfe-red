@@ -204,7 +204,7 @@ export default function ListaEnfermeros() {
           <h1>{nurse ? 'Tus pacientes.' : 'El cuidado empieza acá.'}</h1>
           <p>
             {nurse
-              ? 'Consultá las personas que tienen una solicitud activa con vos y la ubicación que decidieron compartir.'
+              ? 'Consultá a quienes te enviaron solicitudes y las ubicaciones que comparten mientras tengan una solicitud activa.'
               : 'Explorá perfiles y encontrá atención de enfermería para vos o tu familia.'}
           </p>
         </div>
@@ -369,7 +369,7 @@ export default function ListaEnfermeros() {
               <span className="soft-icon">
                 <Icon name="search" size={26} />
               </span>
-              <h2>{nurse ? 'Todavía no hay pacientes asignados.' : 'Probemos con otra búsqueda.'}</h2>
+              <h2>{nurse ? 'Todavía no hay pacientes que te hayan enviado solicitudes.' : 'Probemos con otra búsqueda.'}</h2>
               <p>
                 {nurse
                   ? 'Los pacientes aparecerán cuando tengan una solicitud pendiente o aceptada con vos.'
@@ -428,9 +428,9 @@ export default function ListaEnfermeros() {
                               <h3>{person.nombre} {person.apellido}</h3>
                               <p className="card-location">
                                 <Icon name="briefcase" size={13} />
-                                {person.solicitudes_activas === 1
-                                  ? '1 solicitud activa'
-                                  : `${person.solicitudes_activas} solicitudes activas`}
+                                {person.solicitudes === 1
+                                  ? '1 solicitud enviada'
+                                  : `${person.solicitudes} solicitudes enviadas`}
                               </p>
                             </div>
                           </div>

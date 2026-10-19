@@ -241,7 +241,7 @@ export default function MapaEnfermeros({
 
   // La distancia y el tiempo ahora provienen de la ruta real.
   const { ruta, loadingRoute, routeError } = useRutaReal(
-    mostrandoPacientes ? null : userPosition,
+    userPosition,
     selectedPosition
   );
 
@@ -314,75 +314,38 @@ export default function MapaEnfermeros({
           </p>
         </div>
 
-        {!mostrandoPacientes && <button
+        <button
           type="button"
           onClick={locateUser}
           disabled={locationState === 'loading'}
         >
           {locationState === 'loading'
             ? 'Buscando ubicación…'
-            : 'Usar mi ubicación'}
-        </button>}
+            : mostrandoPacientes
+              ? 'Usar mi ubicación actual'
+              : 'Usar mi ubicación'}
+        </button>
       </div>
 
-      {/* Panel de información de la ruta real */}
-      {!mostrandoPacientes && userPosition && selectedPosition && (
-        <div
-          style={{
-            position: 'absolute',
-            top: '80px',
-            right: '20px',
-            zIndex: 1000,
-            backgroundColor: 'white',
-            padding: '12px 18px',
-            borderRadius: '10px',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-            border: '1px solid #e2e8f0',
-            fontFamily: "'Segoe UI', Roboto, sans-serif",
-            maxWidth: '280px',
-          }}
-        >
-          <h4
-            style={{
-              margin: '0 0 5px 0',
-              color: '#1e293b',
-              fontSize: '14px',
-            }}
-          >
-            🚗 Mejor ruta por calles
-          </h4>
-
-          {loadingRoute && (
-            <p style={{ margin: 0, color: '#64748b' }}>
-              Calculando recorrido…
-            </p>
+      {selectedPosition && (
+        <div className="mapa-route-summary">
+          <h3><span aria-hidden="true">🚗</span> Mejor ruta por calles</h3>
+          <p>
+            Desde tu ubicación actual hasta{' '}
+            {mostrandoPacientes ? 'el paciente' : 'el profesional'}.
+          </p>
+          {!userPosition && (
+            <p>Usá el botón para calcular el recorrido, el tiempo y la distancia.</p>
           )}
-
+          {loadingRoute && <p role="status">Calculando recorrido…</p>}
           {!loadingRoute && ruta && (
-            <p
-              style={{
-                margin: 0,
-                color: '#0284c7',
-                fontWeight: 'bold',
-                fontSize: '15px',
-              }}
-            >
+            <p className="mapa-route-details">
               {ruta.distancia.toFixed(1)} km · aprox.{' '}
               {Math.max(1, Math.ceil(ruta.tiempo / 60))} min
             </p>
           )}
-
           {!loadingRoute && routeError && (
-            <p
-              role="alert"
-              style={{
-                margin: 0,
-                color: '#dc2626',
-                fontSize: '13px',
-              }}
-            >
-              {routeError}
-            </p>
+            <p className="mapa-route-error" role="alert">{routeError}</p>
           )}
         </div>
       )}
@@ -415,8 +378,8 @@ export default function MapaEnfermeros({
         {/* Ajustar la vista al recorrido completo */}
         {ruta && <FitRoute positions={ruta.positions} />}
 
-        {/* Marcador de la ubicación del usuario */}
-        {!mostrandoPacientes && userPosition && (
+        {/* Marcador de la ubicación actual del usuario */}
+        {userPosition && (
           <>
             <CircleMarker
               center={userPosition}
@@ -442,7 +405,7 @@ export default function MapaEnfermeros({
         )}
 
         {/* Recorrido real: sigue las calles, no una línea recta */}
-        {!mostrandoPacientes && ruta && (
+        {ruta && (
           <Polyline
             positions={ruta.positions}
             pathOptions={{

@@ -1355,6 +1355,36 @@
   font-size: 12px;
   font-weight: 600;
 }
+.mapa-route-summary {
+  position: absolute;
+  top: 80px;
+  right: 20px;
+  z-index: 1000;
+  max-width: 280px;
+  padding: 12px 18px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: white;
+  box-shadow: 0 4px 12px #193b4d26;
+}
+.mapa-route-summary h3 {
+  margin: 0 0 5px;
+  color: var(--ink);
+  font-size: 14px;
+}
+.mapa-route-summary p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.mapa-route-summary .mapa-route-details {
+  color: var(--blue-dark);
+  font-size: 15px;
+  font-weight: 700;
+}
+.mapa-route-summary .mapa-route-error {
+  color: #a52e3b;
+}
 .mapa-error {
   padding: 0 20px 14px;
   color: #a52e3b;
@@ -2275,6 +2305,13 @@
   .mapa-toolbar {
     align-items: flex-start;
     flex-direction: column;
+  }
+  .mapa-route-summary {
+    top: 125px;
+    right: 12px;
+    left: 12px;
+    max-width: none;
+    padding: 10px 12px;
   }
   .mapa-toolbar button {
     min-height: 44px;
