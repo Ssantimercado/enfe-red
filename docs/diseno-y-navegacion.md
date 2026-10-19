@@ -26,8 +26,8 @@ visual en navegador. Las propuestas para próximos sprints se identifican al fin
 | `/perfil/:id` | `VerPerfiles.jsx` y `ProfessionalContact.jsx` | Perfil profesional; el botón para solicitar servicio queda a la derecha de la tarjeta de encabezado en escritorio y se apila debajo en pantallas angostas. Conserva el retorno a la cartilla con búsqueda, filtros y página. `id` identifica a Usuario. |
 | `/perfil/:id/solicitar` | `SolicitarServicio.jsx` | El paciente elige un servicio del catálogo real, fecha, hora y dirección; confirma el envío en verde y puede abrir el comprobante. |
 | `/solicitudes/:idSolicitud` | `ConfirmacionSolicitud.jsx` | Comprobante privado del paciente o del enfermero asignado. |
-| `/perfil-paciente` | `PerfilPaciente.jsx` → `ProfileEditor` | Perfil propio, consulta y edición; acceso de paciente. Incluye el historial de servicios aceptados o realizados cuya fecha y hora ya pasó, con los datos del enfermero y opción de calificarlo. |
-| `/perfil-enfermero` | `PerfilEnfermero.jsx` → `ProfileEditor` | Perfil propio profesional, punto del mapa y `GestionHorarios`; el enfermero puede agregar y editar sus franjas semanales. Incluye el historial de servicios aceptados o realizados cuya fecha y hora ya pasó, con los datos del paciente y opción de calificarlo. |
+| `/perfil-paciente` | `PerfilPaciente.jsx` → `ProfileEditor` | Perfil propio, consulta y edición; acceso de paciente. Incluye el historial de servicios aceptados o realizados cuya fecha y hora ya pasó, con los datos del enfermero y opción de calificarlo. El historial filtra por rango de fechas y por estado; las opciones de estado salen de la respuesta del backend. |
+| `/perfil-enfermero` | `PerfilEnfermero.jsx` → `ProfileEditor` | Perfil propio profesional, punto del mapa y `GestionHorarios`; el enfermero puede agregar y editar sus franjas semanales. Incluye el historial de servicios aceptados o realizados cuya fecha y hora ya pasó, con los datos del paciente y opción de calificarlo. Comparte los filtros de fecha y estado del historial del paciente. |
 | `/solicitudes-enfermero` | `SolicitudesEnfermero.jsx` | Bandeja privada del enfermero para consultar los pedidos recibidos y aceptar o rechazar los pendientes; acceso desde el botón Solicitudes en la esquina superior derecha. |
 
 La aplicación interna comparte `AppShell`: marca, Inicio, cartilla por rol,
@@ -35,6 +35,12 @@ Mi perfil, cuenta y cierre de sesión. El rol enfermero también tiene el acceso
 Solicitudes en la esquina superior derecha. Buscar permanece activo al abrir un perfil
 público. Mi perfil cambia de destino según el rol. No agregar una segunda cabecera
 o un segundo pie dentro de una pantalla interna.
+
+`Notificaciones.jsx` agrega en `AppShell` la campana con contador de no leídas y
+menú desplegable (`aria-expanded`, cierre con Escape o clic afuera). Permanece
+oculta hasta que `GET /api/notificaciones/<idUsuario>` devuelva una lista; el
+backend de notificaciones todavía no está integrado. Marcar como leída llama a
+`PUT /api/notificaciones/<idNotificacion>/leer` y descuenta solo tras el éxito.
 
 La ubicación exacta del paciente es opcional. El paciente la elige y habilita su
 compartición desde su perfil; solo se incluye para enfermeros con una solicitud
@@ -240,8 +246,8 @@ en el backend. Confirmar cancelaciones y rechazos en un diálogo; actualizar la
 tarjeta con la respuesta recibida y tratar errores sin recargar toda la página.
 Esta pauta define continuidad de diseño, no agrega las tareas del frontend.
 
-En Sprint 5, integrar la campana al `AppShell` activo aunque la consigna mencione
-`Navbar.jsx`. El historial debe seguir la estructura del perfil. En Sprint 6,
+En Sprint 5, la campana está en el `AppShell` activo aunque la consigna mencione
+`Navbar.jsx`, y los filtros del historial siguen la estructura del perfil. En Sprint 6,
 mantener el mismo sistema visual para administración y reputación. No mostrar
 botones, contadores o estrellas como funciones operativas antes de integrar
 sus datos y contratos. Implementar solamente el sprint y las tareas solicitadas.

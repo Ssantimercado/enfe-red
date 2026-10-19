@@ -1700,7 +1700,8 @@
   cursor: pointer;
 }
 .notification-item.unread:hover {
-  background: #e2f0f9;
+  border-left-color: var(--blue-dark);
+  color: var(--blue-dark);
 }
 .notification-item time {
   color: var(--muted);
