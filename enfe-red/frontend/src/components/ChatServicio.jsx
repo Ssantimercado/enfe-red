@@ -4,6 +4,8 @@ import { requestApi as api, sesionActual } from '../api';
 // SCRUM-63 (Santiago): chat asociado a una solicitud. Contrato en backend/SPRINT5-INTEGRACION.md.
 export const INTERVALO_CHAT_MS = 3000;
 const MAX_CONTENIDO = 2000;
+// Sin permiso o sin solicitud no tiene sentido seguir consultando.
+const ERRORES_PERMANENTES = [403, 404];
 
 function horaLocal(fechaHora) {
   const fecha = new Date(fechaHora);
@@ -23,26 +25,36 @@ function unirMensajes(actuales, nuevos) {
   return [...porId.values()].sort((a, b) => a.idMensaje - b.idMensaje);
 }
 
-export default function ChatServicio({ solicitud, contraparte }) {
-  const { idSolicitud, estado } = solicitud;
+// En pantallas táctiles Enter agrega una línea; se envía con el botón.
+const pantallaTactil = () => window.matchMedia?.('(pointer: coarse)').matches ?? false;
+
+export default function ChatServicio({ solicitud, contraparte, onEstadoCambiado }) {
+  const { idSolicitud } = solicitud;
+  const [estado, setEstado] = useState(solicitud.estado);
   const habilitado = estado === 'Aceptada';
   const userId = Number(sesionActual()?.sub);
   const [mensajes, setMensajes] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [errorCarga, setErrorCarga] = useState('');
+  const [bloqueado, setBloqueado] = useState(false);
   const [texto, setTexto] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [errorEnvio, setErrorEnvio] = useState('');
   const lista = useRef(null);
+  const campo = useRef(null);
   const ocupado = useRef(false);
+  const tactil = pantallaTactil();
 
   useEffect(() => {
+    setEstado(solicitud.estado);
+  }, [solicitud.estado]);
+
+  useEffect(() => {
+    if (bloqueado) return undefined;
     let activo = true;
     let consultando = false;
     let controller = null;
-    setMensajes([]);
-    setCargando(true);
-    setErrorCarga('');
+    let timer = null;
 
     async function consultar({ periodica = false } = {}) {
       // Con la pestaña oculta se pausa el polling; la carga inicial siempre consulta.
@@ -56,7 +68,12 @@ export default function ChatServicio({ solicitud, contraparte }) {
         setMensajes((actuales) => unirMensajes(actuales, items));
         setErrorCarga('');
       } catch (err) {
-        if (activo && err.name !== 'AbortError') setErrorCarga(err.message);
+        if (!activo || err.name === 'AbortError') return;
+        setErrorCarga(err.message);
+        if (ERRORES_PERMANENTES.includes(err.status)) {
+          window.clearInterval(timer);
+          setBloqueado(true);
+        }
       } finally {
         consultando = false;
         if (activo) setCargando(false);
@@ -65,21 +82,36 @@ export default function ChatServicio({ solicitud, contraparte }) {
 
     consultar();
     // Una conversación cerrada ya no recibe mensajes: se consulta una sola vez.
-    const timer = habilitado
-      ? window.setInterval(() => consultar({ periodica: true }), INTERVALO_CHAT_MS)
-      : null;
+    if (habilitado) {
+      timer = window.setInterval(() => consultar({ periodica: true }), INTERVALO_CHAT_MS);
+    }
     return () => {
       activo = false;
-      if (timer) window.clearInterval(timer);
+      window.clearInterval(timer);
       controller?.abort();
     };
-  }, [idSolicitud, habilitado]);
+  }, [idSolicitud, habilitado, bloqueado]);
 
   const ultimoId = mensajes.at(-1)?.idMensaje;
   useEffect(() => {
     // Desplaza solo el contenedor del chat, sin mover la página.
     if (lista.current) lista.current.scrollTop = lista.current.scrollHeight;
   }, [ultimoId]);
+
+  // Si el envío choca con un cambio de estado (409), se consulta el estado real y se cierra el chat.
+  async function revisarEstado() {
+    try {
+      const actual = await api(`/solicitudes/${idSolicitud}`);
+      if (actual?.estado && actual.estado !== 'Aceptada') {
+        setEstado(actual.estado);
+        onEstadoCambiado?.(actual);
+        return actual.estado;
+      }
+    } catch {
+      // Se conserva el error original del envío.
+    }
+    return null;
+  }
 
   async function enviar(event) {
     event.preventDefault();
@@ -97,10 +129,14 @@ export default function ChatServicio({ solicitud, contraparte }) {
       setMensajes((actuales) => unirMensajes(actuales, [mensaje]));
       setTexto('');
     } catch (err) {
-      setErrorEnvio(err.message);
+      const nuevoEstado = err.status === 409 ? await revisarEstado() : null;
+      setErrorEnvio(nuevoEstado
+        ? `La solicitud pasó a ${nuevoEstado}: la conversación se cerró y tu mensaje no se envió.`
+        : err.message);
     } finally {
       ocupado.current = false;
       setEnviando(false);
+      campo.current?.focus();
     }
   }
 
@@ -122,7 +158,9 @@ export default function ChatServicio({ solicitud, contraparte }) {
 
       {errorCarga && (
         <p className="notice notice-error" role="alert">
-          {mensajes.length ? 'No pudimos actualizar los mensajes. Reintentamos en unos segundos.' : errorCarga}
+          {mensajes.length && !bloqueado
+            ? 'No pudimos actualizar los mensajes. Reintentamos en unos segundos.'
+            : errorCarga}
         </p>
       )}
 
@@ -136,7 +174,7 @@ export default function ChatServicio({ solicitud, contraparte }) {
         tabIndex={0}
       >
         {cargando && !mensajes.length ? (
-          <p className="chat-vacio" role="status">Cargando mensajes…</p>
+          <p className="chat-vacio">Cargando mensajes…</p>
         ) : mensajes.length ? (
           mensajes.map((mensaje) => {
             const propio = mensaje.idEmisor === userId;
@@ -160,24 +198,32 @@ export default function ChatServicio({ solicitud, contraparte }) {
         )}
       </div>
 
-      {habilitado && (
+      {errorEnvio && !habilitado && <p className="notice notice-error" role="alert">{errorEnvio}</p>}
+
+      {habilitado && !bloqueado && (
         <form className="chat-formulario" onSubmit={enviar}>
           <label className="field">
             Escribí tu mensaje
             <textarea
+              ref={campo}
               value={texto}
               maxLength={MAX_CONTENIDO}
               rows={2}
               aria-describedby={idAyuda}
-              disabled={enviando}
+              // readOnly y no disabled: deshabilitar el campo le quitaría el foco.
+              readOnly={enviando}
+              aria-busy={enviando}
               onChange={(event) => setTexto(event.target.value)}
               onKeyDown={(event) => {
+                // No enviar mientras se compone un acento o texto con IME.
+                if (event.nativeEvent.isComposing || tactil) return;
                 if (event.key === 'Enter' && !event.shiftKey) enviar(event);
               }}
             />
           </label>
           <p id={idAyuda} className="filter-hint">
-            Enter envía · Shift + Enter agrega una línea · {largo}/{MAX_CONTENIDO}
+            {tactil ? '' : 'Enter envía · Shift + Enter agrega una línea · '}
+            {largo}/{MAX_CONTENIDO}
           </p>
           {errorEnvio && <p className="notice notice-error" role="alert">{errorEnvio}</p>}
           <button className="button button-primary" type="submit" disabled={enviando || !largo}>

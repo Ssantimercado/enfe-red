@@ -47,6 +47,7 @@ export default function ConfirmacionSolicitud() {
         key={solicitud.idSolicitud}
         solicitud={solicitud}
         contraparte={[solicitud.enfermero?.nombre, solicitud.enfermero?.apellido].filter(Boolean).join(' ')}
+        onEstadoCambiado={(actual) => setSolicitud(previa => ({ ...previa, estado: actual.estado }))}
       />
     )}
   </main>;

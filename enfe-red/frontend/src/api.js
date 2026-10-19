@@ -65,10 +65,14 @@ export async function requestApi(path, { body, headers, ...options } = {}) {
     throw new Error('No podemos conectar con el servidor. Intentá nuevamente.');
   }
   const data = await response.json().catch(() => ({}));
-  if (!response.ok)
-    throw new Error(
+  if (!response.ok) {
+    const error = new Error(
       data.error || 'No pudimos completar la solicitud. Intentá nuevamente.',
     );
+    // Permite distinguir errores permanentes (403/404) de conflictos (409).
+    error.status = response.status;
+    throw error;
+  }
   return data;
 }
 

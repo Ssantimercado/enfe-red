@@ -144,8 +144,11 @@ export default function SolicitudesEnfermero() {
               )}
               {chatAbierto === solicitud.idSolicitud && CHAT_VISIBLE.includes(solicitud.estado) && (
                 <ChatServicio
-                  key={`${solicitud.idSolicitud}-${solicitud.estado}`}
+                  key={solicitud.idSolicitud}
                   solicitud={solicitud}
+                  onEstadoCambiado={(actual) => setSolicitudes((items) => items.map((item) => (
+                    item.idSolicitud === actual.idSolicitud ? { ...item, estado: actual.estado } : item
+                  )))}
                   contraparte={[solicitud.paciente?.nombre, solicitud.paciente?.apellido].filter(Boolean).join(' ')}
                 />
               )}

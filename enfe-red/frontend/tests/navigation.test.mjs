@@ -965,7 +965,7 @@ test('la campana cuenta las no leídas y marca una como leída con el PUT', asyn
 });
 
 // SCRUM-63 (Santiago): chat asociado al servicio con polling cada 3 segundos.
-async function conChat(mensajesServidor, prueba, { estado = 'Aceptada', envio } = {}) {
+async function conChat(mensajesServidor, prueba, { estado = 'Aceptada', envio, estadoServidor, errorGet } = {}) {
   solicitudHandler = async config => {
     if (config.url === '/solicitudes/15') return { data: { ...comprobante, estado } };
     if (config.url === '/solicitudes/enfermero/201') return {
@@ -989,9 +989,14 @@ async function conChat(mensajesServidor, prueba, { estado = 'Aceptada', envio } 
   globalThis.fetch = async (url, options = {}) => {
     const ruta = String(url);
     if (ruta.endsWith('/perfil/enfermero')) return response({ ...profile, idEnfermero: 201 });
+    if (ruta.endsWith('/api/solicitudes/15')) {
+      chat.push({ method: 'GET', ruta: 'solicitud' });
+      return response({ ...comprobante, estado: estadoServidor || estado });
+    }
     if (!ruta.endsWith('/solicitudes/15/mensajes')) return original(url, options);
     chat.push({ method: options.method || 'GET', body: options.body });
     if (options.method === 'POST') return envio ? envio(JSON.parse(options.body)) : response({}, 500);
+    if (errorGet) return response({ error: 'No tenés acceso a los mensajes de esta solicitud' }, errorGet);
     return response(mensajesServidor());
   };
   const poll = async () => {
@@ -1048,6 +1053,57 @@ test('un envío rechazado conserva el texto y muestra el error del servidor', as
   }, {
     envio: () => response({ error: 'Solo podés enviar mensajes cuando la solicitud está Aceptada' }, 409),
   });
+});
+
+test('si la solicitud se canceló mientras chateaba, el 409 cierra el chat y actualiza el comprobante', async () => {
+  session();
+  await conChat(() => [], async ({ chat, intervalos }) => {
+    await mount('/solicitudes/15');
+    assert.equal(intervalos.size, 1);
+    await typeTextArea(document.querySelector('.chat-formulario textarea'), '¿Seguís viniendo?');
+    await submitForm();
+    assert.ok(chat.some(llamada => llamada.ruta === 'solicitud'));
+    assert.equal(document.querySelector('.chat-formulario'), null);
+    assert.match(document.querySelector('.chat-servicio [role="alert"]').textContent, /pasó a Cancelada/);
+    assert.match(document.body.textContent, /La conversación quedó cerrada/);
+    assert.match(document.body.textContent, /Estado: Cancelada/);
+    assert.equal(intervalos.size, 0);
+  }, {
+    estadoServidor: 'Cancelada',
+    envio: () => response({ error: 'Solo podés enviar mensajes cuando la solicitud está Aceptada' }, 409),
+  });
+});
+
+test('un 403 al leer mensajes detiene el polling y muestra el error', async () => {
+  session();
+  await conChat(() => [], async ({ chat, intervalos, poll }) => {
+    await mount('/solicitudes/15');
+    assert.match(document.querySelector('.chat-servicio [role="alert"]').textContent, /No tenés acceso/);
+    assert.equal(intervalos.size, 0);
+    await poll();
+    assert.equal(chat.filter(llamada => llamada.method === 'GET' && !llamada.ruta).length, 1);
+    assert.equal(document.querySelector('.chat-formulario'), null);
+  }, { errorGet: 403 });
+});
+
+test('el campo conserva el foco al enviar y Enter no envía mientras se compone un acento', async () => {
+  session();
+  await conChat(() => [], async ({ chat }) => {
+    await mount('/solicitudes/15');
+    const campo = document.querySelector('.chat-formulario textarea');
+    assert.equal(campo.disabled, false);
+    await typeTextArea(campo, 'Hola');
+    const enter = (isComposing) => act(async () => {
+      const evento = new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+      Object.defineProperty(evento, 'isComposing', { value: isComposing });
+      campo.dispatchEvent(evento);
+    });
+    await enter(true);
+    assert.equal(chat.some(llamada => llamada.method === 'POST'), false);
+    await enter(false);
+    assert.equal(chat.filter(llamada => llamada.method === 'POST').length, 1);
+    assert.equal(document.activeElement, document.querySelector('.chat-formulario textarea'));
+  }, { envio: datos => response(mensajeChat(9, 1, datos.contenido), 201) });
 });
 
 test('una solicitud realizada muestra el chat solo para leer y sin polling', async () => {
