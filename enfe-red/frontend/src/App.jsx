@@ -21,10 +21,18 @@ import SolicitarServicio from './components/SolicitarServicio';
 import ConfirmacionSolicitud from './components/ConfirmacionSolicitud';
 import SolicitudesEnfermero from './components/SolicitudesEnfermero';
 import EstadoSolicitudes from './components/EstadoSolicitudes';
+import AdminUsuarios from './components/AdminUsuarios';
+import PanelAdmin from './components/PanelAdmin';
 import './App.css';
 
 function EntryRoute() {
-  return <Navigate to={sesionActual() ? '/home' : '/login'} replace />;
+  const session = sesionActual();
+  return (
+    <Navigate
+      to={session ? (session.rol === 'administrador' ? '/admin' : '/home') : '/login'}
+      replace
+    />
+  );
 }
 
 function ScrollToTop() {
@@ -79,8 +87,15 @@ function RutaProtegida({ children, rol }) {
         state={{ from: location.pathname + location.search }}
       />
     );
-  if (rol && session.rol !== rol) return <Navigate to="/home" replace />;
+  if (rol && session.rol !== rol) {
+    return <Navigate to={session.rol === 'administrador' ? '/admin' : '/home'} replace />;
+  }
+  if (!rol && session.rol === 'administrador') return <Navigate to="/admin" replace />;
   return children;
+}
+
+function RutaProtegidaAdmin({ children }) {
+  return <RutaProtegida rol="administrador">{children}</RutaProtegida>;
 }
 
 export default function App() {
@@ -122,6 +137,16 @@ export default function App() {
           />
           <Route path="/perfil/:id" element={<VerPerfiles />} />
           <Route path="/cartilla" element={<ListaEnfermeros />} />
+        </Route>
+        <Route
+          element={
+            <RutaProtegidaAdmin>
+              <AppShell />
+            </RutaProtegidaAdmin>
+          }
+        >
+          <Route path="/admin" element={<PanelAdmin />} />
+          <Route path="/admin/usuarios" element={<AdminUsuarios />} />
         </Route>
         <Route path="*" element={<EntryRoute />} />
       </Routes>

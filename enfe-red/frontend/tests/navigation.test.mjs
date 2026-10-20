@@ -153,6 +153,19 @@ after(() => { axios.defaults.adapter = originalAdapter; dom.window.close(); });
 
 globalThis.fetch = async (url, options = {}) => {
   requests.push({ url: String(url), options });
+  if (String(url).includes('/admin/metricas')) {
+    return response({
+      total_usuarios: 12,
+      pacientes: 8,
+      enfermeros: 4,
+      usuarios_suspendidos: 1,
+      matriculas_pendientes: 2,
+      total_solicitudes: 15,
+    });
+  }
+  if (String(url).includes('/admin/usuarios')) {
+    return response({ usuarios: [], total_resultados: 0, total_paginas: 0 });
+  }
   if (String(url).includes('/horarios')) return response([]);
   if (String(url).includes('/buscar'))
     return response({ enfermeros: [], total_resultados: 0, total_paginas: 0 });
@@ -207,6 +220,77 @@ test('una URL desconocida vuelve al panel con sesión válida', async () => {
   session();
   await mount('/no-existe');
   assert.equal(window.location.pathname, '/home');
+});
+
+test('el administrador entra al panel y carga las métricas', async () => {
+  session('administrador');
+  await mount('/admin');
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+  assert.match(document.querySelector('h1').textContent, /Panel de administración/);
+  assert.match(document.body.textContent, /12/);
+  assert.match(document.body.textContent, /Matrículas pendientes/);
+  assert.ok(document.querySelector('a[href="/admin/usuarios"]'));
+  assert.ok(requests.some((entry) => entry.url.includes('/api/admin/metricas')));
+});
+
+test('paciente y enfermero no pueden entrar a las vistas administrativas', async () => {
+  session('enfermero');
+  await mount('/admin');
+  assert.equal(window.location.pathname, '/home');
+  assert.doesNotMatch(document.body.textContent, /Panel de administración/);
+});
+
+test('el administrador puede suspender y reactivar cuentas desde la lista', async () => {
+  session('administrador');
+  const original = globalThis.fetch;
+  let suspendido = false;
+  globalThis.fetch = async (url, options = {}) => {
+    if (String(url).includes('/api/admin/usuarios/') && options.method === 'PUT') {
+      suspendido = JSON.parse(options.body).suspendido;
+      return response({
+        usuario: {
+          id: 2,
+          nombre: 'Ana',
+          apellido: 'Paciente',
+          email: 'ana@test.local',
+          rol: 'paciente',
+          suspendido,
+        },
+      });
+    }
+    return response({
+      usuarios: [{
+        id: 2,
+        nombre: 'Ana',
+        apellido: 'Paciente',
+        email: 'ana@test.local',
+        rol: 'paciente',
+        suspendido,
+      }],
+      total_resultados: 1,
+      total_paginas: 1,
+    });
+  };
+  try {
+    await mount('/admin/usuarios');
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 300)));
+    assert.match(document.body.textContent, /Ana Paciente/);
+    await click(button('Suspender'));
+    assert.match(document.querySelector('dialog').textContent, /perderá el acceso/);
+    await click(button('Cancelar'));
+    assert.equal(suspendido, false);
+    await click(button('Suspender'));
+    await click(button('Sí, suspender'));
+    assert.equal(suspendido, true);
+    assert.match(document.body.textContent, /Reactivar/);
+    assert.match(document.body.textContent, /Ana Paciente suspendido/);
+    await click(button('Reactivar'));
+    await click(button('Sí, reactivar'));
+    assert.equal(suspendido, false);
+    assert.match(document.body.textContent, /Ana Paciente reactivado/);
+  } finally {
+    globalThis.fetch = original;
+  }
 });
 
 test('un token vencido se limpia y muestra el aviso de sesión', async () => {

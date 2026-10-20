@@ -68,7 +68,7 @@ crea desde el registro público de pacientes/enfermeros.
 | Disponibilidad y horarios | Disponibilidad general y alta/consulta de franjas implementadas. | Edición y eliminación de franjas no están implementadas. |
 | Crear, consultar y gestionar solicitudes | Backend de Santiago y Pablo integrado. | Falta integrar formulario, comprobante, bandejas y acciones del frontend del Sprint 4. |
 | Calificaciones y reseñas | Pendiente. | Solo permitir calificar después de que la solicitud esté Realizada; respetar la entrega del 02/11. |
-| Administración y validación profesional | Pendiente como circuito completo; existe matrícula y campo de verificación. | Construir acceso por permisos y revisión administrativa en su entrega correspondiente. |
+| Administración y validación profesional | Las rutas protegidas y las vistas de usuarios/métricas están integradas en el frontend; requieren los endpoints administrativos de Pablo para operar. | No permitir acceso por selección de rol en registro. La primera cuenta administradora debe habilitarse fuera del registro público. |
 | Subir títulos o documentos | No hay carga de archivos implementada. | Definir requisitos y almacenamiento antes de convertirlo en una tarea; registrar matrícula como texto no equivale a subir un título. |
 | Pago dentro de la plataforma | No implementado ni incluido en el reparto de tareas compartido. | El nodo original Abonar no se incorpora al flujo comprometido sin acordar su alcance. |
 | Gestionar reportes | No implementado y sin definición suficiente en el reparto. | Aclarar qué reportes son, quién los genera y qué acciones permite el administrador. |

@@ -38,7 +38,9 @@ export default function Login() {
       navigate(
         destination?.startsWith('/') && !destination.startsWith('//')
           ? destination
-          : '/home',
+          : data.rol === 'administrador'
+            ? '/admin'
+            : '/home',
         { replace: true },
       );
     } catch (err) {

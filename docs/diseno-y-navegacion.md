@@ -29,6 +29,8 @@ visual en navegador. Las propuestas para próximos sprints se identifican al fin
 | `/perfil-paciente` | `PerfilPaciente.jsx` → `ProfileEditor` | Perfil propio, consulta y edición; acceso de paciente. Incluye el historial de servicios aceptados o realizados cuya fecha y hora ya pasó, con los datos del enfermero y opción de calificarlo. El historial filtra por rango de fechas y por estado; las opciones de estado salen de la respuesta del backend. |
 | `/perfil-enfermero` | `PerfilEnfermero.jsx` → `ProfileEditor` | Perfil propio profesional, punto del mapa y `GestionHorarios`; el enfermero puede agregar y editar sus franjas semanales. Incluye el historial de servicios aceptados o realizados cuya fecha y hora ya pasó, con los datos del paciente y opción de calificarlo. Comparte los filtros de fecha y estado del historial del paciente. |
 | `/solicitudes-enfermero` | `SolicitudesEnfermero.jsx` | Bandeja privada del enfermero para consultar los pedidos recibidos y aceptar o rechazar los pendientes; acceso desde el botón Solicitudes en la esquina superior derecha. |
+| `/admin` | `PanelAdmin.jsx` dentro de `AppShell` | Resumen de usuarios, cuentas suspendidas, matrículas pendientes y solicitudes; acceso exclusivo para administradores. |
+| `/admin/usuarios` | `AdminUsuarios.jsx` dentro de `AppShell` | Buscar y filtrar cuentas, confirmar antes de suspender/reactivar; no permite suspender la propia cuenta administradora. |
 
 La aplicación interna comparte `AppShell`: marca, Inicio, cartilla por rol,
 Mi perfil, cuenta y cierre de sesión. El rol enfermero también tiene el acceso
@@ -55,7 +57,20 @@ calificaciones se muestran en el historial privado de sus participantes.
 `App.jsx` protege la sesión y los roles y gestiona el desplazamiento al cambiar de
 ruta. El acceso directo a `/perfil-enfermero#horarios` espera la carga del perfil
 para llegar a la sección. Las rutas desconocidas redirigen según la sesión.
-El login conserva un destino interno solicitado previamente.
+El login conserva un destino interno solicitado previamente y deriva a cada rol
+a su inicio correspondiente, incluido `/admin`.
+
+Las vistas administrativas esperan el siguiente contrato de backend:
+`GET /api/admin/metricas` devuelve `total_usuarios`, `pacientes`, `enfermeros`,
+`usuarios_suspendidos`, `matriculas_pendientes` y `total_solicitudes` como
+enteros no negativos; `GET /api/admin/usuarios` acepta `q`, `rol`, `estado`,
+`page` y `per_page` y devuelve `usuarios`, `total_resultados` y `total_paginas`;
+`GET /api/admin/usuarios` devuelve usuarios con `id` entero, `email`, `rol` y
+`suspendido` booleano; `PUT /api/admin/usuarios/<id>/suspension` acepta
+`{"suspendido": boolean}` y devuelve `{"usuario": ...}` con el estado confirmado.
+El backend debe autorizar cada endpoint por rol; la protección de rutas del
+frontend no reemplaza los permisos del servidor. Hasta que esos endpoints estén
+integrados, las vistas muestran el error del servidor y permiten reintentar.
 
 ## Archivos que definen el diseño
 

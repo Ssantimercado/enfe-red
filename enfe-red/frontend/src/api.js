@@ -16,7 +16,7 @@ export function sesionActual() {
     );
     if (!Number.isFinite(payload.exp) || payload.exp * 1000 <= Date.now())
       return null;
-    if (!['paciente', 'enfermero'].includes(payload.rol)) return null;
+    if (!['paciente', 'enfermero', 'administrador'].includes(payload.rol)) return null;
     return payload;
   } catch {
     return null;
