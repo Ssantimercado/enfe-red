@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import Brand from './ui/Brand';
 import Icon from './ui/Icon';
 export default function AuthLayout({ children }) {
@@ -45,7 +46,10 @@ export default function AuthLayout({ children }) {
           <Brand to="/" />
         </div>
         <div className="auth-form-wrap">{children}</div>
-        <p className="auth-footnote">Enfe-red · Enfermería a domicilio</p>
+        <p className="auth-footnote">
+          Enfe-red · Enfermería a domicilio ·{' '}
+          <Link to="/terminos">Términos</Link> · <Link to="/privacidad">Privacidad</Link>
+        </p>
       </main>
     </div>
   );

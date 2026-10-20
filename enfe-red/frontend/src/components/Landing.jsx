@@ -675,6 +675,8 @@ export default function Landing() {
           <div className="lp-footer-bottom">
             <span>© {new Date().getFullYear()} Enfe-red.</span>
             <span>Enfermería a domicilio, cerca de vos.</span>
+            <Link to="/terminos">Términos y condiciones</Link>
+            <Link to="/privacidad">Política de privacidad</Link>
             <a href="#landing-contenido">
               Volver arriba
               <Icon name="arrow" size={14} />

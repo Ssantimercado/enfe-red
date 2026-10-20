@@ -9,6 +9,9 @@ class Usuario(db.Model):
     rol = db.Column(db.String(50), nullable=False)
     suspendido = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
     nivelPermiso = db.Column(db.String(30), nullable=True)
+    # Ley 25.326: constancia del consentimiento expreso (versión y fecha UTC) dado al registrarse.
+    versionTerminos = db.Column(db.String(10), nullable=True)
+    aceptoTerminosEn = db.Column(db.DateTime, nullable=True)
 
     # Relaciones para conectar con los perfiles
     perfil_paciente = db.relationship('Paciente', backref='usuario', uselist=False, cascade="all, delete-orphan")

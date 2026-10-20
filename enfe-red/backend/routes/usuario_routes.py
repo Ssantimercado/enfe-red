@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity, create_access_token
 from sqlalchemy import and_, or_
@@ -10,6 +10,7 @@ from extensions import bcrypt
 from models.usuario_models import Usuario, Paciente, Enfermero, Disponibilidad
 from models.solicitud_models import ESTADOS_ACTIVOS, SolicitudServicio
 from routes.auth_routes import error_password
+from schema_legal import VERSION_TERMINOS
 
 usuario_bp = Blueprint('usuario_bp', __name__)
 
@@ -73,6 +74,9 @@ def registrar_usuario():
     mensaje_password = error_password(password)
     if mensaje_password:
         return jsonify({"error": mensaje_password}), 400
+    # Ley 25.326 (art. 5 y 7): consentimiento libre, expreso e informado, también para datos de salud.
+    if data.get('aceptaTerminos') is not True:
+        return jsonify({"error": "Para crear la cuenta tenés que aceptar los Términos y condiciones y la Política de privacidad"}), 400
 
     usuario_existente = Usuario.query.filter_by(email=email).first()
     if usuario_existente:
@@ -83,7 +87,9 @@ def registrar_usuario():
     nuevo_usuario = Usuario(
         email=email,
         password_hash=password_hash,
-        rol=rol
+        rol=rol,
+        versionTerminos=VERSION_TERMINOS,
+        aceptoTerminosEn=datetime.now(timezone.utc).replace(tzinfo=None, microsecond=0),
     )
 
     partes = nombre_completo.split(' ', 1)

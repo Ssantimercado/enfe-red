@@ -203,6 +203,48 @@ test('el acceso profesional de la landing selecciona ese rol en el registro', as
   );
 });
 
+// Ley 25.326: consentimiento expreso al registrarse, páginas legales y aviso de almacenamiento.
+test('el registro exige aceptar términos y privacidad y envía la aceptación', async () => {
+  await mount('/registro');
+  await type(document.querySelector('input[name="nombre"]'), 'Ana Pérez');
+  await type(document.querySelector('input[name="email"]'), 'ana@test.local');
+  await type(document.querySelector('input[name="password"]'), 'clave-segura');
+  const casilla = document.querySelector('input[name="aceptaTerminos"]');
+  assert.equal(casilla.required, true);
+  assert.ok(document.querySelector('.consentimiento a[href="/terminos"]'));
+  assert.ok(document.querySelector('.consentimiento a[href="/privacidad"]'));
+  assert.match(document.querySelector('.consentimiento').textContent, /datos de salud/);
+  await submitForm();
+  assert.match(document.querySelector('[role="alert"]').textContent, /Términos y condiciones/);
+  assert.equal(requests.some((r) => r.url.endsWith('/registro')), false);
+  await click(casilla);
+  await submitForm();
+  const registro = requests.find((r) => r.url.endsWith('/registro'));
+  assert.equal(JSON.parse(registro.options.body).aceptaTerminos, true);
+});
+
+test('las páginas legales son públicas e incluyen las leyendas de la Ley 25.326', async () => {
+  await mount('/privacidad');
+  assert.match(document.querySelector('h1').textContent, /Política de privacidad/);
+  assert.match(document.body.textContent, /AGENCIA DE ACCESO A LA INFORMACIÓN PÚBLICA/);
+  assert.match(document.body.textContent, /artículo 14, inciso 3/);
+  assert.match(document.body.textContent, /no usa cookies publicitarias/);
+  await click(link('Términos y condiciones'));
+  assert.equal(window.location.pathname, '/terminos');
+  assert.match(document.body.textContent, /no es un servicio de emergencias/);
+});
+
+test('el aviso de cookies se cierra y no vuelve a aparecer', async () => {
+  await mount('/');
+  assert.ok(document.querySelector('.aviso-cookies'));
+  await click(button('Entendido'));
+  assert.equal(document.querySelector('.aviso-cookies'), null);
+  await act(async () => root.unmount());
+  root = null;
+  await mount('/');
+  assert.equal(document.querySelector('.aviso-cookies'), null);
+});
+
 test('la landing sigue accesible con sesión y permite volver al espacio personal', async () => {
   session();
   await mount('/');

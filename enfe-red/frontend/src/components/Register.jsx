@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { requestApi as api } from '../api';
 import AuthLayout from './AuthLayout';
 import Icon from './ui/Icon';
+import './Legal.css';
 
 export default function Register() {
   const [params] = useSearchParams();
@@ -12,6 +13,8 @@ export default function Register() {
     password: '',
     rol: params.get('rol') === 'enfermero' ? 'enfermero' : 'paciente',
   });
+  // Ley 25.326: consentimiento expreso; el backend también lo exige.
+  const [acepta, setAcepta] = useState(false);
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState('');
@@ -21,12 +24,16 @@ export default function Register() {
   async function submit(e) {
     e.preventDefault();
     if (loading) return;
+    if (!acepta) {
+      setError('Para crear la cuenta tenés que aceptar los Términos y condiciones y la Política de privacidad.');
+      return;
+    }
     setLoading(true);
     setError('');
     try {
       await api('/registro', {
         method: 'POST',
-        body: { ...form, nombre: form.nombre.trim(), email: form.email.trim() },
+        body: { ...form, nombre: form.nombre.trim(), email: form.email.trim(), aceptaTerminos: true },
       });
       setDone(true);
       setForm((current) => ({ ...current, password: '' }));
@@ -138,6 +145,23 @@ export default function Register() {
                 >
                   <Icon name={visible ? 'eyeOff' : 'eye'} size={18} />
                 </button>
+              </span>
+            </label>
+            <label className="consentimiento">
+              <input
+                type="checkbox"
+                name="aceptaTerminos"
+                checked={acepta}
+                onChange={(e) => setAcepta(e.target.checked)}
+                required
+              />
+              <span>
+                Leí y acepto los{' '}
+                <Link to="/terminos" target="_blank" rel="noopener">Términos y condiciones</Link> y la{' '}
+                <Link to="/privacidad" target="_blank" rel="noopener">Política de privacidad</Link>, y
+                presto mi consentimiento para el tratamiento de mis datos personales
+                {form.rol === 'paciente' ? ', incluidos los datos de salud que cargue,' : ''} según la
+                Ley 25.326.
               </span>
             </label>
             <button

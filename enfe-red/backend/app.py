@@ -16,6 +16,7 @@ from routes.resena_routes import resena_bp
 from routes.admin_routes import admin_bp
 from schema_sprint4 import inicializar_bd_sprint4, inicializar_catalogo_servicios
 from schema_sprint6 import inicializar_bd_sprint6
+from schema_legal import inicializar_bd_legal
 from seed_sprint3 import inicializar_bd_sprint3
 
 load_dotenv()
@@ -69,6 +70,7 @@ registrar_comandos(app)
 with app.app_context():
     inicializar_bd_sprint4()
     inicializar_bd_sprint6()
+    inicializar_bd_legal()
     inicializar_bd_sprint3()
     inicializar_catalogo_servicios()
 

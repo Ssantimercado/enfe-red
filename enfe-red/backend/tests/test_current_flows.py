@@ -66,6 +66,20 @@ class CurrentFlowsTest(unittest.TestCase):
         self.assertEqual(len(nombres), 6)
         self.assertFalse({'Nurse 0', 'Nurse 1'} & nombres)
 
+    def test_registro_exige_aceptar_terminos_y_guarda_la_constancia(self):
+        base = {'nombre': 'Ana Nueva', 'email': 'consentimiento@test.local', 'password': 'clave-segura', 'rol': 'paciente'}
+        for valor in (None, False, 'true', 1):
+            with self.subTest(valor=valor):
+                datos = base if valor is None else {**base, 'aceptaTerminos': valor}
+                respuesta = self.client.post('/api/registro', json=datos)
+                self.assertEqual(respuesta.status_code, 400)
+                self.assertIn('Términos', respuesta.json['error'])
+        self.assertIsNone(Usuario.query.filter_by(email='consentimiento@test.local').first())
+        self.assertEqual(self.client.post('/api/registro', json={**base, 'aceptaTerminos': True}).status_code, 201)
+        usuario = Usuario.query.filter_by(email='consentimiento@test.local').one()
+        self.assertEqual(usuario.versionTerminos, '1.0')
+        self.assertIsNotNone(usuario.aceptoTerminosEn)
+
     def test_login_y_registro_validan_datos_sin_errores_500(self):
         for cuerpo in ('no-json', '[]', 'null'):
             for ruta in ('/api/login', '/api/registro'):
@@ -75,7 +89,7 @@ class CurrentFlowsTest(unittest.TestCase):
         largo = self.client.post('/api/login', json={'email': 'nurse0@test.local', 'password': 'ñ' * 40})
         self.assertEqual(largo.status_code, 401)
         self.assertEqual(self.client.post('/api/login', json={'email': 1, 'password': 'x'}).status_code, 400)
-        base = {'nombre': 'Ana Nueva', 'email': 'nueva@test.local', 'rol': 'paciente'}
+        base = {'nombre': 'Ana Nueva', 'email': 'nueva@test.local', 'rol': 'paciente', 'aceptaTerminos': True}
         self.assertEqual(self.client.post('/api/registro', json={**base, 'password': 'corta'}).status_code, 400)
         self.assertEqual(self.client.post('/api/registro', json={**base, 'password': 'x' * 73}).status_code, 400)
         self.assertEqual(self.client.post('/api/registro', json={**base, 'password': 'clave-segura', 'rol': 'admin'}).status_code, 400)
@@ -472,6 +486,7 @@ class CurrentFlowsTest(unittest.TestCase):
     def test_single_name_registration_and_profile_update(self):
         response = self.client.post('/api/registro', json={
             'nombre': 'Ana', 'email': 'ana@test.local', 'password': 'test-password', 'rol': 'paciente',
+            'aceptaTerminos': True,
         })
         self.assertEqual(response.status_code, 201)
         user = Usuario.query.filter_by(email='ana@test.local').one()

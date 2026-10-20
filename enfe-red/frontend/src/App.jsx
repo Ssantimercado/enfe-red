@@ -23,6 +23,8 @@ import SolicitudesEnfermero from './components/SolicitudesEnfermero';
 import EstadoSolicitudes from './components/EstadoSolicitudes';
 import AdminUsuarios from './components/AdminUsuarios';
 import PanelAdmin from './components/PanelAdmin';
+import { Privacidad, Terminos } from './components/Legal';
+import AvisoCookies from './components/AvisoCookies';
 import './App.css';
 
 function EntryRoute() {
@@ -107,6 +109,8 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/registro" element={<Register />} />
         <Route path="/recuperar-password" element={<RecuperarPassword />} />
+        <Route path="/terminos" element={<Terminos />} />
+        <Route path="/privacidad" element={<Privacidad />} />
         <Route
           element={
             <RutaProtegida>
@@ -150,6 +154,7 @@ export default function App() {
         </Route>
         <Route path="*" element={<EntryRoute />} />
       </Routes>
+      <AvisoCookies />
     </BrowserRouter>
   );
 }

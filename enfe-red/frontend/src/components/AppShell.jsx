@@ -9,6 +9,7 @@ import { cerrarSesion, sesionActual } from '../api';
 import Brand from './ui/Brand';
 import Icon from './ui/Icon';
 import Notificaciones from './Notificaciones';
+import './Legal.css';
 export default function AppShell() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -106,7 +107,10 @@ export default function AppShell() {
       <footer className="site-footer">
         <Brand />
         <p>Enfermería a domicilio, cerca de vos.</p>
-        <span>Hecho para cuidar.</span>
+        <nav className="footer-legal" aria-label="Información legal">
+          <Link to="/terminos">Términos y condiciones</Link>
+          <Link to="/privacidad">Privacidad</Link>
+        </nav>
       </footer>
     </div>
   );
