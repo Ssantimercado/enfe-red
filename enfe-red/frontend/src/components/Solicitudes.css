@@ -74,6 +74,12 @@
 .solicitud-reject-dialog::backdrop { background: rgb(0 0 0 / 45%); }
 .solicitud-reject-dialog .solicitud-card-actions { justify-content: flex-end; }
 .nurse-requests-link { min-height: 40px; gap: 7px; white-space: nowrap; }
+.solicitudes-section-title { margin: 28px 0 14px; font-size: 20px; }
+.solicitudes-section-empty { color: var(--muted); }
+.solicitud-card h3 { margin: 6px 0 0; }
+.solicitud-estado-detalle { margin: 12px 0 0; color: var(--muted); }
+.solicitud-card .solicitud-cancelar { margin: 12px 0 0; }
+.solicitud-finalizar-hint { margin: 18px 0 0; color: var(--muted); font-size: 14px; }
 .chat-servicio { margin-top: 22px; }
 .solicitud-card .chat-servicio { padding: 18px 0 0; border: 0; border-top: 1px solid var(--border); border-radius: 0; box-shadow: none; }
 .chat-mensajes {

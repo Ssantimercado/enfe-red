@@ -133,7 +133,8 @@ def _notificar_cambio_estado(solicitud, destino):
     )
 
 
-def _cambiar_estado_solicitud(id_solicitud, *, rol, origen, destino, accion, mensaje):
+def _cambiar_estado_solicitud(id_solicitud, *, rol, origen, destino, accion, mensaje,
+                              requiere_turno_pasado=False):
     """Validar titularidad y guardar una transición de estado de forma atómica."""
     usuario = _usuario_actual()
     if not usuario:
@@ -149,6 +150,8 @@ def _cambiar_estado_solicitud(id_solicitud, *, rol, origen, destino, accion, men
         return jsonify({'error': f'Solo podés {accion} tus propias solicitudes'}), 403
     if solicitud.estado not in origen:
         return jsonify({'error': f'Solo se pueden {accion} solicitudes en estado {" o ".join(origen)}'}), 400
+    if requiere_turno_pasado and datetime.combine(solicitud.fecha, solicitud.hora) > _ahora_local():
+        return jsonify({'error': 'Vas a poder marcar el servicio como realizado cuando llegue la fecha y hora de atención'}), 409
 
     try:
         if not _bloquear_agenda(solicitud.idEnfermero):
@@ -278,22 +281,22 @@ def confirmarSolicitud(idSolicitud):
 @solicitud_bp.route('/solicitudes/paciente/<int:idPaciente>', methods=['GET'])
 @jwt_required()
 def consultarSolicitudesPaciente(idPaciente):
-    """Listar los pedidos Pendiente o Aceptada del paciente autenticado."""
+    """Listar los pedidos Pendiente o Aceptada del paciente autenticado.
+
+    Con ?todas=1 incluye todos los estados, para la vista de estados (SCRUM-58.3).
+    """
     usuario = _usuario_actual()
     if not usuario:
         return jsonify({'error': 'La sesión no corresponde a un usuario existente'}), 401
     paciente = Paciente.query.filter_by(usuario_id=usuario.id).first()
     if usuario.rol != 'paciente' or not paciente or paciente.id != idPaciente:
         return jsonify({'error': 'Solo podés consultar tus propias solicitudes de paciente'}), 403
-    solicitudes = (
-        _consulta_con_resumen()
-        .filter(
-            SolicitudServicio.idPaciente == idPaciente,
-            SolicitudServicio.estado.in_(ESTADOS_ACTIVOS),
-        )
-        .order_by(SolicitudServicio.fecha, SolicitudServicio.hora, SolicitudServicio.idSolicitud)
-        .all()
-    )
+    consulta = _consulta_con_resumen().filter(SolicitudServicio.idPaciente == idPaciente)
+    if request.args.get('todas') != '1':
+        consulta = consulta.filter(SolicitudServicio.estado.in_(ESTADOS_ACTIVOS))
+    solicitudes = consulta.order_by(
+        SolicitudServicio.fecha, SolicitudServicio.hora, SolicitudServicio.idSolicitud,
+    ).all()
     return jsonify([solicitud.to_dict() for solicitud in solicitudes]), 200
 
 
@@ -333,6 +336,8 @@ def marcarComoRealizado(idSolicitud):
     return _cambiar_estado_solicitud(
         idSolicitud, rol='enfermero', origen=('Aceptada',), destino='Realizada',
         accion='finalizar', mensaje='Servicio marcado como realizado',
+        # Una atención futura no puede estar realizada (y no se podría reseñar).
+        requiere_turno_pasado=True,
     )
 
 

@@ -20,6 +20,7 @@ import Landing from './components/Landing';
 import SolicitarServicio from './components/SolicitarServicio';
 import ConfirmacionSolicitud from './components/ConfirmacionSolicitud';
 import SolicitudesEnfermero from './components/SolicitudesEnfermero';
+import EstadoSolicitudes from './components/EstadoSolicitudes';
 import './App.css';
 
 function EntryRoute() {
@@ -102,6 +103,7 @@ export default function App() {
           <Route path="/perfil/:id/solicitar" element={<RutaProtegida rol="paciente"><SolicitarServicio /></RutaProtegida>} />
           <Route path="/solicitudes/:idSolicitud" element={<RutaProtegida rol="paciente"><ConfirmacionSolicitud /></RutaProtegida>} />
           <Route path="/solicitudes-enfermero" element={<RutaProtegida rol="enfermero"><SolicitudesEnfermero /></RutaProtegida>} />
+          <Route path="/mis-solicitudes" element={<RutaProtegida rol="paciente"><EstadoSolicitudes /></RutaProtegida>} />
           <Route
             path="/perfil-paciente"
             element={

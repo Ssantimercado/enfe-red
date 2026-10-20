@@ -63,8 +63,12 @@ class SolicitudesTest(unittest.TestCase):
         db.session.commit()
         self.client = self.app.test_client()
         self.reloj = patch('routes.solicitud_routes._ahora_local', return_value=datetime(2030, 1, 10, 10, 0))
-        self.reloj.start()
+        self.ahora = self.reloj.start()
         self.addCleanup(self.reloj.stop)
+
+    def pasar_turno(self):
+        # Los turnos de prueba son el 11/01/2030; finalizar exige que ya hayan ocurrido.
+        self.ahora.return_value = datetime(2030, 1, 12, 9, 0)
 
     def tearDown(self):
         db.session.remove()
@@ -399,6 +403,7 @@ class SolicitudesTest(unittest.TestCase):
         id_solicitud = creada.json['solicitud']['idSolicitud']
         ruta = f'/api/solicitudes/{id_solicitud}'
         self.assertEqual(self.client.put(ruta + '/aceptar', headers=self.headers(21)).status_code, 200)
+        self.pasar_turno()
         response = self.client.put(ruta + '/finalizar', headers=self.headers(21))
         self.assertEqual(response.status_code, 200, response.json)
         esperado = {**creada.json['solicitud'], 'estado': 'Realizada'}
@@ -419,7 +424,25 @@ class SolicitudesTest(unittest.TestCase):
                 self.assertIn('error', response.json)
                 self.assertEqual(db.session.get(SolicitudServicio, id_solicitud).estado, estado)
 
+    def test_bandeja_paciente_con_todas_incluye_estados_cerrados(self):
+        ids = {estado: self.guardar_solicitud(estado=estado, hora=hora)
+               for estado, hora in (('Pendiente', 8), ('Aceptada', 9), ('Rechazada', 10),
+                                    ('Cancelada', 11), ('Realizada', 12))}
+        activas = self.client.get('/api/solicitudes/paciente/101', headers=self.headers()).json
+        self.assertEqual({s['idSolicitud'] for s in activas}, {ids['Pendiente'], ids['Aceptada']})
+        todas = self.client.get('/api/solicitudes/paciente/101?todas=1', headers=self.headers()).json
+        self.assertEqual({s['idSolicitud'] for s in todas}, set(ids.values()))
+        self.assertEqual(self.client.get('/api/solicitudes/paciente/102?todas=1', headers=self.headers()).status_code, 403)
+
+    def test_finalizar_antes_del_turno_devuelve_409_sin_modificar(self):
+        id_solicitud = self.guardar_solicitud(estado='Aceptada')
+        response = self.client.put(f'/api/solicitudes/{id_solicitud}/finalizar', headers=self.headers(21))
+        self.assertEqual(response.status_code, 409)
+        self.assertIn('fecha y hora de atención', response.json['error'])
+        self.assertEqual(db.session.get(SolicitudServicio, id_solicitud).estado, 'Aceptada')
+
     def test_finalizar_dos_veces_devuelve_400_la_segunda_vez(self):
+        self.pasar_turno()
         id_solicitud = self.guardar_solicitud(estado='Aceptada')
         ruta = f'/api/solicitudes/{id_solicitud}/finalizar'
         self.assertEqual(self.client.put(ruta, headers=self.headers(21)).status_code, 200)
@@ -458,6 +481,7 @@ class SolicitudesTest(unittest.TestCase):
         self.assertEqual(db.session.get(SolicitudServicio, id_solicitud).estado, 'Aceptada')
 
     def test_finalizar_hace_rollback_si_falla_y_permite_reintentar(self):
+        self.pasar_turno()
         id_solicitud = self.guardar_solicitud(estado='Aceptada')
         ruta = f'/api/solicitudes/{id_solicitud}/finalizar'
         with patch.object(db.session(), 'commit', side_effect=SQLAlchemyError('detalle privado')):

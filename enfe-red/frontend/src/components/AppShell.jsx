@@ -54,16 +54,14 @@ export default function AppShell() {
             </NavLink>
           </nav>
           <div className="account-actions">
-            {nurse && (
-              <Link
-                className="button button-secondary nurse-requests-link"
-                to="/solicitudes-enfermero"
-                aria-label="Ver solicitudes recibidas"
-              >
-                <Icon name="briefcase" size={17} />
-                <span className="nurse-requests-label">Solicitudes</span>
-              </Link>
-            )}
+            <Link
+              className="button button-secondary nurse-requests-link"
+              to={nurse ? '/solicitudes-enfermero' : '/mis-solicitudes'}
+              aria-label={nurse ? 'Ver solicitudes recibidas' : 'Ver mis solicitudes'}
+            >
+              <Icon name="briefcase" size={17} />
+              <span className="nurse-requests-label">{nurse ? 'Solicitudes' : 'Mis solicitudes'}</span>
+            </Link>
             <Notificaciones userId={Number(session?.sub)} />
             <Link className="account-link" to={profile}>
               <span className="account-avatar">

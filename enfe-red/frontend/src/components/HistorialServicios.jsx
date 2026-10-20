@@ -228,7 +228,7 @@ export default function HistorialServicios({ userId, nurse }) {
                           Tu calificación: <strong>{'★'.repeat(propia.estrellas)}{'☆'.repeat(5 - propia.estrellas)}</strong>
                           <span> · {propia.comentario}</span>
                         </p>
-                      ) : (
+                      ) : solicitud.estado === 'Realizada' ? (
                         <button
                           className="text-link"
                           type="button"
@@ -236,6 +236,13 @@ export default function HistorialServicios({ userId, nurse }) {
                         >
                           Calificar {nurse ? 'paciente' : 'enfermero'}
                         </button>
+                      ) : (
+                        // HU11: la reseña se habilita una vez finalizada la atención.
+                        <p className="filter-hint">
+                          {nurse
+                            ? 'Marcá el servicio como realizado desde Solicitudes para poder calificar.'
+                            : 'Vas a poder calificar cuando el enfermero marque el servicio como realizado.'}
+                        </p>
                       )}
                       {recibida && (
                         <p>

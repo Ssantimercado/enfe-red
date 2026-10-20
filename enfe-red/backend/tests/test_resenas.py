@@ -128,7 +128,7 @@ class ResenasTest(unittest.TestCase):
         self.assertIsNone(db.session.get(Enfermero, 201).calificacionPromedio)
 
     def test_calificar_desde_el_historial_tambien_actualiza_el_promedio(self):
-        id_solicitud = self.solicitud(estado='Aceptada', fecha=date(2020, 1, 10))
+        id_solicitud = self.solicitud(estado='Realizada', fecha=date(2020, 1, 10))
         ruta = f'/api/solicitudes/{id_solicitud}/calificaciones'
         respuesta = self.client.post(ruta, headers=self.headers(11), json={'estrellas': 4, 'comentario': 'Bien'})
         self.assertEqual(respuesta.status_code, 201)

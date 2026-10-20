@@ -98,8 +98,9 @@ def calificarSolicitud(idSolicitud):
     )
     if not participante:
         return jsonify(error='Solo podés calificar servicios en los que participaste'), 403
-    if solicitud.estado not in ESTADOS_HISTORIAL:
-        return jsonify(error='Solo podés calificar servicios aceptados o realizados'), 409
+    # HU11: "La reseña solo puede realizarse una vez finalizada la atención".
+    if solicitud.estado != 'Realizada':
+        return jsonify(error='Vas a poder calificar cuando el enfermero marque el servicio como realizado'), 409
 
     ahora_local = datetime.now(ZONA_HORARIA_ARGENTINA).replace(tzinfo=None)
     fecha_hora_servicio = datetime.combine(solicitud.fecha, solicitud.hora)

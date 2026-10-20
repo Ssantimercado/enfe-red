@@ -448,7 +448,7 @@ test('el enfermero puede calificar un paciente desde el historial', async () => 
         idSolicitud: 45,
         fecha: '2020-02-03',
         hora: '10:30',
-        estado: 'Aceptada',
+        estado: 'Realizada',
         servicio: { tipoServicio: 'Curaciones' },
         paciente: { nombre: 'Paciente', apellido: 'anterior' },
         enfermero: { nombre: 'Enfermera', apellido: 'actual' },
@@ -1142,4 +1142,89 @@ test('el enfermero abre los mensajes de una solicitud aceptada y el polling se d
     assert.equal(document.querySelector('.chat-servicio'), null);
     assert.equal(intervalos.size, 0);
   });
+});
+
+// SCRUM-59.3 y HU11: marcar como realizado habilita la calificación.
+test('el enfermero marca como realizado un turno pasado y no uno futuro', async () => {
+  session('enfermero');
+  const pasada = { ...comprobante, idSolicitud: 21, estado: 'Aceptada', fecha: '2020-05-04', paciente: { nombre: 'Ana' } };
+  const futura = { ...comprobante, idSolicitud: 22, estado: 'Aceptada', fecha: '2099-05-04', paciente: { nombre: 'Mario' } };
+  solicitudHandler = async config => {
+    if (config.url === '/solicitudes/enfermero/201') return { data: [pasada, futura] };
+    if (config.url === '/solicitudes/21/finalizar' && config.method === 'put') {
+      return { data: { mensaje: 'Servicio marcado como realizado', solicitud: { ...pasada, estado: 'Realizada' } } };
+    }
+    throw new Error(`Petición inesperada: ${config.method} ${config.url}`);
+  };
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url, options = {}) => (String(url).endsWith('/perfil/enfermero')
+    ? response({ ...profile, idEnfermero: 201 })
+    : original(url, options));
+  try {
+    await mount('/solicitudes-enfermero');
+    const botones = [...document.querySelectorAll('button')].filter(b => b.textContent === 'Marcar como realizado');
+    assert.equal(botones.length, 1);
+    assert.match(document.body.textContent, /después del turno/);
+    await click(botones[0]);
+    assert.ok(solicitudRequests.some(r => r.url === '/solicitudes/21/finalizar' && r.method === 'put'));
+    assert.match(document.body.textContent, /Servicio marcado como realizado/);
+    assert.match(document.querySelectorAll('.solicitud-card')[0].textContent, /Realizada/);
+    assert.equal([...document.querySelectorAll('button')].some(b => b.textContent === 'Marcar como realizado'), false);
+  } finally { globalThis.fetch = original; }
+});
+
+test('el historial no ofrece calificar un servicio aceptado que no se marcó como realizado', async () => {
+  session('paciente');
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url, options = {}) => (String(url).endsWith('/usuarios/1/historial')
+    ? response([{
+      idSolicitud: 46, fecha: '2020-02-03', hora: '10:30', estado: 'Aceptada',
+      servicio: { tipoServicio: 'Curaciones' }, enfermero: { nombre: 'Laura' }, calificaciones: [],
+    }])
+    : original(url, options));
+  try {
+    await mount('/perfil-paciente');
+    await click(button('Ver historial'));
+    assert.equal([...document.querySelectorAll('button')].some(b => /Calificar/.test(b.textContent)), false);
+    assert.match(document.body.textContent, /cuando el enfermero marque el servicio como realizado/);
+  } finally { globalThis.fetch = original; }
+});
+
+// SCRUM-58.3: el paciente consulta el estado de todas sus solicitudes.
+test('Mis solicitudes muestra estados, enlaza al comprobante y permite cancelar desde la tarjeta', async () => {
+  session('paciente');
+  const items = [
+    { ...comprobante, idSolicitud: 31, estado: 'Pendiente' },
+    { ...comprobante, idSolicitud: 32, estado: 'Aceptada' },
+    { ...comprobante, idSolicitud: 33, estado: 'Rechazada', fecha: '2026-01-02' },
+    { ...comprobante, idSolicitud: 34, estado: 'Realizada', fecha: '2026-02-02' },
+  ];
+  solicitudHandler = async config => {
+    if (config.url === '/solicitudes/paciente/101') {
+      assert.equal(config.params?.todas, 1);
+      return { data: items };
+    }
+    if (config.url === '/solicitudes/31/cancelar') return { data: { mensaje: 'Solicitud cancelada', solicitud: { ...items[0], estado: 'Cancelada' } } };
+    throw new Error(`Petición inesperada: ${config.method} ${config.url}`);
+  };
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url, options = {}) => (String(url).endsWith('/perfil/paciente')
+    ? response({ idPaciente: 101, nombre: 'Ana' })
+    : original(url, options));
+  try {
+    await mount('/home');
+    await click(link('Mis solicitudes'));
+    assert.equal(window.location.pathname, '/mis-solicitudes');
+    assert.match(document.body.textContent, /En curso \(2\)/);
+    assert.match(document.body.textContent, /Anteriores \(2\)/);
+    const estados = [...document.querySelectorAll('.solicitud-status')].map(e => e.textContent);
+    assert.deepEqual(estados, ['Pendiente', 'Aceptada', 'Realizada', 'Rechazada']);
+    assert.ok(document.querySelector('a[href="/solicitudes/32"]').textContent.includes('mensajes'));
+    assert.equal([...document.querySelectorAll('button')].filter(b => b.textContent === 'Cancelar solicitud').length, 2);
+    await click(button('Cancelar solicitud'));
+    await click(button('Sí, cancelar'));
+    assert.ok(solicitudRequests.some(r => r.url === '/solicitudes/31/cancelar'));
+    assert.match(document.body.textContent, /En curso \(1\)/);
+    assert.match(document.body.textContent, /Anteriores \(3\)/);
+  } finally { globalThis.fetch = original; }
 });

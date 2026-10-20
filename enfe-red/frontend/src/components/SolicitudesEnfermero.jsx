@@ -4,6 +4,7 @@ import { requestApi as api } from '../api';
 import {
   aceptarSolicitud,
   errorSolicitud,
+  finalizarSolicitud,
   obtenerSolicitudesEnfermero,
   rechazarSolicitud,
 } from '../services/solicitudes';
@@ -12,6 +13,17 @@ import './Solicitudes.css';
 
 // El chat se habilita al aceptar; después de cerrar queda como registro de lectura.
 const CHAT_VISIBLE = ['Aceptada', 'Realizada', 'Cancelada'];
+const ACCIONES = {
+  aceptar: { enviar: aceptarSolicitud, exito: 'Solicitud aceptada.' },
+  rechazar: { enviar: rechazarSolicitud, exito: 'Solicitud rechazada.' },
+  // SCRUM-59.3: marcar como realizada habilita la reseña del paciente (HU11).
+  finalizar: { enviar: finalizarSolicitud, exito: 'Servicio marcado como realizado.' },
+};
+
+function turnoPasado(solicitud) {
+  // El backend valida con la hora de Argentina; acá solo decide qué botón mostrar.
+  return new Date(`${solicitud.fecha}T${solicitud.hora}`) <= new Date();
+}
 
 function mensajeError(error) {
   if (!error.response && error.message && error.message !== 'Network Error') {
@@ -61,15 +73,13 @@ export default function SolicitudesEnfermero() {
     setError('');
     setMensaje('');
     try {
-      const resultado = accion === 'aceptar'
-        ? await aceptarSolicitud(solicitud.idSolicitud)
-        : await rechazarSolicitud(solicitud.idSolicitud);
+      const resultado = await ACCIONES[accion].enviar(solicitud.idSolicitud);
       const actualizada = resultado.solicitud;
       if (!actualizada?.idSolicitud) throw new Error('El servidor no devolvió la solicitud actualizada.');
       setSolicitudes((items) => items.map((item) =>
         item.idSolicitud === actualizada.idSolicitud ? actualizada : item,
       ));
-      setMensaje(resultado.mensaje || `Solicitud ${accion === 'aceptar' ? 'aceptada' : 'rechazada'}.`);
+      setMensaje(resultado.mensaje || ACCIONES[accion].exito);
       setSeleccionada(null);
       dialog.current?.close();
     } catch (err) {
@@ -128,6 +138,24 @@ export default function SolicitudesEnfermero() {
                 <dt>Dirección</dt>
                 <dd>{solicitud.direccionAtencion}</dd>
               </dl>
+              {solicitud.estado === 'Aceptada' && (
+                turnoPasado(solicitud) ? (
+                  <div className="solicitud-card-actions">
+                    <button
+                      className="button button-primary"
+                      type="button"
+                      disabled={guardando}
+                      onClick={() => cambiarEstado(solicitud, 'finalizar')}
+                    >
+                      {guardando ? 'Actualizando…' : 'Marcar como realizado'}
+                    </button>
+                  </div>
+                ) : (
+                  <p className="solicitud-finalizar-hint">
+                    Vas a poder marcarlo como realizado después del turno.
+                  </p>
+                )
+              )}
               {CHAT_VISIBLE.includes(solicitud.estado) && (
                 <div className="solicitud-card-actions">
                   <button

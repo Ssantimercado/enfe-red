@@ -103,7 +103,7 @@ class ComunicacionTest(unittest.TestCase):
         self.assertNotIn(futura, [item['idSolicitud'] for item in response.json])
 
     def test_participantes_pueden_calificarse_una_vez_y_ver_ambas_calificaciones(self):
-        id_solicitud = self.solicitud(fecha=date(2020, 1, 10))
+        id_solicitud = self.solicitud('Realizada', fecha=date(2020, 1, 10))
         ruta = f'/api/solicitudes/{id_solicitud}/calificaciones'
         paciente = self.client.post(
             ruta,
@@ -133,7 +133,7 @@ class ComunicacionTest(unittest.TestCase):
         self.assertEqual(len(historial.json[0]['calificaciones']), 2)
 
     def test_calificacion_valida_escala_y_limite_de_palabras(self):
-        id_solicitud = self.solicitud(fecha=date(2020, 1, 10))
+        id_solicitud = self.solicitud('Realizada', fecha=date(2020, 1, 10))
         ruta = f'/api/solicitudes/{id_solicitud}/calificaciones'
         for datos in (
             {'estrellas': 0, 'comentario': 'Opinión'},
@@ -154,8 +154,8 @@ class ComunicacionTest(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 201)
 
-    def test_solo_participantes_y_servicios_ya_aceptados_y_vencidos_pueden_calificar(self):
-        ruta = f'/api/solicitudes/{self.solicitud(fecha=date(2020, 1, 10))}/calificaciones'
+    def test_solo_participantes_y_servicios_realizados_pueden_calificar(self):
+        ruta = f'/api/solicitudes/{self.solicitud("Realizada", fecha=date(2020, 1, 10))}/calificaciones'
         datos = {'estrellas': 5, 'comentario': 'Buen servicio.'}
         self.assertEqual(
             self.client.post(ruta, headers=self.headers(12), json=datos).status_code,
@@ -178,6 +178,16 @@ class ComunicacionTest(unittest.TestCase):
             json=datos,
         )
         self.assertEqual(response.status_code, 409)
+
+        # HU11: aceptada y vencida no alcanza; el enfermero debe marcarla como realizada.
+        vencida = self.solicitud('Aceptada', fecha=date(2020, 1, 10))
+        response = self.client.post(
+            f'/api/solicitudes/{vencida}/calificaciones',
+            headers=self.headers(),
+            json=datos,
+        )
+        self.assertEqual(response.status_code, 409)
+        self.assertIn('realizado', response.json['error'])
 
     def test_chat_bidireccional_orden_y_fecha_utc(self):
         ruta = f'/api/solicitudes/{self.solicitud()}/mensajes'
