@@ -58,8 +58,27 @@ Disparadores, siempre en la misma transacción que el cambio (si falla la alerta
 
 Ambos requieren `Authorization: Bearer <token>` y usan `{ "error": "..." }` para errores de aplicación.
 
+## Reseñas y reputación (Santiago: SCRUM-65, 66 y 67)
+
+Se reutiliza la tabla `calificaciones_servicio` de Renzo para tener un único sistema de reputación: una reseña es la calificación que el paciente deja sobre el enfermero. Se agregaron `Calificacion.fecha` (Reseña.fecha del diagrama) y `Enfermero.calificacionPromedio` / `cantidadResenas`, con migración idempotente en `schema_sprint4.py` que completa el promedio de las calificaciones existentes.
+
+**65.2 Promedio:** se recalcula en la misma transacción cada vez que un paciente califica, tanto desde `POST /api/resenas` como desde `POST /api/solicitudes/<id>/calificaciones` del historial. Las calificaciones del enfermero al paciente no cuentan. `Enfermero.to_dict()` incluye `calificacionPromedio`, `cantidadResenas` y `puntuacion` (el mismo promedio, que la cartilla ya muestra como estrella).
+
+**66.1** `POST /api/resenas` (solo paciente dueño de la solicitud). Body exacto: `{ "idSolicitud": 15, "puntuacion": 5, "comentario": "Muy puntual." }`. Solo con la solicitud en **Realizada** (HU11: "una vez finalizada la atención"); si no, 409. Una reseña por solicitud (409 si se repite). Comentario obligatorio, hasta 250 palabras y 2000 caracteres. Responde 201:
+
+```json
+{ "mensaje": "Reseña publicada",
+  "resena": { "idResena": 7, "idSolicitud": 15, "puntuacion": 5, "comentario": "Muy puntual.",
+              "fecha": "2026-10-20T00:10:00Z", "paciente": "Ana P." },
+  "calificacionPromedio": 4.5, "cantidadResenas": 2 }
+```
+
+**67.1** `GET /api/enfermeros/<idEnfermero>/resenas` (ID de perfil, igual que en solicitudes; requiere sesión). Responde `{ "idEnfermero", "calificacionPromedio", "cantidadResenas", "resenas": [...] }`, de la más nueva a la más vieja. El autor se muestra como nombre e inicial del apellido; no se exponen emails ni datos médicos. 404 si el enfermero no existe.
+
+**Para acordar:** la calificación desde el historial (`/solicitudes/<id>/calificaciones`) sigue aceptando servicios **Aceptados** con fecha pasada, porque todavía no está el botón "Marcar como realizado" (59.3). `/api/resenas` aplica la regla estricta de la HU11.
+
 ## Validación
 
 Desde backend: `python -m unittest discover -s tests -q`.
 
-Se agregaron 10 pruebas de historial privado, estados terminales, envío bidireccional, aislamiento entre solicitudes, permisos, autenticación, validación, bloqueo de suplantación, timestamps UTC, rollback y esquema. Las pruebas usan SQLite en memoria: no alteran MySQL local. El bloqueo `FOR UPDATE` del envío está destinado a MySQL/InnoDB; la concurrencia real debe validarse allí al integrar. `tests/test_notificaciones.py` agrega 9 pruebas: aviso al aceptar y rechazar, transiciones sin aviso, rollback si falla la alerta, mensajes sin acumulación, privacidad, lectura idempotente, orden y esquema.
+Se agregaron 10 pruebas de historial privado, estados terminales, envío bidireccional, aislamiento entre solicitudes, permisos, autenticación, validación, bloqueo de suplantación, timestamps UTC, rollback y esquema. Las pruebas usan SQLite en memoria: no alteran MySQL local. El bloqueo `FOR UPDATE` del envío está destinado a MySQL/InnoDB; la concurrencia real debe validarse allí al integrar. `tests/test_resenas.py` agrega 8 pruebas: promedio, regla de Realizada, una por solicitud, permisos, validación, rollback, calificación desde el historial y migración. `tests/test_notificaciones.py` agrega 9 pruebas: aviso al aceptar y rechazar, transiciones sin aviso, rollback si falla la alerta, mensajes sin acumulación, privacidad, lectura idempotente, orden y esquema.

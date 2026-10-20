@@ -36,6 +36,32 @@ def inicializar_bd_sprint4():
             connection.execute(text(
                 'ALTER TABLE enfermeros ADD COLUMN verificado BOOLEAN NOT NULL DEFAULT FALSE'
             ))
+        # Sprint 5 de Santiago (SCRUM-65.2): reputación del enfermero.
+        recalcular = False
+        if 'calificacionPromedio' not in columnas:
+            connection.execute(text('ALTER TABLE enfermeros ADD COLUMN calificacionPromedio FLOAT NULL'))
+            recalcular = True
+        if 'cantidadResenas' not in columnas:
+            connection.execute(text(
+                'ALTER TABLE enfermeros ADD COLUMN cantidadResenas INTEGER NOT NULL DEFAULT 0'
+            ))
+            recalcular = True
+        if inspect(connection).has_table('calificaciones_servicio'):
+            columnas_calificacion = {
+                columna['name']
+                for columna in inspect(connection).get_columns('calificaciones_servicio')
+            }
+            if 'fecha' not in columnas_calificacion:
+                connection.execute(text('ALTER TABLE calificaciones_servicio ADD COLUMN fecha DATETIME NULL'))
+            if recalcular:
+                # SQL directo: otras columnas de enfermeros se agregan después, en el Sprint 3.
+                connection.execute(text(
+                    'UPDATE enfermeros SET '
+                    'calificacionPromedio = (SELECT ROUND(AVG(c.estrellas), 2) FROM calificaciones_servicio c '
+                    'WHERE c.idUsuarioCalificado = enfermeros.usuario_id), '
+                    'cantidadResenas = (SELECT COUNT(*) FROM calificaciones_servicio c '
+                    'WHERE c.idUsuarioCalificado = enfermeros.usuario_id)'
+                ))
         precio = next(
             (columna for columna in inspect(connection).get_columns('servicios')
              if columna['name'] == 'precioEstimado'),

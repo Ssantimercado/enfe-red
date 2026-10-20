@@ -10,7 +10,7 @@ from sqlalchemy.orm import joinedload
 from database import db
 from models.usuario_models import Usuario, Paciente, Enfermero
 from models.solicitud_models import SolicitudServicio
-from models.calificacion_models import Calificacion
+from models.calificacion_models import Calificacion, recalcular_promedio
 from models.mensaje_models import Mensaje
 from models.notificacion_models import notificar
 
@@ -138,6 +138,9 @@ def calificarSolicitud(idSolicitud):
     )
     try:
         db.session.add(calificacion)
+        if usuario.rol == 'paciente':
+            # SCRUM-65.2: el promedio del enfermero se actualiza en la misma transacción.
+            recalcular_promedio(solicitud.enfermero)
         db.session.commit()
     except IntegrityError:
         db.session.rollback()

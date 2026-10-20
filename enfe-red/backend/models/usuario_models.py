@@ -78,6 +78,9 @@ class Enfermero(db.Model):
     verificado = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
     latitud = db.Column(db.Float, nullable=True)
     longitud = db.Column(db.Float, nullable=True)
+    # SCRUM-65.2: se recalcula con cada calificación nueva de un paciente.
+    calificacionPromedio = db.Column(db.Float, nullable=True)
+    cantidadResenas = db.Column(db.Integer, nullable=False, default=0, server_default='0')
 
     disponibilidades = db.relationship('Disponibilidad', backref='enfermero', cascade="all, delete-orphan")
     
@@ -100,7 +103,11 @@ class Enfermero(db.Model):
             "disponible": self.disponible,
             "verificado": self.verificado,
             "latitud": self.latitud,
-            "longitud": self.longitud
+            "longitud": self.longitud,
+            "calificacionPromedio": self.calificacionPromedio,
+            "cantidadResenas": self.cantidadResenas or 0,
+            # ListaEnfermeros.jsx muestra la estrella con este campo (HU3).
+            "puntuacion": self.calificacionPromedio,
         }
 
 class Disponibilidad(db.Model):
