@@ -115,7 +115,7 @@ class SolicitudesTest(unittest.TestCase):
         db.session.commit()
         self.assertEqual(self.client.get('/api/servicios', headers=self.headers()).json, [])
 
-    def test_catalogo_inicial_sin_tarifas_es_idempotente_y_se_puede_solicitar(self):
+    def test_catalogo_inicial_con_precios_de_referencia_es_idempotente_y_se_puede_solicitar(self):
         inicializar_catalogo_servicios()
         inicializar_catalogo_servicios()
         servicios = self.client.get('/api/servicios', headers=self.headers()).json
@@ -138,11 +138,12 @@ class SolicitudesTest(unittest.TestCase):
             servicio for servicio in servicios
             if servicio['tipoServicio'] == 'Inyecciones'
         )
+        # Un precio cargado se conserva; uno vacío recibe el de referencia.
         self.assertEqual(curaciones['precioEstimado'], '8500.50')
-        self.assertIsNone(inyecciones['precioEstimado'])
+        self.assertEqual(inyecciones['precioEstimado'], '6000.00')
         solicitud = self.crear(idServicio=inyecciones['idServicio'])
         self.assertEqual(solicitud.status_code, 201)
-        self.assertIsNone(solicitud.json['solicitud']['servicio']['precioEstimado'])
+        self.assertEqual(solicitud.json['solicitud']['servicio']['precioEstimado'], '6000.00')
         self.assertEqual(Servicio.query.count(), 6)
 
     def test_crear_y_consultar_comprobante_sin_cambiar_estado(self):

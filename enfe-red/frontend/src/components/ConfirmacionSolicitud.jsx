@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { sesionActual } from '../api';
 import { obtenerSolicitud, errorSolicitud } from '../services/solicitudes';
 import CancelarSolicitud from './CancelarSolicitud';
 import ChatServicio from './ChatServicio';
@@ -10,6 +11,10 @@ const CHAT_VISIBLE = ['Aceptada', 'Realizada', 'Cancelada'];
 
 export default function ConfirmacionSolicitud() {
   const { idSolicitud } = useParams();
+  // El paciente y el enfermero asignado ven el mismo comprobante; el backend valida el acceso.
+  const enfermero = sesionActual()?.rol === 'enfermero';
+  const otraParte = (s) => (enfermero ? s?.paciente : s?.enfermero);
+  const nombreOtraParte = (s) => [otraParte(s)?.nombre, otraParte(s)?.apellido].filter(Boolean).join(' ');
   const [solicitud, setSolicitud] = useState(null);
   const [error, setError] = useState('');
   const [intento, setIntento] = useState(0);
@@ -28,10 +33,10 @@ export default function ConfirmacionSolicitud() {
     <section className="content-panel">
     {error ? <><p role="alert" className="notice notice-error">{error}</p><button className="button button-secondary" onClick={() => setIntento(i => i + 1)}>Reintentar consulta</button></> : !solicitud ? <p role="status">Cargando comprobante…</p> : <>
       <p className="notice notice-info" role="status">Estado: <strong>{solicitud.estado}</strong></p>
-      {solicitud.estado === 'Pendiente' && <p>Tu pedido está registrado y espera la aceptación del enfermero.</p>}
+      {solicitud.estado === 'Pendiente' && <p>{enfermero ? 'El pedido espera tu respuesta en Solicitudes.' : 'Tu pedido está registrado y espera la aceptación del enfermero.'}</p>}
       <dl className="solicitud-summary">
         <dt>Número</dt><dd>{solicitud.idSolicitud}</dd>
-        <dt>Profesional</dt><dd>{solicitud.enfermero?.nombre} {solicitud.enfermero?.apellido}</dd>
+        <dt>{enfermero ? 'Paciente' : 'Profesional'}</dt><dd>{nombreOtraParte(solicitud) || 'No informado'}</dd>
         <dt>Servicio</dt><dd>{solicitud.servicio?.tipoServicio || 'No informado'}</dd>
         <dt>Fecha</dt><dd>{solicitud.fecha}</dd>
         <dt>Hora</dt><dd>{solicitud.hora}</dd>
@@ -40,13 +45,15 @@ export default function ConfirmacionSolicitud() {
       </dl>
       <CancelarSolicitud key={solicitud.idSolicitud} solicitud={solicitud} onCancelada={() => setSolicitud(actual => ({ ...actual, estado: 'Cancelada' }))} />
     </>}
-    <Link className="button button-secondary" to="/cartilla">Volver a la cartilla</Link>
+    {enfermero
+      ? <Link className="button button-secondary" to="/solicitudes-enfermero">Volver a solicitudes</Link>
+      : <Link className="button button-secondary" to="/mis-solicitudes">Volver a mis solicitudes</Link>}
     </section>
     {solicitud && CHAT_VISIBLE.includes(solicitud.estado) && (
       <ChatServicio
         key={solicitud.idSolicitud}
         solicitud={solicitud}
-        contraparte={[solicitud.enfermero?.nombre, solicitud.enfermero?.apellido].filter(Boolean).join(' ')}
+        contraparte={nombreOtraParte(solicitud)}
         onEstadoCambiado={(actual) => setSolicitud(previa => ({ ...previa, estado: actual.estado }))}
       />
     )}

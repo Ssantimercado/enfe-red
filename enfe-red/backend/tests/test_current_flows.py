@@ -11,7 +11,7 @@ from extensions import bcrypt
 from models.usuario_models import Disponibilidad, Enfermero, Paciente, Usuario
 from models.servicio_models import Servicio
 from models.solicitud_models import SolicitudServicio
-from routes.auth_routes import auth_bp, codigos_recuperacion
+from routes.auth_routes import auth_bp, codigos_recuperacion, limites_recuperacion
 from routes.usuario_routes import usuario_bp
 from seed_sprint3 import inicializar_bd_sprint3
 
@@ -38,7 +38,7 @@ class CurrentFlowsTest(unittest.TestCase):
             db.session.add(user)
             db.session.flush()
             db.session.add(Enfermero(usuario_id=user.id, matricula=f'MAT-{index}',
-                                    nombre=f'Nurse {index}', tarifa_hora=precio))
+                                    nombre=f'Nurse {index}', tarifa_hora=precio, verificado=True))
         user = Usuario(email='patient@test.local', rol='paciente', password_hash='unused')
         db.session.add(user)
         db.session.flush()
@@ -48,12 +48,86 @@ class CurrentFlowsTest(unittest.TestCase):
         self.headers = {'Authorization': 'Bearer ' + create_access_token(identity='1')}
         self.client = self.app.test_client()
         codigos_recuperacion.clear()
+        limites_recuperacion.clear()
 
     def tearDown(self):
         db.session.remove()
         db.drop_all()
         self.context.pop()
         codigos_recuperacion.clear()
+        limites_recuperacion.clear()
+
+    def test_busqueda_solo_muestra_disponibles_y_verificados(self):
+        ocultos = Enfermero.query.filter(Enfermero.matricula.in_(('MAT-0', 'MAT-1'))).all()
+        ocultos[0].verificado = False
+        ocultos[1].disponible = False
+        db.session.commit()
+        nombres = {e['nombre'] for e in self.client.get('/api/enfermeros/buscar?per_page=100').json['enfermeros']}
+        self.assertEqual(len(nombres), 6)
+        self.assertFalse({'Nurse 0', 'Nurse 1'} & nombres)
+
+    def test_login_y_registro_validan_datos_sin_errores_500(self):
+        for cuerpo in ('no-json', '[]', 'null'):
+            for ruta in ('/api/login', '/api/registro'):
+                with self.subTest(ruta=ruta, cuerpo=cuerpo):
+                    respuesta = self.client.post(ruta, data=cuerpo, content_type='application/json')
+                    self.assertEqual(respuesta.status_code, 400)
+        largo = self.client.post('/api/login', json={'email': 'nurse0@test.local', 'password': 'ñ' * 40})
+        self.assertEqual(largo.status_code, 401)
+        self.assertEqual(self.client.post('/api/login', json={'email': 1, 'password': 'x'}).status_code, 400)
+        base = {'nombre': 'Ana Nueva', 'email': 'nueva@test.local', 'rol': 'paciente'}
+        self.assertEqual(self.client.post('/api/registro', json={**base, 'password': 'corta'}).status_code, 400)
+        self.assertEqual(self.client.post('/api/registro', json={**base, 'password': 'x' * 73}).status_code, 400)
+        self.assertEqual(self.client.post('/api/registro', json={**base, 'password': 'clave-segura', 'rol': 'admin'}).status_code, 400)
+        creado = self.client.post('/api/registro', json={**base, 'email': '  nueva@test.local ', 'password': 'clave-segura'})
+        self.assertEqual(creado.status_code, 201)
+        login = self.client.post('/api/login', json={'email': 'nueva@test.local', 'password': 'clave-segura'})
+        self.assertEqual(login.status_code, 200)
+        with patch('routes.usuario_routes.db.session.commit', side_effect=RuntimeError('detalle interno')):
+            fallo = self.client.post('/api/registro', json={**base, 'email': 'otra@test.local', 'password': 'clave-segura'})
+        self.assertEqual(fallo.status_code, 500)
+        self.assertNotIn('detalle interno', fallo.get_data(as_text=True))
+
+    def test_recuperacion_limita_codigos_por_ventana(self):
+        email = 'nurse0@test.local'
+        with patch('routes.auth_routes.secrets.randbelow', side_effect=[111111, 222222, 333333, 444444]):
+            for _ in range(4):
+                self.client.post('/api/recuperar-password', json={'email': email})
+        # El cuarto pedido de la ventana no genera código nuevo: sigue vigente el tercero.
+        self.assertEqual(codigos_recuperacion[email]['codigo'], '333333')
+
+    def test_pedir_otro_codigo_no_reinicia_los_intentos_fallidos(self):
+        email = 'nurse0@test.local'
+        incorrecto = dict(email=email, codigo='000000', nueva_password='nueva-clave')
+        with patch('routes.auth_routes.secrets.randbelow', side_effect=[111111, 222222, 333333]):
+            for _ in range(2):
+                self.client.post('/api/recuperar-password', json={'email': email})
+                for _ in range(5):
+                    self.assertEqual(self.client.post('/api/reset-password', json=incorrecto).status_code, 400)
+            self.client.post('/api/recuperar-password', json={'email': email})
+        # Con 10 fallos en la ventana, ni el código correcto sirve hasta que pase el bloqueo.
+        bloqueado = self.client.post('/api/reset-password', json={**incorrecto, 'codigo': '333333'})
+        self.assertEqual(bloqueado.status_code, 429)
+        self.assertEqual(self.client.post('/api/login', json=dict(email=email, password='original')).status_code, 200)
+
+    def test_reset_valida_la_nueva_contrasena_sin_consumir_el_codigo(self):
+        email = 'nurse0@test.local'
+        self.client.post('/api/recuperar-password', json={'email': email})
+        codigo = codigos_recuperacion[email]['codigo']
+        corta = self.client.post('/api/reset-password', json=dict(email=email, codigo=codigo, nueva_password='corta'))
+        self.assertEqual(corta.status_code, 400)
+        valida = self.client.post('/api/reset-password', json=dict(email=email, codigo=codigo, nueva_password='nueva-clave'))
+        self.assertEqual(valida.status_code, 200)
+
+    def test_cambiar_matricula_quita_la_verificacion(self):
+        enfermero = Enfermero.query.filter_by(matricula='MAT-0').one()
+        headers = {'Authorization': 'Bearer ' + create_access_token(identity=str(enfermero.usuario_id))}
+        mismo = self.client.put('/api/perfil/enfermero', headers=headers, json={'matricula': 'MAT-0', 'nombre': 'Nurse 0'})
+        self.assertEqual(mismo.status_code, 200)
+        self.assertTrue(db.session.get(Enfermero, enfermero.id).verificado)
+        otra = self.client.put('/api/perfil/enfermero', headers=headers, json={'matricula': 'MAT-999', 'nombre': 'Nurse 0'})
+        self.assertEqual(otra.status_code, 200)
+        self.assertFalse(db.session.get(Enfermero, enfermero.id).verificado)
 
     def horario(self, **changes):
         data = dict(dia='Lunes', estado='Disponible', hora_inicio='08:00', hora_fin='12:00')

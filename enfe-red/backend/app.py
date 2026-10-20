@@ -4,6 +4,7 @@ from flask import Flask, jsonify
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 
+from cli_admin import registrar_comandos
 from database import db
 from extensions import bcrypt
 from routes.usuario_routes import usuario_bp
@@ -17,13 +18,31 @@ from seed_sprint3 import inicializar_bd_sprint3
 
 load_dotenv()
 
+# Sin valor por defecto: una clave escrita en el repositorio permitiría falsificar tokens.
+JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', '')
+if len(JWT_SECRET_KEY) < 32:
+    raise RuntimeError(
+        'Falta JWT_SECRET_KEY (mínimo 32 caracteres) en backend/.env. '
+        'Generala con: python -c "import secrets; print(secrets.token_urlsafe(48))"'
+    )
+if not os.getenv('DATABASE_URL'):
+    raise RuntimeError('Falta DATABASE_URL en backend/.env (ver .env.example).')
+
 app = Flask(__name__)
-CORS(app)
+# Solo el frontend del proyecto puede llamar a la API desde el navegador.
+ORIGENES_FRONTEND = [
+    origen.strip()
+    for origen in os.getenv('FRONTEND_ORIGINS', 'http://localhost:5173,http://127.0.0.1:5173').split(',')
+    if origen.strip()
+]
+CORS(app, origins=ORIGENES_FRONTEND)
 
 # Configuración de base de datos y JWT
 app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'clave_secreta_super_segura_para_enfered_2026_32bytes')
+app.config['JWT_SECRET_KEY'] = JWT_SECRET_KEY
+# Rechaza cuerpos enormes antes de procesarlos (comentarios, mensajes, perfiles).
+app.config['MAX_CONTENT_LENGTH'] = 1024 * 1024
 
 # Inicialización de extensiones
 db.init_app(app)
@@ -41,6 +60,7 @@ app.register_blueprint(solicitud_bp, url_prefix='/api')
 app.register_blueprint(comunicacion_bp, url_prefix='/api')
 app.register_blueprint(notificacion_bp, url_prefix='/api')
 app.register_blueprint(resena_bp, url_prefix='/api')
+registrar_comandos(app)
 
 # Prepara el esquema de solicitudes antes de consultar/sembrar los perfiles existentes.
 with app.app_context():
@@ -54,4 +74,5 @@ def home():
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
-    app.run(debug=True, port=port)
+    # El debugger de Werkzeug permite ejecutar código: solo en desarrollo y a pedido.
+    app.run(debug=os.getenv('FLASK_DEBUG') == '1', port=port)

@@ -260,8 +260,15 @@ secreto con `.\venv\Scripts\python.exe -c "import secrets; print(secrets.token_h
 
 - `DATABASE_URL`: `mysql+pymysql://USUARIO:CLAVE@localhost:3306/enfe_red`.
   Los caracteres especiales del usuario/clave deben estar codificados para URL.
-- `JWT_SECRET_KEY`: secreto aleatorio de al menos 32 bytes; no compartirlo en Git.
+- `JWT_SECRET_KEY`: **obligatorio**, secreto aleatorio de al menos 32 caracteres;
+  no compartirlo en Git. Sin él el backend no arranca (ya no hay clave por defecto
+  en el código). Al cambiarlo, las sesiones abiertas se cierran y hay que volver a
+  iniciar sesión.
 - `PORT`: puerto de Flask; predeterminado `5000`.
+- `FLASK_DEBUG=1`: solo en desarrollo. Activa la recarga automática y muestra en la
+  consola el código de recuperación de contraseña (no hay envío de correo).
+- `FRONTEND_ORIGINS`: orígenes autorizados por CORS; predeterminado
+  `http://localhost:5173,http://127.0.0.1:5173`.
 
 ```powershell
 .\venv\Scripts\python.exe app.py
@@ -279,9 +286,21 @@ migración general de todas las diferencias futuras.
 El seed agrega cuatro profesionales de Mendoza cuando no existen. Por ejemplo,
 `laura.gomez@test.com` recibe la contraseña de demo `123456` solo al crearse;
 reiniciar el backend no reemplaza contraseñas ya cambiadas. Un paciente se crea
-desde `/registro`. Los profesionales de demo no se verifican automáticamente
-y el catálogo `Servicio` comienza vacío. Para preparar una solicitud de prueba
-local, seguir [el ejemplo del contrato](docs/sprint-4-santiago.md#datos-para-una-prueba-local).
+desde `/registro`. El catálogo `Servicio` se completa con seis servicios y un
+precio estimado de referencia por visita (solo donde el precio está vacío).
+
+Los profesionales no se verifican automáticamente y la cartilla solo muestra
+enfermeros **disponibles y verificados** (HU3 y HU9). Hasta el panel de
+administración del Sprint 6, la matrícula se verifica desde la consola:
+
+```powershell
+.\venv\Scripts\flask.exe --app app enfermeros-pendientes
+.\venv\Scripts\flask.exe --app app verificar-enfermero laura.gomez@test.com
+.\venv\Scripts\flask.exe --app app verificar-enfermero laura.gomez@test.com --quitar
+```
+
+Para preparar una solicitud de prueba local, seguir
+[el ejemplo del contrato](docs/sprint-4-santiago.md#datos-para-una-prueba-local).
 
 ### 2. Frontend
 

@@ -1,17 +1,23 @@
+from decimal import Decimal
+
 from sqlalchemy import inspect, text
 
 from database import db
 from models.servicio_models import Servicio
 from models.solicitud_models import SolicitudServicio
 
-SERVICIOS_INICIALES = (
-    'Curaciones',
-    'Inyecciones',
-    'Control de signos vitales',
-    'Higiene y confort',
-    'Acompañamiento de adultos mayores',
-    'Cuidados Intensivos',
-)
+# Precio estimado de referencia por visita (ARS), para que el comprobante muestre un
+# valor orientativo. El precio final lo acuerdan paciente y profesional; cuando exista
+# la gestión de servicios del administrador, estos valores se podrán editar.
+PRECIOS_REFERENCIA = {
+    'Curaciones': Decimal('8500.00'),
+    'Inyecciones': Decimal('6000.00'),
+    'Control de signos vitales': Decimal('5500.00'),
+    'Higiene y confort': Decimal('9000.00'),
+    'Acompañamiento de adultos mayores': Decimal('12000.00'),
+    'Cuidados Intensivos': Decimal('18000.00'),
+}
+SERVICIOS_INICIALES = tuple(PRECIOS_REFERENCIA)
 
 
 def inicializar_bd_sprint4():
@@ -83,16 +89,18 @@ def inicializar_bd_sprint4():
 
 
 def inicializar_catalogo_servicios():
-    """Agregar los servicios elegidos si faltan, sin asignar precios inventados."""
+    """Agregar los servicios si faltan y completar el precio de referencia solo donde está vacío."""
     existentes = {
-        servicio.tipoServicio
+        servicio.tipoServicio: servicio
         for servicio in Servicio.query.filter(
             Servicio.tipoServicio.in_(SERVICIOS_INICIALES)
         ).all()
     }
-    db.session.add_all(
-        Servicio(tipoServicio=tipo, precioEstimado=None)
-        for tipo in SERVICIOS_INICIALES
-        if tipo not in existentes
-    )
+    for tipo, precio in PRECIOS_REFERENCIA.items():
+        servicio = existentes.get(tipo)
+        if not servicio:
+            db.session.add(Servicio(tipoServicio=tipo, precioEstimado=precio))
+        elif servicio.precioEstimado is None:
+            # Nunca pisa un precio que alguien ya cargó.
+            servicio.precioEstimado = precio
     db.session.commit()

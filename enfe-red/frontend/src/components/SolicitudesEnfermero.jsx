@@ -158,6 +158,9 @@ export default function SolicitudesEnfermero() {
               )}
               {CHAT_VISIBLE.includes(solicitud.estado) && (
                 <div className="solicitud-card-actions">
+                  <Link className="button button-secondary" to={`/solicitudes/${solicitud.idSolicitud}`}>
+                    Ver comprobante
+                  </Link>
                   <button
                     className="button button-secondary"
                     type="button"

@@ -101,7 +101,7 @@ export default function App() {
         >
           <Route path="/home" element={<Home />} />
           <Route path="/perfil/:id/solicitar" element={<RutaProtegida rol="paciente"><SolicitarServicio /></RutaProtegida>} />
-          <Route path="/solicitudes/:idSolicitud" element={<RutaProtegida rol="paciente"><ConfirmacionSolicitud /></RutaProtegida>} />
+          <Route path="/solicitudes/:idSolicitud" element={<ConfirmacionSolicitud />} />
           <Route path="/solicitudes-enfermero" element={<RutaProtegida rol="enfermero"><SolicitudesEnfermero /></RutaProtegida>} />
           <Route path="/mis-solicitudes" element={<RutaProtegida rol="paciente"><EstadoSolicitudes /></RutaProtegida>} />
           <Route

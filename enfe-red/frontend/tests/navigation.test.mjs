@@ -1190,6 +1190,20 @@ test('el historial no ofrece calificar un servicio aceptado que no se marcó com
   } finally { globalThis.fetch = original; }
 });
 
+test('el enfermero asignado abre el comprobante con los datos del paciente', async () => {
+  session('enfermero');
+  solicitudHandler = async config => {
+    if (config.url === '/solicitudes/15') return { data: { ...comprobante, paciente: { nombre: 'Ana', apellido: 'Prueba' } } };
+    throw new Error(`Petición inesperada: ${config.method} ${config.url}`);
+  };
+  await mount('/solicitudes/15');
+  assert.equal(window.location.pathname, '/solicitudes/15');
+  assert.match(document.body.textContent, /Comprobante de solicitud/);
+  assert.match(document.querySelector('.solicitud-summary').textContent, /PacienteAna Prueba/);
+  assert.equal([...document.querySelectorAll('button')].some(b => b.textContent === 'Cancelar solicitud'), false);
+  assert.ok(document.querySelector('a[href="/solicitudes-enfermero"]'));
+});
+
 // SCRUM-58.3: el paciente consulta el estado de todas sus solicitudes.
 test('Mis solicitudes muestra estados, enlaza al comprobante y permite cancelar desde la tarjeta', async () => {
   session('paciente');

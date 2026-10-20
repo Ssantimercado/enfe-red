@@ -9,6 +9,7 @@ from database import db
 from extensions import bcrypt
 from models.usuario_models import Usuario, Paciente, Enfermero, Disponibilidad
 from models.solicitud_models import ESTADOS_ACTIVOS, SolicitudServicio
+from routes.auth_routes import error_password
 
 usuario_bp = Blueprint('usuario_bp', __name__)
 
@@ -17,16 +18,23 @@ usuario_bp = Blueprint('usuario_bp', __name__)
 # ==========================================
 @usuario_bp.route('/login', methods=['POST'])
 def login():
-    data = request.get_json()
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "Datos inválidos"}), 400
     email = data.get('email')
     password = data.get('password')
 
-    if not email or not password:
+    if not isinstance(email, str) or not isinstance(password, str) or not email.strip() or not password:
         return jsonify({"error": "Faltan datos"}), 400
 
-    usuario = Usuario.query.filter_by(email=email).first()
+    usuario = Usuario.query.filter_by(email=email.strip()).first()
 
-    if not usuario or not bcrypt.check_password_hash(usuario.password_hash, password):
+    try:
+        valida = bool(usuario) and bcrypt.check_password_hash(usuario.password_hash, password)
+    except ValueError:
+        # bcrypt rechaza contraseñas de más de 72 bytes: nunca pueden coincidir.
+        valida = False
+    if not valida:
         return jsonify({"error": "Credenciales incorrectas"}), 401
 
     token = create_access_token(
@@ -42,15 +50,26 @@ def login():
 # ==========================================
 @usuario_bp.route('/registro', methods=['POST'])
 def registrar_usuario():
-    data = request.get_json()
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "Datos inválidos"}), 400
 
-    nombre_completo = data.get('nombre', '').strip()
+    nombre_completo = data.get('nombre')
     email = data.get('email')
     password = data.get('password')
     rol = data.get('rol', 'paciente')
 
-    if not nombre_completo or not email or not password:
+    if not all(isinstance(valor, str) and valor.strip() for valor in (nombre_completo, email, password)):
         return jsonify({"error": "Todos los campos son obligatorios"}), 400
+    nombre_completo = nombre_completo.strip()
+    email = email.strip()
+    if len(email) > 120 or '@' not in email or len(nombre_completo) > 200:
+        return jsonify({"error": "Revisá el nombre y el email"}), 400
+    if rol not in ('paciente', 'enfermero'):
+        return jsonify({"error": "Rol inválido"}), 400
+    mensaje_password = error_password(password)
+    if mensaje_password:
+        return jsonify({"error": mensaje_password}), 400
 
     usuario_existente = Usuario.query.filter_by(email=email).first()
     if usuario_existente:
@@ -95,9 +114,14 @@ def registrar_usuario():
         db.session.add(nuevo_perfil)
         db.session.commit()
         return jsonify({"mensaje": "Usuario registrado exitosamente"}), 201
-    except Exception as e:
+    except IntegrityError:
+        # Dos registros simultáneos con el mismo email.
         db.session.rollback()
-        return jsonify({"error": "Error al guardar el usuario", "detalle": str(e)}), 500
+        return jsonify({"error": "El email ya está registrado"}), 400
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception('No se pudo registrar el usuario')
+        return jsonify({"error": "Error al guardar el usuario"}), 500
 
 
 # ==========================================
@@ -257,7 +281,11 @@ def perfil_enfermero():
             enfermero.nombre = data.get('nombre', enfermero.nombre)
             enfermero.apellido = data.get('apellido', enfermero.apellido)
             enfermero.especialidad = data.get('especialidad', enfermero.especialidad)
-            enfermero.matricula = data.get('matricula', enfermero.matricula)
+            nueva_matricula = data.get('matricula', enfermero.matricula)
+            if nueva_matricula != enfermero.matricula:
+                # Una matrícula distinta tiene que volver a validarse (HU9).
+                enfermero.verificado = False
+            enfermero.matricula = nueva_matricula
             enfermero.telefono = data.get('telefono', enfermero.telefono)
             enfermero.experiencia_anios = data.get('experiencia_anios', enfermero.experiencia_anios)
             enfermero.descripcion = data.get('descripcion', enfermero.descripcion)
@@ -547,7 +575,11 @@ def buscar_enfermeros():
         if hora_inicio >= hora_fin:
             return jsonify({'error': 'La hora desde debe ser anterior a la hora hasta'}), 400
 
-    query = Enfermero.query.join(Usuario, Enfermero.usuario_id == Usuario.id)
+    query = Enfermero.query.join(Usuario, Enfermero.usuario_id == Usuario.id).filter(
+        # HU3: "Solo se muestran enfermeros disponibles"; HU9: aparecen al validar la matrícula.
+        Enfermero.disponible.is_(True),
+        Enfermero.verificado.is_(True),
+    )
 
     if texto:
         patron = f"%{texto}%"
