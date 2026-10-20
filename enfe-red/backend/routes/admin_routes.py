@@ -144,6 +144,7 @@ def verificarMatricula(idEnfermero):
     if enfermero is None:
         return jsonify(error='Enfermero no encontrado'), 404
     enfermero.verificado = verificado
+    enfermero.matricula_rechazada = not verificado
     try:
         db.session.commit()
     except SQLAlchemyError:
@@ -154,13 +155,32 @@ def verificarMatricula(idEnfermero):
     }), 200
 
 
+@admin_bp.get('/admin/enfermeros/pendientes')
+@admin_required
+def enfermerosPendientes():
+    pendientes = Enfermero.query.filter_by(
+        verificado=False, matricula_rechazada=False
+    ).order_by(Enfermero.id).all()
+    return jsonify(enfermeros=[{
+        'idEnfermero': enfermero.id,
+        'usuarioId': enfermero.usuario_id,
+        'nombre': enfermero.nombre,
+        'apellido': enfermero.apellido,
+        'email': enfermero.usuario.email if enfermero.usuario else '',
+        'matricula': enfermero.matricula,
+        'especialidad': enfermero.especialidad,
+    } for enfermero in pendientes]), 200
+
+
 @admin_bp.get('/admin/metricas')
 @admin_bp.get('/admin/resumen')
 @admin_required
 def resumenAdmin():
     total_usuarios = Usuario.query.count()
     usuarios_activos = Usuario.query.filter_by(suspendido=False).count()
-    pendientes = Enfermero.query.filter_by(verificado=False).count()
+    pendientes = Enfermero.query.filter_by(
+        verificado=False, matricula_rechazada=False
+    ).count()
     realizados = SolicitudServicio.query.filter_by(estado='Realizada').count()
     return jsonify({
         'total_usuarios': total_usuarios,

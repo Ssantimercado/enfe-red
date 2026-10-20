@@ -13,8 +13,13 @@ const METRICAS = [
 
 export default function PanelAdmin() {
   const [metricas, setMetricas] = useState(null);
+  const [pendientes, setPendientes] = useState([]);
   const [cargando, setCargando] = useState(true);
+  const [cargandoMatriculas, setCargandoMatriculas] = useState(true);
   const [error, setError] = useState('');
+  const [errorMatriculas, setErrorMatriculas] = useState('');
+  const [mensajeMatriculas, setMensajeMatriculas] = useState('');
+  const [actualizando, setActualizando] = useState(null);
   const [intento, setIntento] = useState(0);
 
   useEffect(() => {
@@ -38,6 +43,47 @@ export default function PanelAdmin() {
       });
     return () => controller.abort();
   }, [intento]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setCargandoMatriculas(true);
+    setErrorMatriculas('');
+    api('/admin/enfermeros/pendientes', { signal: controller.signal })
+      .then((data) => {
+        if (!Array.isArray(data.enfermeros)) {
+          throw new Error('La respuesta de matrículas pendientes no tiene el formato esperado.');
+        }
+        if (!controller.signal.aborted) setPendientes(data.enfermeros);
+      })
+      .catch((err) => {
+        if (!controller.signal.aborted) setErrorMatriculas(err.message);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setCargandoMatriculas(false);
+      });
+    return () => controller.abort();
+  }, [intento]);
+
+  async function actualizarMatricula(enfermero, verificado) {
+    setActualizando(enfermero.idEnfermero);
+    setErrorMatriculas('');
+    setMensajeMatriculas('');
+    try {
+      await api(`/admin/enfermeros/${enfermero.idEnfermero}/matricula`, {
+        method: 'PUT',
+        body: { verificado },
+      });
+      setPendientes((items) => items.filter((item) => item.idEnfermero !== enfermero.idEnfermero));
+      setMensajeMatriculas(verificado
+        ? `Matrícula de ${[enfermero.nombre, enfermero.apellido].filter(Boolean).join(' ')} aprobada. Ya puede aparecer en la búsqueda.`
+        : `Matrícula de ${[enfermero.nombre, enfermero.apellido].filter(Boolean).join(' ')} rechazada.`);
+      setIntento((value) => value + 1);
+    } catch (err) {
+      setErrorMatriculas(err.message);
+    } finally {
+      setActualizando(null);
+    }
+  }
 
   return (
     <div className="page-container admin-page">
@@ -72,6 +118,54 @@ export default function PanelAdmin() {
           ))}
         </section>
       ) : null}
+
+      <section className="admin-verification-section" aria-labelledby="admin-verification-title">
+        <div className="admin-verification-heading">
+          <div>
+            <span className="eyebrow">REVISIÓN DE MATRÍCULAS</span>
+            <h2 id="admin-verification-title">Enfermeros pendientes de validación</h2>
+            <p>Al aprobar una matrícula, el perfil queda habilitado para aparecer en la búsqueda y el mapa.</p>
+          </div>
+          <span className="admin-pending-count">{pendientes.length} pendiente{pendientes.length === 1 ? '' : 's'}</span>
+        </div>
+        {mensajeMatriculas && <p className="notice notice-success" role="status">{mensajeMatriculas}</p>}
+        {errorMatriculas && (
+          <div className="notice notice-error" role="alert">
+            {errorMatriculas}{' '}
+            <button className="text-link" type="button" onClick={() => setIntento((value) => value + 1)}>
+              Reintentar
+            </button>
+          </div>
+        )}
+        {cargandoMatriculas ? (
+          <p role="status">Cargando matrículas pendientes…</p>
+        ) : errorMatriculas ? null : pendientes.length === 0 ? (
+          <div className="content-panel empty-state"><p>No hay matrículas pendientes de revisión.</p></div>
+        ) : (
+          <div className="admin-pending-list" aria-busy={actualizando !== null}>
+            {pendientes.map((enfermero) => (
+              <article className="content-panel admin-pending-card" key={enfermero.idEnfermero}>
+                <div>
+                  <h3>{[enfermero.nombre, enfermero.apellido].filter(Boolean).join(' ') || 'Enfermero sin nombre'}</h3>
+                  <p>{enfermero.email}</p>
+                  <dl className="admin-pending-details">
+                    <div><dt>Matrícula</dt><dd>{enfermero.matricula || 'Sin informar'}</dd></div>
+                    <div><dt>Especialidad</dt><dd>{enfermero.especialidad || 'Sin informar'}</dd></div>
+                  </dl>
+                </div>
+                <div className="admin-pending-actions">
+                  <button className="button button-secondary" type="button" disabled={actualizando !== null} onClick={() => actualizarMatricula(enfermero, false)}>
+                    {actualizando === enfermero.idEnfermero ? 'Guardando…' : 'Rechazar'}
+                  </button>
+                  <button className="button button-primary" type="button" disabled={actualizando !== null} onClick={() => actualizarMatricula(enfermero, true)}>
+                    {actualizando === enfermero.idEnfermero ? 'Guardando…' : 'Aprobar matrícula'}
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }
