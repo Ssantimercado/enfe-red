@@ -1,11 +1,11 @@
-"""Comandos de consola para verificar matrículas mientras no exista el panel de administración.
+"""Comandos de consola para verificar matrículas y provisionar administradores.
 
-SCRUM-47 / HU9: el panel con aprobación y rechazo se hace en el Sprint 6 (70.1 de Pablo).
-Hasta entonces, el equipo puede validar enfermeros para las demostraciones:
+Los comandos de matrícula siguen disponibles para la preparación local:
 
     flask --app app enfermeros-pendientes
     flask --app app verificar-enfermero laura.gomez@test.com
     flask --app app verificar-enfermero laura.gomez@test.com --quitar
+    flask --app app asignar-administrador pablo@example.com --nivel-permiso total
 """
 import click
 from flask.cli import with_appcontext
@@ -57,3 +57,22 @@ def verificar_enfermero(email, quitar):
 def registrar_comandos(app):
     app.cli.add_command(enfermeros_pendientes)
     app.cli.add_command(verificar_enfermero)
+    app.cli.add_command(asignar_administrador)
+
+
+@click.command('asignar-administrador')
+@click.argument('email')
+@click.option('--nivel-permiso', default='total', show_default=True)
+@with_appcontext
+def asignar_administrador(email, nivel_permiso):
+    """Promover una cuenta existente a administrador desde la consola local."""
+    usuario = Usuario.query.filter_by(email=email.strip()).first()
+    if not usuario:
+        raise click.ClickException(f'No hay una cuenta registrada con el email {email}.')
+    if not nivel_permiso.strip():
+        raise click.ClickException('El nivel de permiso no puede estar vacío.')
+    usuario.rol = 'administrador'
+    usuario.nivelPermiso = nivel_permiso.strip()[:30]
+    usuario.suspendido = False
+    db.session.commit()
+    click.echo(f'{email} ahora es administrador ({usuario.nivelPermiso}). Iniciá sesión de nuevo.')

@@ -9,9 +9,9 @@ El [mapa de navegación de referencia](mapa-de-navegacion.md) conserva el flujo
 compartido por el equipo, sus ajustes y la distinción entre funciones actuales
 y futuras.
 
-Referencia de código: rama `Prueba`, base `6d8e1b9`, revisada el 15 de octubre de
-2026. Esta guía registra patrones del código activo; no sustituye una revisión
-visual en navegador. Las propuestas para próximos sprints se identifican al final.
+Referencia de código: rama local `Pablo`, integrada con `origin/Prueba` hasta
+`f16b35c`, revisada el 20 de octubre de 2026. Esta guía registra patrones del
+código activo; no sustituye una revisión visual en navegador.
 
 ## Pantallas y recorridos existentes
 
@@ -40,8 +40,9 @@ o un segundo pie dentro de una pantalla interna.
 
 `Notificaciones.jsx` agrega en `AppShell` la campana con contador de no leídas y
 menú desplegable (`aria-expanded`, cierre con Escape o clic afuera). Permanece
-oculta hasta que `GET /api/notificaciones/<idUsuario>` devuelva una lista; el
-backend de notificaciones todavía no está integrado. Marcar como leída llama a
+oculta hasta que `GET /api/notificaciones/<idUsuario>` devuelva una lista.
+El backend de SCRUM-64 está integrado y genera avisos al aceptar/rechazar
+solicitudes o recibir mensajes. Marcar como leída llama a
 `PUT /api/notificaciones/<idNotificacion>/leer` y descuenta solo tras el éxito.
 
 La ubicación exacta del paciente es opcional. El paciente la elige y habilita su
@@ -58,9 +59,10 @@ calificaciones se muestran en el historial privado de sus participantes.
 ruta. El acceso directo a `/perfil-enfermero#horarios` espera la carga del perfil
 para llegar a la sección. Las rutas desconocidas redirigen según la sesión.
 El login conserva un destino interno solicitado previamente y deriva a cada rol
-a su inicio correspondiente, incluido `/admin`.
+a su inicio correspondiente, incluido `/admin`. El backend impide el inicio de
+sesión de una cuenta suspendida.
 
-Las vistas administrativas esperan el siguiente contrato de backend:
+Las vistas administrativas consumen este contrato de backend:
 `GET /api/admin/metricas` devuelve `total_usuarios`, `pacientes`, `enfermeros`,
 `usuarios_suspendidos`, `matriculas_pendientes` y `total_solicitudes` como
 enteros no negativos; `GET /api/admin/usuarios` acepta `q`, `rol`, `estado`,
@@ -68,9 +70,10 @@ enteros no negativos; `GET /api/admin/usuarios` acepta `q`, `rol`, `estado`,
 `GET /api/admin/usuarios` devuelve usuarios con `id` entero, `email`, `rol` y
 `suspendido` booleano; `PUT /api/admin/usuarios/<id>/suspension` acepta
 `{"suspendido": boolean}` y devuelve `{"usuario": ...}` con el estado confirmado.
-El backend debe autorizar cada endpoint por rol; la protección de rutas del
-frontend no reemplaza los permisos del servidor. Hasta que esos endpoints estén
-integrados, las vistas muestran el error del servidor y permiten reintentar.
+El backend de Pablo también implementa `PUT /api/admin/enfermeros/<id>/matricula`
+con `{"verificado": boolean}`. Las rutas contrastan rol y nivel de permiso
+del JWT con la cuenta activa en la base. La primera cuenta administrativa se
+habilita por consola con `flask --app app asignar-administrador <email>`.
 
 ## Archivos que definen el diseño
 
@@ -240,21 +243,21 @@ ejemplo como si fueran de una persona. El mapa conserva estilos en línea y
 algunos colores/emojis propios: son excepciones existentes, no el modelo para
 los nuevos botones y avisos de otras pantallas.
 
-## Reglas para las próximas funciones
+## Reglas para extender las funciones actuales
 
-El backend de Sprint 4 ya incluye creación, consulta, aceptación, finalización,
-rechazo y cancelación. Sus pantallas todavía no están conectadas en este frontend.
-Consultar [el contrato vigente](sprint-4-santiago.md) y respetar los IDs de perfil,
-estados y permisos del backend. Las transiciones de Pablo están en
-`backend/routes/solicitud_routes.py`, dentro del Blueprint existente.
+El frontend y backend de Sprint 4 incluyen creación, consulta, aceptación,
+finalización, rechazo y cancelación. Consultar [el contrato vigente](sprint-4-santiago.md)
+y respetar los IDs de perfil, estados y permisos del backend. Las transiciones
+están en `backend/routes/solicitud_routes.py`.
 
-Para nuevas pantallas de solicitudes, la propuesta de continuidad es usar
+Las pantallas de solicitudes, chat, reputación y administración están integradas.
+Para nuevas pantallas, usar
 `AppShell`, `.page-container`, `.page-heading` y tarjetas/paneles del mismo estilo.
 Las etiquetas deben decir exactamente Pendiente, Aceptada, Rechazada, Cancelada
 o Realizada. Como criterio nuevo, mantener pendientes en un tono suave de aviso,
 aceptadas en azul, realizadas en verde y rechazadas/canceladas con texto y tonos
-discretos. Esas variantes de estado aún necesitan clases y revisión de contraste;
-no existe hoy un componente compartido de badges de solicitudes.
+discretos. `EstadoSolicitudes.jsx` muestra los estados en tarjetas; conservar
+siempre el texto además del color y revisar contraste en cada variante.
 
 Los botones se muestran según rol y estado, y los permisos se vuelven a validar
 en el backend. Confirmar cancelaciones y rechazos en un diálogo; actualizar la
@@ -262,10 +265,10 @@ tarjeta con la respuesta recibida y tratar errores sin recargar toda la página.
 Esta pauta define continuidad de diseño, no agrega las tareas del frontend.
 
 En Sprint 5, la campana está en el `AppShell` activo aunque la consigna mencione
-`Navbar.jsx`, y los filtros del historial siguen la estructura del perfil. En Sprint 6,
-mantener el mismo sistema visual para administración y reputación. No mostrar
-botones, contadores o estrellas como funciones operativas antes de integrar
-sus datos y contratos. Implementar solamente el sprint y las tareas solicitadas.
+`Navbar.jsx`, y los filtros del historial siguen la estructura del perfil. Para
+administración, conservar el acceso exclusivo por rol y los estados de carga,
+error y vacío. La tabla de matrículas pendientes y sus acciones deben consumir
+el endpoint administrativo antes de mostrarse como operativas.
 
 ## Cómo continuar y comprobar cambios
 

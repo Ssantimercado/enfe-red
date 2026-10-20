@@ -37,9 +37,12 @@ def login():
     if not valida:
         return jsonify({"error": "Credenciales incorrectas"}), 401
 
+    if usuario.estado == 'Suspendido':
+        return jsonify({"error": "La cuenta está suspendida. Contactá a soporte."}), 403
+
     token = create_access_token(
         identity=str(usuario.id),
-        additional_claims={"rol": usuario.rol}
+        additional_claims={"rol": usuario.rol, "nivelPermiso": usuario.nivelPermiso}
     )
 
     return jsonify({"mensaje": "Login exitoso", "token": token, "rol": usuario.rol}), 200

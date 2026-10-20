@@ -7,6 +7,8 @@ class Usuario(db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
     rol = db.Column(db.String(50), nullable=False)
+    suspendido = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+    nivelPermiso = db.Column(db.String(30), nullable=True)
 
     # Relaciones para conectar con los perfiles
     perfil_paciente = db.relationship('Paciente', backref='usuario', uselist=False, cascade="all, delete-orphan")
@@ -15,12 +17,27 @@ class Usuario(db.Model):
     def __repr__(self):
         return f'<Usuario {self.email}>'
 
+    @property
+    def estado(self):
+        """Estado legible por la consigna; la interfaz usa el booleano suspendido."""
+        return 'Suspendido' if self.suspendido else 'Activo'
+
+    @estado.setter
+    def estado(self, valor):
+        if valor not in ('Activo', 'Suspendido'):
+            raise ValueError("El estado debe ser 'Activo' o 'Suspendido'")
+        self.suspendido = valor == 'Suspendido'
+
     def to_dict(self):
         return {
             "id": self.id,
             "email": self.email,
             "rol": self.rol
         }
+
+
+class Administrador(Usuario):
+    """Perfil administrativo sobre la tabla de usuarios existente."""
 
 class Paciente(db.Model):
     __tablename__ = 'pacientes'

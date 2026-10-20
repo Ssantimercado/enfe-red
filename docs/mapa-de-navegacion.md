@@ -7,7 +7,8 @@ distintas y se conectan mediante las solicitudes de atención.
 Se conserva como referencia para continuar, incorporando los ajustes de esta
 revisión. Describe el flujo objetivo, con funciones actuales y futuras; no es
 un inventario de pantallas ya implementadas ni agrega tareas al sprint vigente.
-Fuente: imagen compartida por Pablo. Revisión del 15/10/2026 sobre `Prueba`.
+Fuente: imagen compartida por Pablo. Estado revisado el 20/10/2026 sobre la rama
+local `Pablo`, integrada con `origin/Prueba` hasta `f16b35c`.
 
 ## Recorrido de referencia
 
@@ -66,9 +67,10 @@ crea desde el registro público de pacientes/enfermeros.
 | Búsqueda, lista, mapa y perfil profesional | Implementado con filtros actuales y mapa. | Mantener retorno con filtros. Filtrar por valoración, servicio del catálogo y cercanía real requiere trabajo adicional; no asumir que ya existe. |
 | Contacto por teléfono/correo | Implementado en el perfil profesional. | Conservarlo mientras se integra el flujo de solicitudes. |
 | Disponibilidad y horarios | Disponibilidad general y alta/consulta de franjas implementadas. | Edición y eliminación de franjas no están implementadas. |
-| Crear, consultar y gestionar solicitudes | Backend de Santiago y Pablo integrado. | Falta integrar formulario, comprobante, bandejas y acciones del frontend del Sprint 4. |
-| Calificaciones y reseñas | Pendiente. | Solo permitir calificar después de que la solicitud esté Realizada; respetar la entrega del 02/11. |
-| Administración y validación profesional | Las rutas protegidas y las vistas de usuarios/métricas están integradas en el frontend; requieren los endpoints administrativos de Pablo para operar. | No permitir acceso por selección de rol en registro. La primera cuenta administradora debe habilitarse fuera del registro público. |
+| Crear, consultar y gestionar solicitudes | Backend y frontend integrados: solicitud, comprobante, bandejas, estados, aceptar, rechazar, cancelar y finalizar. | Mantener validación de rol, titularidad y transición en backend. |
+| Chat y notificaciones | Chat por solicitud aceptada, polling y campana conectados a los endpoints. | Las alertas se generan al aceptar/rechazar una solicitud o recibir un mensaje. |
+| Calificaciones y reseñas | Publicación después de Realizada y consulta de reseñas/promedio integradas. | Conservar la regla HU11: una reseña por servicio realizado. |
+| Administración y validación profesional | El panel de métricas y gestión de usuarios está en `Prueba`; el backend de Pablo implementa protección, búsqueda, suspensión/reactivación, verificación de matrícula y métricas en su rama local. La tabla de matrículas en la interfaz aún no está conectada. | La primera cuenta administradora se habilita desde consola, fuera del registro público. Integrar el backend de Pablo antes de compartir la rama. |
 | Subir títulos o documentos | No hay carga de archivos implementada. | Definir requisitos y almacenamiento antes de convertirlo en una tarea; registrar matrícula como texto no equivale a subir un título. |
 | Pago dentro de la plataforma | No implementado ni incluido en el reparto de tareas compartido. | El nodo original Abonar no se incorpora al flujo comprometido sin acordar su alcance. |
 | Gestionar reportes | No implementado y sin definición suficiente en el reparto. | Aclarar qué reportes son, quién los genera y qué acciones permite el administrador. |
@@ -82,7 +84,7 @@ crea desde el registro público de pacientes/enfermeros.
 | Rechazar | Enfermero asignado | Pendiente | Rechazada |
 | Finalizar | Enfermero asignado | Aceptada | Realizada |
 | Cancelar | Paciente dueño | Pendiente o Aceptada | Cancelada |
-| Calificar o reseñar | Paciente dueño, cuando se implemente | Realizada | La solicitud conserva su estado; se registra la valoración. |
+| Calificar o reseñar | Paciente dueño, después de la atención | Realizada | La solicitud conserva su estado; se registra la valoración. |
 
 Aceptar no significa que la atención ya se realizó. La calificación debe ir
 después de finalizar, separada del pago. Rechazo y cancelación son salidas del
@@ -94,7 +96,7 @@ respuestas, identificadores y permisos exactos.
 
 - Mantener la navegación compartida y los accesos por rol. Incorporar pantallas
   nuevas al router existente, sin duplicar la aplicación o su cabecera.
-- Conservar accesos a Inicio, Mi perfil y, cuando se implemente, Mis solicitudes.
+- Conservar accesos a Inicio, Mi perfil y Mis solicitudes.
   El recorrido debe permitir volver a la lista o bandeja de origen.
 - Reutilizar la [guía de diseño y navegación](diseno-y-navegacion.md) para colores,
   componentes, adaptación a celular y estados de carga, error y vacío.

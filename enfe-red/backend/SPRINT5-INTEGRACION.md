@@ -1,6 +1,10 @@
-# Sprint 5 — Backend de Germán
+# Sprint 5 — Integración de comunicación, notificaciones y reputación
 
-Implementa SCRUM-62 (historial) y SCRUM-63 (mensajes). Todos los endpoints requieren `Authorization: Bearer <token>`. No se implementan notificaciones ni interfaces de chat, que corresponden a los demás integrantes.
+Esta guía reúne los contratos integrados de SCRUM-62 a SCRUM-67: historial y
+mensajes de Germán, chat de Santiago, notificaciones de Renzo, campana de Pablo
+y reseñas de Santiago. Las vistas y rutas activas están en el único frontend de
+`enfe-red/frontend/`. Todos los endpoints privados requieren
+`Authorization: Bearer <token>`.
 
 ## Instalación
 
@@ -10,7 +14,7 @@ Reiniciar `python app.py` con el entorno virtual activo. El import del blueprint
 
 `GET /api/usuarios/<idUsuario>/historial`
 
-El ID es el de Usuario (el `sub` del JWT), no el de Paciente/Enfermero. Solo permite consultar el historial propio. Devuelve HTTP 200 y un array de comprobantes con el mismo formato del GET de detalle de Sprint 4, filtrados a Realizada, Rechazada y Cancelada, más recientes primero por fecha/hora/ID. Sin registros devuelve `[]`. Funciona para paciente y enfermero, resolviendo internamente su perfil. No expone contraseña ni historial médico. Los filtros visuales por fecha/estado pueden aplicarse sobre este array.
+El ID es el de Usuario (el `sub` del JWT), no el de Paciente/Enfermero. Solo permite consultar el historial propio. Devuelve HTTP 200 y un array de comprobantes con el mismo formato del GET de detalle de Sprint 4, para solicitudes Aceptadas o Realizadas cuya fecha y hora ya pasaron, más recientes primero. Sin registros devuelve `[]`. Funciona para paciente y enfermero, resolviendo internamente su perfil. No expone contraseña ni historial médico. Los filtros visuales por fecha/estado pueden aplicarse sobre este array.
 
 ## Mensajes (para Santiago)
 
@@ -75,7 +79,7 @@ Se reutiliza la tabla `calificaciones_servicio` de Renzo para tener un único si
 
 **67.1** `GET /api/enfermeros/<idEnfermero>/resenas` (ID de perfil, igual que en solicitudes; requiere sesión). Responde `{ "idEnfermero", "calificacionPromedio", "cantidadResenas", "resenas": [...] }`, de la más nueva a la más vieja. El autor se muestra como nombre e inicial del apellido; no se exponen emails ni datos médicos. 404 si el enfermero no existe.
 
-**Para acordar:** la calificación desde el historial (`/solicitudes/<id>/calificaciones`) sigue aceptando servicios **Aceptados** con fecha pasada, porque todavía no está el botón "Marcar como realizado" (59.3). `/api/resenas` aplica la regla estricta de la HU11.
+La calificación desde el historial (`/solicitudes/<id>/calificaciones`) y la reseña (`/api/resenas`) requieren que el servicio esté **Realizada** y que haya pasado su fecha y hora. El botón "Marcar como realizado" está conectado a la transición del Sprint 4.
 
 ## Validación
 

@@ -3,14 +3,13 @@
 Aplicación académica de Práctica Profesionalizante 3 para conectar pacientes
 con profesionales de enfermería. Permite registrarse, administrar perfiles,
 consultar disponibilidad y buscar profesionales en una cartilla y un mapa.
-El backend de solicitudes de Santiago incorpora la creación de pedidos y la
-consulta de sus comprobantes y estados.
-
-Esta guía describe la entrega de `Santiago` para la rama compartida `Prueba` al
-**15 de octubre de 2026**. El alcance revisado comprende **Sprint 1, Sprint 2,
-Sprint 3 y exclusivamente SCRUM-56/57/58 del backend de Santiago en Sprint 4**.
-Las tareas de los demás integrantes del Sprint 4 y los sprints siguientes no
-se evalúan como entregas pendientes de esta revisión.
+La aplicación integra perfiles, solicitudes, comunicación, notificaciones,
+reseñas y vistas administrativas. Esta guía se actualizó el **20 de octubre de
+2026** sobre la rama local `Pablo`, integrada hasta `origin/Prueba` (`f16b35c`).
+El backend administrativo de Pablo está en desarrollo local; ver
+[`SPRINT6-PABLO.md`](enfe-red/backend/SPRINT6-PABLO.md) para su contrato.
+Las secciones de comparación y ramas más abajo conservan una instantánea
+histórica del 15 de octubre.
 
 ## Guías para el equipo
 
@@ -18,6 +17,8 @@ se evalúan como entregas pendientes de esta revisión.
 - [Contexto para asistentes y colaboradores](AGENTS.md).
 - [Comparación con el PDF: sprints 1 a 3 y Sprint 4 de Santiago](docs/comparacion-sprints-1-4.md).
 - [Contrato y ejemplos de la API de solicitudes](docs/sprint-4-santiago.md).
+- [Integración de comunicación y reputación (Sprint 5)](enfe-red/backend/SPRINT5-INTEGRACION.md).
+- [Administración y seguridad de Pablo (Sprint 6)](enfe-red/backend/SPRINT6-PABLO.md).
 - [Mapa de ramas y estado de integración](#ramas-y-estado-de-integración).
 - [Instalación y ejecución local](#instalación-y-ejecución-local).
 
@@ -138,13 +139,12 @@ La landing (`/`) explica el producto y permite ir a registro o login. Las
 reseñas de esa pantalla están identificadas como demostraciones académicas;
 no provienen de valoraciones guardadas por pacientes.
 
-Después del login, `/home` muestra el inicio interno. El paciente puede editar
-su perfil, abrir `/cartilla`, buscar, filtrar y ver el perfil de un profesional.
-El enfermero puede editar sus datos, su disponibilidad general y agregar franjas
-semanales de atención. Puede elegir o quitar su punto en el mapa al editar el
-perfil. Cambiar dirección/ciudad descarta las coordenadas anteriores para evitar
-publicar una ubicación desactualizada. El contacto actual se ofrece desde el perfil profesional.
-El formulario de solicitudes del Sprint 4 no está integrado en este frontend.
+Después del login, `/home` muestra el inicio interno. Pacientes y enfermeros
+pueden consultar solicitudes, chatear en servicios aceptados, ver historial y
+recibir notificaciones. Pacientes pueden solicitar y cancelar turnos, consultar
+estados y publicar reseñas tras una atención realizada. Enfermeros gestionan las
+solicitudes recibidas y pueden aceptarlas, rechazarlas o marcarlas como realizadas.
+Los administradores tienen un panel con métricas y gestión de usuarios.
 
 | Ruta de pantalla | Acceso y función |
 | --- | --- |
@@ -155,6 +155,10 @@ El formulario de solicitudes del Sprint 4 no está integrado en este frontend.
 | `/perfil-enfermero` | Enfermero; perfil propio y horarios |
 | `/cartilla` | Usuario con sesión; búsqueda/listado/mapa |
 | `/perfil/:id` | Usuario con sesión; perfil profesional identificado por **Usuario.id** |
+| `/perfil/:id/solicitar` y `/solicitudes/:idSolicitud` | Paciente solicita atención y consulta el comprobante |
+| `/mis-solicitudes`, `/solicitudes-enfermero` | Bandejas de solicitudes por rol |
+| `/admin`, `/admin/usuarios` | Panel y gestión de cuentas; solo administrador |
+| Chat | Se abre desde el comprobante de una solicitud aceptada; queda de solo lectura al cerrarse el servicio. |
 
 `api.js` centraliza `VITE_API_URL`, el manejo de respuestas y el cierre de
 sesión ante HTTP 401. `requestApi('/enfermeros')` construye
@@ -171,12 +175,14 @@ Las versiones exactas están en los manifests y lockfiles, no en este resumen.
 
 | Modelo / tabla | Responsabilidad y relaciones |
 | --- | --- |
-| `Usuario` / `usuarios` | Email, hash de contraseña y rol (`paciente` o `enfermero`). |
+| `Usuario` / `usuarios` | Email, hash, rol (`paciente`, `enfermero` o `administrador`), suspensión y nivel de permiso. |
+| `Administrador` | Clase derivada de `Usuario`, con el mismo registro y `nivelPermiso`. |
 | `Paciente` / `pacientes` | Perfil asociado por `usuario_id` único. |
 | `Enfermero` / `enfermeros` | Perfil, matrícula, especialidad, tarifa, disponibilidad, verificación y coordenadas; `usuario_id` único. |
 | `Disponibilidad` / `disponibilidades` | Franjas por día de semana de un enfermero. |
 | `Servicio` / `servicios` | Catálogo mínimo: tipo y precio estimado decimal. |
 | `SolicitudServicio` / `solicitudes_servicio` | Un paciente, un enfermero, un servicio, fecha/hora, dirección y estado. |
+| `Mensaje`, `Notificacion`, `Calificacion` | Chat por solicitud, alertas y reputación de atenciones. |
 
 En el código actual `Paciente` y `Enfermero` son modelos separados, vinculados
 uno a uno con `Usuario`; no heredan de esa clase Python. El PDF representa
@@ -208,8 +214,15 @@ Todos los endpoints de esta tabla tienen el prefijo `/api`.
 | `GET /usuarios/<id>/horarios` | Horarios del profesional, con JWT; `id` es Usuario.id. |
 | `POST /solicitudes` | Paciente autenticado: crea pedido Pendiente. |
 | `GET /solicitudes/<idSolicitud>` | Dueño o enfermero destinatario: comprobante. |
-| `GET /solicitudes/paciente/<idPaciente>` | Ese paciente: pedidos Pendiente/Aceptada. |
+| `GET /solicitudes/paciente/<idPaciente>` | Ese paciente: pedidos activos; `?todas=1` incluye todos los estados. |
 | `GET /solicitudes/enfermero/<idEnfermero>` | Ese enfermero: pedidos recibidos de todos los estados. |
+| `PUT /solicitudes/<id>/aceptar`, `/rechazar`, `/cancelar`, `/finalizar` | Cambios de estado autorizados por rol y titularidad. |
+| `GET /usuarios/<idUsuario>/historial` | Historial privado de servicios del usuario. |
+| `GET`, `POST /solicitudes/<id>/mensajes` | Conversación privada de una solicitud aceptada. |
+| `GET /notificaciones/<idUsuario>`, `PUT /notificaciones/<id>/leer` | Consulta y lectura de alertas propias. |
+| `POST /resenas`, `GET /enfermeros/<idEnfermero>/resenas` | Publicar y consultar reseñas. |
+| `GET /admin/usuarios`, `PUT /admin/usuarios/<id>/suspension` o `/estado` | Búsqueda, suspensión y reactivación de usuarios. |
+| `PUT /admin/enfermeros/<id>/matricula`, `GET /admin/metricas` o `/resumen` | Verificación de matrícula y métricas administrativas. |
 
 La búsqueda admite `q`, `especialidad`, `ciudad`, `precio_min`, `precio_max`,
 `disponible`, `dia_semana`, `page` y `per_page`. Devuelve
@@ -277,8 +290,8 @@ secreto con `.\venv\Scripts\python.exe -c "import secrets; print(secrets.token_h
 El backend queda en `http://localhost:5000`; `GET /` devuelve un mensaje de
 servidor disponible. No hace falta activar el entorno virtual para estos comandos.
 
-**Efectos del arranque:** `app.py` crea tablas faltantes, prepara la columna
-`verificado` y ejecuta los ajustes/datos de demo de Sprint 3. Utilizar una base
+**Efectos del arranque:** `app.py` crea tablas faltantes, prepara las columnas
+de Sprint 4 a Sprint 6 y ejecuta los ajustes/datos de demo de Sprint 3. Utilizar una base
 de desarrollo. Se necesitan permisos de creación/alteración de tablas. No hay
 un sistema de migraciones Alembic; los scripts actuales no sustituyen una
 migración general de todas las diferencias futuras.
@@ -290,13 +303,15 @@ desde `/registro`. El catálogo `Servicio` se completa con seis servicios y un
 precio estimado de referencia por visita (solo donde el precio está vacío).
 
 Los profesionales no se verifican automáticamente y la cartilla solo muestra
-enfermeros **disponibles y verificados** (HU3 y HU9). Hasta el panel de
-administración del Sprint 6, la matrícula se verifica desde la consola:
+enfermeros **disponibles y verificados** (HU3 y HU9). La matrícula se puede
+validar desde el panel administrativo o desde la consola local. Para crear la
+primera cuenta administradora, promové una cuenta ya registrada:
 
 ```powershell
 .\venv\Scripts\flask.exe --app app enfermeros-pendientes
 .\venv\Scripts\flask.exe --app app verificar-enfermero laura.gomez@test.com
 .\venv\Scripts\flask.exe --app app verificar-enfermero laura.gomez@test.com --quitar
+.\venv\Scripts\flask.exe --app app asignar-administrador pablo@example.com --nivel-permiso total
 ```
 
 Para preparar una solicitud de prueba local, seguir
@@ -357,38 +372,24 @@ verificación y los avisos del backend se registran en la comparación con el PD
 
 ## Ramas y estado de integración
 
-Instantánea comprobada con `git fetch origin` el **15/10/2026**. Los nombres
-respetan mayúsculas: **`Santiago` y `Prueba`**, no `santiago`/`prueba`.
-Esta tabla no es un seguimiento en tiempo real: actualizarla al integrar trabajo.
+Referencias actualizadas con `git fetch origin` el **20/10/2026**. La rama local
+`Pablo` se integró por fast-forward con `origin/Prueba` hasta `f16b35c`, que ya
+incluye las entregas incorporadas de Sprint 5 y el frontend administrativo de
+Sprint 6. El backend administrativo de Pablo está implementado localmente y
+pendiente de commit; todavía no se publicó a `origin/Pablo` ni se integró a
+`origin/Prueba`.
 
-| Rama remota | Commit observado | Qué representa en esta revisión |
+| Rama remota | Commit observado | Estado |
 | --- | --- | --- |
-| `origin/main` | `da2ea4b` | Base anterior del proyecto; no contiene los avances integrados de Prueba. |
-| `origin/Prueba` | Entrega Sprint 4 de Santiago sobre `52a785a` | Integración compartida: mejoras previas de perfiles/ubicación y backend de solicitudes SCRUM-56/57/58, documentación y limpieza de estructura. |
-| `origin/Santiago` | Misma entrega de Sprint 4 | Rama de trabajo de Santiago sincronizada con la entrega a Prueba. |
-| `origin/Pablo` | `3b81721` | Correcciones de sprints 1, 2 y 3, ya incluidas en Santiago/Prueba. |
-| `origin/Renzo` | `c725180` | Horarios y correcciones de cartilla, ya incluidas en Santiago/Prueba. |
-| `origin/German` | `2c474f2` | Tiene un commit adicional de UI de solicitudes que no está integrado en Santiago. Se registra su existencia, sin evaluarlo como parte de esta entrega. |
+| `origin/Prueba` | `f16b35c` | Integración compartida hasta el panel administrativo frontend. |
+| `origin/Santiago` | `2b00536` | Avances de Santiago hasta la revisión de Sprint 5. |
+| `origin/Pablo` | `9d6d65b` | Anterior a los siete commits integrados localmente. |
+| `origin/Renzo` | `c725180` | Rama de Renzo observada en la última consulta. |
+| `origin/German` | `b0d1c45` | Rama de Germán observada en la última consulta. |
+| `origin/main` | `da2ea4b` | Base anterior; no contiene los avances de `Prueba`. |
 
-**Entrega del 15/10/2026:** el commit `feat(sprint-4): completar la parte de
-Santiago (SCRUM-56, SCRUM-57 y SCRUM-58)` incorpora el backend de solicitudes,
-las pruebas, la documentación y la limpieza de estructura. Se integra en
-`Prueba` desde `Santiago`, sobre `52a785a`, sin reescribir el historial.
-Consultar `git log -1 origin/Prueba` para obtener el identificador de la entrega.
-
-La limpieza deja de versionar 668 archivos de `node_modules` y una base local;
-estos archivos siguen en la máquina de trabajo y quedan ignorados por Git.
-Después de actualizar una copia anterior, ejecutar `npm.cmd ci` en el frontend
-para reinstalar las dependencias. Cada integrante debe conservar su `.env` y
-su propia base de desarrollo; esos datos no se comparten mediante Git.
-Si la copia anterior todavía versiona `backend/instance/test.db`, respaldar
-esa base fuera del repositorio antes de actualizar: Git retira el archivo
-versionado al incorporar esta limpieza.
-
-El reparto comunicado para Sprint 4 asigna a Santiago creación, comprobante y
-consulta (SCRUM-56/57/58); a Pablo las transiciones de estado; a Germán el flujo
-del paciente; y a Renzo las bandejas y acciones del enfermero. Esta guía no
-marca las tareas de esos compañeros como fallas de tu entrega actual.
+Esta tabla describe la consulta del 20/10/2026, no se actualiza sola. Cada
+integrante conserva su `.env` y base de desarrollo; no se comparten por Git.
 
 Para verificar la situación antes de trabajar:
 
@@ -402,19 +403,19 @@ git diff --cached --stat
 git log --oneline HEAD..origin/Prueba
 ```
 
-`fetch` actualiza referencias, no mezcla código. No cambiar de rama ni hacer
-un merge con trabajo local sin revisar. Integrar cambios funcionales y contratos
-en `Prueba` de forma coordinada; no asumir que están en `main`.
+`fetch` actualiza referencias, no mezcla código. Antes de integrar otra rama,
+revisar el estado local y los contratos. Los cambios actuales de Pablo siguen en
+su rama de trabajo hasta que se acuerde su publicación e integración.
 
 ## Límites actuales importantes
 
 - La recuperación imprime el código en la consola del backend. Vence en diez
   minutos, permite cinco intentos y se consume al usarlo. No hay envío de email.
 - La matrícula registrada no equivale a una aprobación administrativa. El POST
-  de solicitudes exige `verificado = True` y `disponible = True`, pero el flujo
-  de aprobación del administrador de Sprint 2 todavía no está implementado.
-- La búsqueda no oculta automáticamente enfermeros sin verificar y permite
-  listar disponibles/no disponibles. Esto difiere de HU3/HU9 del PDF.
+  de solicitudes exige `verificado = True` y `disponible = True`. El endpoint
+  administrativo de verificación existe; la tabla de revisión de matrículas en
+  el panel frontend sigue pendiente de integración visual.
+- La cartilla pública filtra enfermeros no disponibles o sin verificar.
 - La disponibilidad semanal permite agregar y consultar franjas; no tiene
   rutas actuales de edición/borrado. No es una agenda de reservas por fecha.
 - El perfil permite elegir y quitar coordenadas mediante un mapa. Cambiar
@@ -423,10 +424,12 @@ en `Prueba` de forma coordinada; no asumir que están en `main`.
 - El catálogo `Servicio` es mínimo; falta `descripcion` del diagrama y su
   administración de Sprint 2. No confundir especialidad, servicio y tarifa/hora.
 - Consultar `confirmarSolicitud()` devuelve el comprobante: no acepta el pedido.
-  El POST no reserva bloques ni comprueba superposición de solicitudes.
+  La reserva impide duplicar el mismo inicio de turno entre solicitudes activas;
+  no comprueba intervalos superpuestos porque el modelo no define duración.
 
-La comparación detallada distingue estas diferencias de lo que está fuera de
-alcance. No se implementaron funciones de otros sprints durante esta revisión.
+La [comparación con el PDF](docs/comparacion-sprints-1-4.md) conserva el análisis
+histórico de los sprints 1 a 4; no describe por sí sola el estado posterior de
+Sprint 5 y Sprint 6.
 
 ## Convenciones para continuar
 
