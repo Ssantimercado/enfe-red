@@ -5,9 +5,10 @@ export default function Brand({ to = '/home' }) {
       <span className="brand-mark" aria-hidden="true">
         <span />
       </span>
-      {/* Mismo nombre que en el documento del proyecto: Enfe-Red. */}
+      {/* Logotipo "Enfered." de la marca Enfe-Red. */}
       <span>
-        Enfe-<span className="brand-light">Red</span>
+        Enfe<span className="brand-light">red</span>
+        <span className="brand-dot">.</span>
       </span>
     </Link>
   );
