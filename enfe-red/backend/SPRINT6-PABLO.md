@@ -13,6 +13,7 @@ rol, permiso o suspensión tienen efecto sobre los tokens existentes.
 | `PUT /api/admin/usuarios/<idUsuario>/suspension` | Recibe `{"suspendido":true}` o `false`; no permite suspender la propia cuenta. |
 | `PUT /api/admin/usuarios/<idUsuario>/estado` | Alias del contrato del sprint; recibe `{"estado":"Suspendido"}` o `"Activo"`. |
 | `PUT /api/admin/enfermeros/<idEnfermero>/matricula` | Recibe `{"verificado":true}` para aprobar o `false` para rechazar. |
+| `GET /api/admin/enfermeros/pendientes` | Lista matrículas pendientes para la tabla de revisión del panel. |
 | `GET /api/admin/metricas`, `GET /api/admin/resumen` | Contrato del PanelAdmin y métricas del sprint (`usuariosActivos`, `enfermerosPendientes`, `serviciosRealizados`). |
 
 La búsqueda devuelve `usuarios`, `total_resultados` y `total_paginas`. Cada cuenta

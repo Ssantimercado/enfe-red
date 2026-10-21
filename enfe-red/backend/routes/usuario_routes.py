@@ -294,6 +294,7 @@ def perfil_enfermero():
             if nueva_matricula != enfermero.matricula:
                 # Una matrícula distinta tiene que volver a validarse (HU9).
                 enfermero.verificado = False
+                enfermero.matricula_rechazada = False
             enfermero.matricula = nueva_matricula
             enfermero.telefono = data.get('telefono', enfermero.telefono)
             enfermero.experiencia_anios = data.get('experiencia_anios', enfermero.experiencia_anios)

@@ -96,6 +96,7 @@ class Enfermero(db.Model):
     tarifa_hora = db.Column(db.Float, default=0.0, index=True)
     disponible = db.Column(db.Boolean, default=True, index=True)
     verificado = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+    matricula_rechazada = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
     latitud = db.Column(db.Float, nullable=True)
     longitud = db.Column(db.Float, nullable=True)
     # SCRUM-65.2: se recalcula con cada calificación nueva de un paciente.

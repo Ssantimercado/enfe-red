@@ -366,22 +366,42 @@ export default function ListaEnfermeros() {
               ))}
             </div>
           ) : data.enfermeros.length === 0 ? (
-            <div className="empty-state">
-              <span className="soft-icon">
-                <Icon name="search" size={26} />
-              </span>
-              <h2>{nurse ? 'Todavía no hay pacientes que te hayan enviado solicitudes.' : 'Probemos con otra búsqueda.'}</h2>
-              <p>
-                {nurse
-                  ? 'Los pacientes aparecerán cuando tengan una solicitud pendiente o aceptada con vos.'
-                  : 'No encontramos profesionales con estos criterios. Podés cambiar la zona o quitar algún filtro.'}
-              </p>
-              {!nurse && (
-                <button className="button button-primary" onClick={() => clear()}>
-                  Ver todos los profesionales
-                </button>
+            <>
+              {showMap && (
+                <div className="results-map" ref={mapRef}>
+                  <Suspense fallback={<p role="status">Cargando mapa…</p>}>
+                    <MapaEnfermeros
+                      personas={data.enfermeros}
+                      tipoPersona={nurse ? 'paciente' : 'enfermero'}
+                      selectedId={selected}
+                      onSelect={setSelected}
+                      volverA={profileState.from}
+                    />
+                  </Suspense>
+                  <p className="map-results-note">
+                    {nurse
+                      ? 'El mapa muestra únicamente ubicaciones que cada paciente eligió compartir y solo para enfermeros con una solicitud activa asignada.'
+                      : 'El mapa muestra los profesionales de esta página con ubicación informada.'}
+                  </p>
+                </div>
               )}
-            </div>
+              <div className="empty-state">
+                <span className="soft-icon">
+                  <Icon name="search" size={26} />
+                </span>
+                <h2>{nurse ? 'Todavía no hay pacientes que te hayan enviado solicitudes.' : 'Probemos con otra búsqueda.'}</h2>
+                <p>
+                  {nurse
+                    ? 'Los pacientes aparecerán cuando tengan una solicitud pendiente o aceptada con vos.'
+                    : 'No encontramos profesionales con estos criterios. Podés cambiar la zona o quitar algún filtro.'}
+                </p>
+                {!nurse && (
+                  <button className="button button-primary" onClick={() => clear()}>
+                    Ver todos los profesionales
+                  </button>
+                )}
+              </div>
+            </>
           ) : (
             <>
               {showMap && (
