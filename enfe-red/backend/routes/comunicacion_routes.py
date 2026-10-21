@@ -1,25 +1,24 @@
-"""Sprint 5 de Germán: historial (SCRUM-62) y mensajes (SCRUM-63)."""
-from datetime import datetime, timedelta, timezone
+"""Sprint 5 de Germán: historial (SCRUM-62) y mensajes (SCRUM-63).
 
+Las reseñas (SCRUM-65 a 67) se publican únicamente con POST /api/resenas (resena_routes.py).
+"""
 from flask import Blueprint, current_app, jsonify, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
-from sqlalchemy import and_, or_
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload
 
 from database import db
 from models.usuario_models import Usuario, Paciente, Enfermero
 from models.solicitud_models import SolicitudServicio
-from models.calificacion_models import Calificacion, recalcular_promedio
+from models.calificacion_models import Calificacion
 from models.mensaje_models import Mensaje
 from models.notificacion_models import notificar
 
 
 comunicacion_bp = Blueprint('comunicacion', __name__)
-ESTADOS_HISTORIAL = ('Aceptada', 'Realizada')
-ZONA_HORARIA_ARGENTINA = timezone(timedelta(hours=-3))
+# SCRUM-62.1: el historial reúne las solicitudes ya cerradas.
+ESTADOS_HISTORIAL = ('Realizada', 'Rechazada', 'Cancelada')
 MAX_CONTENIDO = 2000
-MAX_PALABRAS_CALIFICACION = 250
 
 
 def _usuario_actual():
@@ -32,6 +31,7 @@ def _usuario_actual():
 @comunicacion_bp.get('/usuarios/<int:idUsuario>/historial')
 @jwt_required()
 def historialSolicitudes(idUsuario):
+    """SCRUM-62.1: solicitudes cerradas (Realizada, Rechazada o Cancelada) del propio usuario."""
     usuario = _usuario_actual()
     if not usuario:
         return jsonify(error='La sesión no corresponde a un usuario existente'), 401
@@ -48,118 +48,25 @@ def historialSolicitudes(idUsuario):
         consulta = consulta.join(Enfermero).filter(Enfermero.usuario_id == usuario.id)
     else:
         return jsonify(error='Este rol no tiene historial de servicios'), 403
-    ahora_local = datetime.now(ZONA_HORARIA_ARGENTINA).replace(tzinfo=None)
     solicitudes = consulta.filter(
         SolicitudServicio.estado.in_(ESTADOS_HISTORIAL),
-        or_(
-            SolicitudServicio.fecha < ahora_local.date(),
-            and_(
-                SolicitudServicio.fecha == ahora_local.date(),
-                SolicitudServicio.hora <= ahora_local.time(),
-            ),
-        ),
     ).order_by(
         SolicitudServicio.fecha.desc(), SolicitudServicio.hora.desc(), SolicitudServicio.idSolicitud.desc(),
     ).all()
     items = [solicitud.to_dict() for solicitud in solicitudes]
-    ids_solicitudes = [solicitud.idSolicitud for solicitud in solicitudes]
+    # Multiplicidad Solicitud 1 — 0..1 Reseña: solo cuenta la reseña del paciente al enfermero.
+    autor_por_solicitud = {s.idSolicitud: s.paciente.usuario_id for s in solicitudes}
     calificaciones = Calificacion.query.filter(
-        Calificacion.idSolicitud.in_(ids_solicitudes),
-    ).order_by(Calificacion.idCalificacion).all() if ids_solicitudes else []
-    por_solicitud = {item['idSolicitud']: item for item in items}
-    for calificacion in calificaciones:
-        por_solicitud[calificacion.idSolicitud].setdefault('calificaciones', []).append(
-            calificacion.to_dict()
-        )
+        Calificacion.idSolicitud.in_(list(autor_por_solicitud)),
+    ).order_by(Calificacion.idCalificacion).all() if autor_por_solicitud else []
+    resenas = {
+        c.idSolicitud: c.to_dict() for c in calificaciones
+        if c.idUsuarioAutor == autor_por_solicitud.get(c.idSolicitud)
+    }
     for item in items:
-        item.setdefault('calificaciones', [])
+        resena = resenas.get(item['idSolicitud'])
+        item['calificaciones'] = [resena] if resena else []
     return jsonify(items), 200
-
-
-@comunicacion_bp.post('/solicitudes/<int:idSolicitud>/calificaciones')
-@jwt_required()
-def calificarSolicitud(idSolicitud):
-    usuario = _usuario_actual()
-    if not usuario:
-        return jsonify(error='La sesión no corresponde a un usuario existente'), 401
-    if usuario.rol not in ('paciente', 'enfermero'):
-        return jsonify(error='Solo un paciente o enfermero puede calificar un servicio'), 403
-
-    solicitud = SolicitudServicio.query.options(
-        joinedload(SolicitudServicio.paciente),
-        joinedload(SolicitudServicio.enfermero),
-    ).filter_by(idSolicitud=idSolicitud).first()
-    if not solicitud:
-        return jsonify(error='Solicitud no encontrada'), 404
-    participante = (
-        usuario.rol == 'paciente' and solicitud.paciente.usuario_id == usuario.id
-    ) or (
-        usuario.rol == 'enfermero' and solicitud.enfermero.usuario_id == usuario.id
-    )
-    if not participante:
-        return jsonify(error='Solo podés calificar servicios en los que participaste'), 403
-    # HU11: "La reseña solo puede realizarse una vez finalizada la atención".
-    if solicitud.estado != 'Realizada':
-        return jsonify(error='Vas a poder calificar cuando el enfermero marque el servicio como realizado'), 409
-
-    ahora_local = datetime.now(ZONA_HORARIA_ARGENTINA).replace(tzinfo=None)
-    fecha_hora_servicio = datetime.combine(solicitud.fecha, solicitud.hora)
-    if fecha_hora_servicio > ahora_local:
-        return jsonify(error='Vas a poder calificar el servicio cuando haya pasado la fecha y hora de atención'), 409
-
-    datos = request.get_json(silent=True)
-    if not isinstance(datos, dict) or set(datos) != {'estrellas', 'comentario'}:
-        return jsonify(error='Enviá una calificación y un comentario'), 400
-    estrellas = datos.get('estrellas')
-    if type(estrellas) is not int or not 1 <= estrellas <= 5:
-        return jsonify(error='La calificación debe ser un número entero de 1 a 5'), 400
-    comentario = datos.get('comentario')
-    if not isinstance(comentario, str) or not comentario.strip():
-        return jsonify(error='El comentario es obligatorio'), 400
-    comentario = comentario.strip()
-    if len(comentario.split()) > MAX_PALABRAS_CALIFICACION:
-        return jsonify(error=f'El comentario no puede superar las {MAX_PALABRAS_CALIFICACION} palabras'), 400
-
-    if Calificacion.query.filter_by(
-        idSolicitud=solicitud.idSolicitud,
-        idUsuarioAutor=usuario.id,
-    ).first():
-        return jsonify(error='Ya calificaste este servicio'), 409
-
-    calificacion = Calificacion(
-        idSolicitud=solicitud.idSolicitud,
-        idUsuarioAutor=usuario.id,
-        idUsuarioCalificado=(
-            solicitud.enfermero.usuario_id
-            if usuario.rol == 'paciente'
-            else solicitud.paciente.usuario_id
-        ),
-        estrellas=estrellas,
-        comentario=comentario,
-    )
-    try:
-        db.session.add(calificacion)
-        if usuario.rol == 'paciente':
-            # SCRUM-65.2: el promedio del enfermero se actualiza en la misma transacción.
-            recalcular_promedio(solicitud.enfermero)
-        db.session.commit()
-    except IntegrityError:
-        db.session.rollback()
-        if Calificacion.query.filter_by(
-            idSolicitud=solicitud.idSolicitud,
-            idUsuarioAutor=usuario.id,
-        ).first():
-            return jsonify(error='Ya calificaste este servicio'), 409
-        current_app.logger.exception('No se pudo guardar la calificación del servicio')
-        return jsonify(error='No se pudo guardar la calificación. Intentá nuevamente.'), 500
-    except SQLAlchemyError:
-        db.session.rollback()
-        current_app.logger.exception('No se pudo guardar la calificación del servicio')
-        return jsonify(error='No se pudo guardar la calificación. Intentá nuevamente.'), 500
-    return jsonify({
-        'mensaje': 'Calificación guardada',
-        'calificacion': calificacion.to_dict(),
-    }), 201
 
 
 def _notificar_mensaje(solicitud, emisor):

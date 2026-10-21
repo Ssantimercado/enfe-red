@@ -3,6 +3,7 @@ from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity, create_access_token
 from sqlalchemy import and_, or_
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import joinedload, selectinload
 import math
 
 from database import db
@@ -13,6 +14,10 @@ from routes.auth_routes import error_password
 from schema_legal import VERSION_TERMINOS
 
 usuario_bp = Blueprint('usuario_bp', __name__)
+LIMITES_PERFIL_PACIENTE = {
+    'nombre': 100, 'apellido': 100, 'direccion': 200, 'telefono': 20,
+    'obraSocial': 100, 'historial_medico': 5000,
+}
 
 # ==========================================
 # 1. RUTA DE LOGIN
@@ -194,17 +199,28 @@ def perfil_paciente():
                 or data.get('longitud', paciente.longitud) is None
             ):
                 return jsonify({"error": "Elegí un punto en el mapa antes de compartir tu ubicación"}), 400
+            for campo, limite in LIMITES_PERFIL_PACIENTE.items():
+                if campo in data and data[campo] is not None and (
+                    not isinstance(data[campo], str) or len(data[campo]) > limite
+                ):
+                    return jsonify({"error": f"El campo {campo} debe ser un texto de hasta {limite} caracteres"}), 400
             paciente.nombre = data.get('nombre', paciente.nombre)
             paciente.apellido = data.get('apellido', paciente.apellido)
             paciente.direccion = data.get('direccion', paciente.direccion)
             paciente.telefono = data.get('telefono', paciente.telefono)
             paciente.historial_medico = data.get('historial_medico', paciente.historial_medico)
+            paciente.obraSocial = data.get('obraSocial', paciente.obraSocial)
             paciente.latitud = data.get('latitud', paciente.latitud)
             paciente.longitud = data.get('longitud', paciente.longitud)
             paciente.ubicacion_compartida = data.get(
                 'ubicacion_compartida', paciente.ubicacion_compartida
             )
-            db.session.commit()
+            try:
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+                current_app.logger.error('No se pudo guardar el perfil del paciente')
+                return jsonify({"error": "No se pudieron guardar los cambios. Intentá nuevamente."}), 500
             
             datos_completos = usuario.to_dict()
             datos_completos.update(paciente.to_dict())
@@ -430,20 +446,19 @@ def gestionar_horarios(horario_id=None):
 # ==========================================
 @usuario_bp.route('/enfermeros', methods=['GET'])
 def obtener_enfermeros():
-    enfermeros_db = Enfermero.query.all()
+    # Solo los que la cartilla puede mostrar (disponibles, verificados y no suspendidos).
+    enfermeros_db = consulta_enfermeros_visibles().options(
+        joinedload(Enfermero.usuario), selectinload(Enfermero.disponibilidades),
+    ).all()
     lista_enfermeros = []
-    
     for enfermero in enfermeros_db:
-        usuario = Usuario.query.get(enfermero.usuario_id)
-        if usuario:
-            datos = enfermero.to_dict()
-            datos['id'] = usuario.id 
-            datos['usuario_id'] = usuario.id
-            datos['email'] = usuario.email
-            # Se adjunta la lista de disponibilidades/horarios del enfermero
-            datos['horarios'] = [d.to_dict() for d in enfermero.disponibilidades]
-            lista_enfermeros.append(datos)
-            
+        datos = enfermero.to_dict()
+        datos['id'] = enfermero.usuario_id
+        datos['usuario_id'] = enfermero.usuario_id
+        datos['email'] = enfermero.usuario.email
+        # Se adjunta la lista de disponibilidades/horarios del enfermero
+        datos['horarios'] = [d.to_dict() for d in enfermero.disponibilidades]
+        lista_enfermeros.append(datos)
     return jsonify(lista_enfermeros), 200
 
 
@@ -585,11 +600,23 @@ def buscar_enfermeros():
         if hora_inicio >= hora_fin:
             return jsonify({'error': 'La hora desde debe ser anterior a la hora hasta'}), 400
 
-    query = Enfermero.query.join(Usuario, Enfermero.usuario_id == Usuario.id).filter(
-        # HU3: "Solo se muestran enfermeros disponibles"; HU9: aparecen al validar la matrícula.
-        Enfermero.disponible.is_(True),
-        Enfermero.verificado.is_(True),
-    )
+    # HU3: ubicación del paciente para ordenar por cercanía (opcional).
+    lat_texto, lng_texto = request.args.get('lat'), request.args.get('lng')
+    origen = None
+    if lat_texto is not None or lng_texto is not None:
+        try:
+            origen = (float(lat_texto), float(lng_texto))
+        except (TypeError, ValueError):
+            return jsonify({'error': 'La ubicación debe incluir latitud y longitud numéricas'}), 400
+        if not (-90 <= origen[0] <= 90 and -180 <= origen[1] <= 180):
+            return jsonify({'error': 'La ubicación no es válida'}), 400
+    radio_km = request.args.get('radio_km', type=float)
+    if 'radio_km' in request.args and (radio_km is None or not 0 < radio_km <= 500):
+        return jsonify({'error': 'El radio debe estar entre 0 y 500 km'}), 400
+    if radio_km is not None and origen is None:
+        return jsonify({'error': 'Para filtrar por radio indicá tu ubicación'}), 400
+
+    query = consulta_enfermeros_visibles()
 
     if texto:
         patron = f"%{texto}%"
@@ -630,19 +657,60 @@ def buscar_enfermeros():
         )
 
     query = query.distinct()
-    paginacion = query.paginate(page=pagina, per_page=por_pagina, error_out=False)
 
-    resultados = []
-    for enf in paginacion.items:
+    def serializar(enf, distancia=None):
         datos_enf = enf.to_dict()
         datos_enf['email'] = enf.usuario.email if enf.usuario else None
         datos_enf['horarios'] = [d.to_dict() for d in enf.disponibilidades]
-        resultados.append(datos_enf)
+        if origen is not None:
+            datos_enf['distancia_km'] = None if distancia is None else round(distancia, 1)
+        return datos_enf
 
+    if origen is None:
+        paginacion = query.paginate(page=pagina, per_page=por_pagina, error_out=False)
+        return jsonify({
+            "pagina_actual": paginacion.page,
+            "por_pagina": paginacion.per_page,
+            "total_resultados": paginacion.total,
+            "total_paginas": paginacion.pages,
+            "enfermeros": [serializar(enf) for enf in paginacion.items]
+        }), 200
+
+    # HU3 "enfermeros cercanos": distancia en línea recta, los más cercanos primero;
+    # quienes no cargaron su ubicación van al final (salvo que se pida un radio).
+    candidatos = []
+    for enf in query.all():
+        distancia = None
+        if enf.latitud is not None and enf.longitud is not None:
+            distancia = distancia_km(origen[0], origen[1], enf.latitud, enf.longitud)
+        if radio_km is not None and (distancia is None or distancia > radio_km):
+            continue
+        candidatos.append((distancia, enf))
+    candidatos.sort(key=lambda par: (par[0] is None, par[0] or 0, par[1].id))
+    total = len(candidatos)
+    inicio = (pagina - 1) * por_pagina
     return jsonify({
-        "pagina_actual": paginacion.page,
-        "por_pagina": paginacion.per_page,
-        "total_resultados": paginacion.total,
-        "total_paginas": paginacion.pages,
-        "enfermeros": resultados
+        "pagina_actual": pagina,
+        "por_pagina": por_pagina,
+        "total_resultados": total,
+        "total_paginas": math.ceil(total / por_pagina) if total else 0,
+        "enfermeros": [serializar(enf, distancia) for distancia, enf in candidatos[inicio:inicio + por_pagina]],
     }), 200
+
+
+def distancia_km(lat1, lng1, lat2, lng2):
+    """Distancia en km entre dos coordenadas (fórmula de haversine)."""
+    radio_tierra = 6371.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dlat, dlng = p2 - p1, math.radians(lng2 - lng1)
+    a = math.sin(dlat / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlng / 2) ** 2
+    return 2 * radio_tierra * math.asin(math.sqrt(a))
+
+
+def consulta_enfermeros_visibles():
+    """Enfermeros que pueden aparecer y recibir pedidos: HU3 (disponibles), HU9 (verificados) y HU10 (no suspendidos)."""
+    return Enfermero.query.join(Usuario, Enfermero.usuario_id == Usuario.id).filter(
+        Enfermero.disponible.is_(True),
+        Enfermero.verificado.is_(True),
+        Usuario.suspendido.is_(False),
+    )

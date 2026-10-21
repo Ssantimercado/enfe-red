@@ -14,6 +14,9 @@ const COMMON = [
   ['telefono', 'Teléfono', 'tel', 'tel'],
   ['direccion', 'Dirección', 'text', 'street-address'],
 ];
+// Paciente.obraSocial del diagrama de clases.
+const PATIENT = [['obraSocial', 'Obra social o prepaga', 'text', 'off']];
+const MAX_LENGTH = { telefono: 20, obraSocial: 100 };
 const PROFESSIONAL = [
   ['especialidad', 'Especialidad'],
   ['matricula', 'Matrícula'],
@@ -32,7 +35,7 @@ export default function ProfileEditor({ role }) {
   const [success, setSuccess] = useState('');
   const [retry, setRetry] = useState(0);
   const [locationOpen, setLocationOpen] = useState(false);
-  const fields = [...COMMON, ...(nurse ? PROFESSIONAL : [])];
+  const fields = [...COMMON, ...(nurse ? PROFESSIONAL : PATIENT)];
 
   useEffect(() => {
     const controller = new AbortController();
@@ -165,7 +168,7 @@ export default function ProfileEditor({ role }) {
                   <div className="form-grid">
                     {fields.map(([key, label, type = 'text', complete]) => (
                       <label className="field" key={key}>
-                        {key === 'apellido' ? 'Apellido (opcional)' : label}
+                        {key === 'apellido' || key === 'obraSocial' ? `${label} (opcional)` : label}
                         <input
                           name={key}
                           type={type}
@@ -183,7 +186,7 @@ export default function ProfileEditor({ role }) {
                           required={['nombre', 'matricula'].includes(key)}
                           min={type === 'number' ? '0' : undefined}
                           step={key === 'tarifa_hora' ? '0.01' : undefined}
-                          maxLength={key === 'telefono' ? 20 : undefined}
+                          maxLength={MAX_LENGTH[key]}
                           disabled={saving}
                         />
                       </label>

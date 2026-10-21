@@ -33,6 +33,21 @@ def admin_required(func):
     return wrapper
 
 
+PREFIJO_MATRICULA_TEMPORAL = 'PENDIENTE-'
+
+
+def _matricula_sin_cargar(enfermero):
+    return (enfermero.matricula or '').startswith(PREFIJO_MATRICULA_TEMPORAL)
+
+
+def _pendientes_de_revision():
+    return Enfermero.query.filter(
+        Enfermero.verificado.is_(False),
+        Enfermero.matricula_rechazada.is_(False),
+        ~Enfermero.matricula.startswith(PREFIJO_MATRICULA_TEMPORAL),
+    )
+
+
 def _datos_usuario(usuario, paciente=None, enfermero=None):
     perfil = paciente or enfermero
     return {
@@ -143,6 +158,9 @@ def verificarMatricula(idEnfermero):
     enfermero = db.session.get(Enfermero, idEnfermero)
     if enfermero is None:
         return jsonify(error='Enfermero no encontrado'), 404
+    if verificado and _matricula_sin_cargar(enfermero):
+        # HU9: solo se valida una matrícula que el enfermero ya cargó en su perfil.
+        return jsonify(error='El enfermero todavía no cargó su matrícula'), 409
     enfermero.verificado = verificado
     enfermero.matricula_rechazada = not verificado
     try:
@@ -158,9 +176,8 @@ def verificarMatricula(idEnfermero):
 @admin_bp.get('/admin/enfermeros/pendientes')
 @admin_required
 def enfermerosPendientes():
-    pendientes = Enfermero.query.filter_by(
-        verificado=False, matricula_rechazada=False
-    ).order_by(Enfermero.id).all()
+    # Las matrículas temporales (PENDIENTE-<id>) no se listan hasta que el enfermero las cargue.
+    pendientes = _pendientes_de_revision().order_by(Enfermero.id).all()
     return jsonify(enfermeros=[{
         'idEnfermero': enfermero.id,
         'usuarioId': enfermero.usuario_id,
@@ -178,9 +195,7 @@ def enfermerosPendientes():
 def resumenAdmin():
     total_usuarios = Usuario.query.count()
     usuarios_activos = Usuario.query.filter_by(suspendido=False).count()
-    pendientes = Enfermero.query.filter_by(
-        verificado=False, matricula_rechazada=False
-    ).count()
+    pendientes = _pendientes_de_revision().count()
     realizados = SolicitudServicio.query.filter_by(estado='Realizada').count()
     return jsonify({
         'total_usuarios': total_usuarios,

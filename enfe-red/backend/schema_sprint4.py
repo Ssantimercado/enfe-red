@@ -18,6 +18,14 @@ PRECIOS_REFERENCIA = {
     'Cuidados Intensivos': Decimal('18000.00'),
 }
 SERVICIOS_INICIALES = tuple(PRECIOS_REFERENCIA)
+DESCRIPCIONES_SERVICIO = {
+    'Curaciones': 'Limpieza y cuidado de heridas, úlceras o puntos quirúrgicos, con cambio de apósitos.',
+    'Inyecciones': 'Aplicación de medicación inyectable indicada por un médico (intramuscular, subcutánea).',
+    'Control de signos vitales': 'Control de presión arterial, temperatura, pulso, saturación y glucemia.',
+    'Higiene y confort': 'Higiene personal, cambio de ropa de cama y cuidados de confort en el domicilio.',
+    'Acompañamiento de adultos mayores': 'Acompañamiento y asistencia en las actividades diarias.',
+    'Cuidados Intensivos': 'Atención de pacientes con alta complejidad o dependencia en el domicilio.',
+}
 
 
 def inicializar_bd_sprint4():
@@ -37,6 +45,12 @@ def inicializar_bd_sprint4():
             connection.execute(text(
                 'ALTER TABLE pacientes ADD COLUMN ubicacion_compartida BOOLEAN NOT NULL DEFAULT FALSE'
             ))
+        # Atributos del diagrama de clases: Paciente.obraSocial y Servicio.descripcion.
+        if 'obraSocial' not in columnas_paciente:
+            connection.execute(text('ALTER TABLE pacientes ADD COLUMN obraSocial VARCHAR(100) NULL'))
+        columnas_servicio = {columna['name'] for columna in inspect(connection).get_columns('servicios')}
+        if 'descripcion' not in columnas_servicio:
+            connection.execute(text('ALTER TABLE servicios ADD COLUMN descripcion VARCHAR(255) NULL'))
         columnas = {columna['name'] for columna in inspect(connection).get_columns('enfermeros')}
         if 'verificado' not in columnas:
             connection.execute(text(
@@ -99,8 +113,12 @@ def inicializar_catalogo_servicios():
     for tipo, precio in PRECIOS_REFERENCIA.items():
         servicio = existentes.get(tipo)
         if not servicio:
-            db.session.add(Servicio(tipoServicio=tipo, precioEstimado=precio))
-        elif servicio.precioEstimado is None:
-            # Nunca pisa un precio que alguien ya cargó.
+            db.session.add(Servicio(tipoServicio=tipo, precioEstimado=precio,
+                                    descripcion=DESCRIPCIONES_SERVICIO[tipo]))
+            continue
+        # Nunca pisa un precio o una descripción que alguien ya cargó.
+        if servicio.precioEstimado is None:
             servicio.precioEstimado = precio
+        if not servicio.descripcion:
+            servicio.descripcion = DESCRIPCIONES_SERVICIO[tipo]
     db.session.commit()

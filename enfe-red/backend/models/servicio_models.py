@@ -11,12 +11,14 @@ class Servicio(db.Model):
 
     idServicio = db.Column(db.Integer, primary_key=True)
     tipoServicio = db.Column(db.String(100), nullable=False)
+    descripcion = db.Column(db.String(255), nullable=True)
     precioEstimado = db.Column(db.Numeric(10, 2), nullable=True)
 
     def to_dict(self):
         return {
             'idServicio': self.idServicio,
             'tipoServicio': self.tipoServicio,
+            'descripcion': self.descripcion,
             # Decimal como texto para conservar los centavos en el JSON.
             'precioEstimado': (
                 format(self.precioEstimado, '.2f')

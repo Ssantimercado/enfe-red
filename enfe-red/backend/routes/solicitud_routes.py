@@ -224,6 +224,9 @@ def crearSolicitud():
         return jsonify({'error': 'El enfermero todavía no está verificado'}), 409
     if not enfermero.disponible:
         return jsonify({'error': 'El enfermero no está disponible para recibir solicitudes'}), 409
+    if enfermero.usuario is None or enfermero.usuario.suspendido:
+        # HU10: una cuenta suspendida no recibe nuevos pedidos.
+        return jsonify({'error': 'El enfermero no está habilitado para recibir solicitudes'}), 409
     servicio = db.session.get(Servicio, datos['idServicio'])
     if not servicio:
         return jsonify({'error': 'Servicio no encontrado'}), 404

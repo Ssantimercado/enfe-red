@@ -12,6 +12,7 @@ from models.usuario_models import Usuario, Paciente, Enfermero
 from models.servicio_models import Servicio
 from models.solicitud_models import SolicitudServicio
 from models.mensaje_models import Mensaje
+from models.calificacion_models import Calificacion
 from routes.comunicacion_routes import comunicacion_bp
 
 
@@ -62,6 +63,7 @@ class ComunicacionTest(unittest.TestCase):
         return item.idSolicitud
 
     def test_historial_filtra_estados_y_participantes(self):
+        # SCRUM-62.1: solo solicitudes cerradas (Realizada, Rechazada o Cancelada).
         hoy = datetime.now(timezone(timedelta(hours=-3))).date()
         pasado = hoy - timedelta(days=2)
         ids = {
@@ -78,7 +80,7 @@ class ComunicacionTest(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertEqual(
                 [item['idSolicitud'] for item in response.json],
-                [ids['Realizada'], ids['Aceptada_pasada']],
+                [ids['Realizada'], ids['Cancelada'], ids['Rechazada']],
             )
             self.assertNotIn('CONFIDENCIAL', response.get_data(as_text=True))
             self.assertNotIn('password_hash', response.get_data(as_text=True))
@@ -88,106 +90,29 @@ class ComunicacionTest(unittest.TestCase):
         self.assertEqual(self.client.get('/api/usuarios/12/historial', headers=self.headers()).status_code, 403)
         self.assertEqual(self.client.get('/api/usuarios/101/historial', headers=self.headers()).status_code, 403)
 
-    def test_historial_incluye_solicitud_de_hoy_cuando_paso_la_hora_del_servicio(self):
-        ahora = datetime(2026, 10, 18, 13, 24, tzinfo=timezone(timedelta(hours=-3)))
-        pasada = self.solicitud(fecha=ahora.date(), hora=time(13, 22))
-        futura = self.solicitud(fecha=ahora.date(), hora=time(13, 25))
-        with patch('routes.comunicacion_routes.datetime') as reloj:
-            reloj.now.return_value = ahora
-            response = self.client.get(
-                '/api/usuarios/11/historial',
-                headers=self.headers(),
-            )
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual([item['idSolicitud'] for item in response.json], [pasada])
-        self.assertNotIn(futura, [item['idSolicitud'] for item in response.json])
-
-    def test_participantes_pueden_calificarse_una_vez_y_ver_ambas_calificaciones(self):
+    def test_historial_muestra_solo_la_resena_del_paciente(self):
+        # Multiplicidad Solicitud 1 — 0..1 Reseña: una calificación previa del enfermero no se muestra.
         id_solicitud = self.solicitud('Realizada', fecha=date(2020, 1, 10))
-        ruta = f'/api/solicitudes/{id_solicitud}/calificaciones'
-        paciente = self.client.post(
-            ruta,
-            headers=self.headers(11),
-            json={'estrellas': 5, 'comentario': 'Excelente atención.'},
-        )
-        self.assertEqual(paciente.status_code, 201)
-        self.assertEqual(paciente.json['calificacion']['idUsuarioCalificado'], 21)
-        self.assertEqual(
-            self.client.post(
-                ruta,
-                headers=self.headers(11),
-                json={'estrellas': 4, 'comentario': 'Otra opinión.'},
-            ).status_code,
-            409,
-        )
+        db.session.add_all([
+            Calificacion(idSolicitud=id_solicitud, idUsuarioAutor=11, idUsuarioCalificado=21,
+                         estrellas=5, comentario='Excelente atención.'),
+            Calificacion(idSolicitud=id_solicitud, idUsuarioAutor=21, idUsuarioCalificado=11,
+                         estrellas=3, comentario='Calificación antigua del enfermero.'),
+        ])
+        db.session.commit()
+        for usuario in (11, 21):
+            historial = self.client.get(f'/api/usuarios/{usuario}/historial', headers=self.headers(usuario)).json
+            self.assertEqual([c['comentario'] for c in historial[0]['calificaciones']], ['Excelente atención.'])
 
-        enfermero = self.client.post(
-            ruta,
-            headers=self.headers(21),
-            json={'estrellas': 4, 'comentario': 'Buena comunicación.'},
-        )
-        self.assertEqual(enfermero.status_code, 201)
-        self.assertEqual(enfermero.json['calificacion']['idUsuarioCalificado'], 11)
-        historial = self.client.get('/api/usuarios/11/historial', headers=self.headers(11))
-        self.assertEqual(historial.status_code, 200)
-        self.assertEqual(len(historial.json[0]['calificaciones']), 2)
-
-    def test_calificacion_valida_escala_y_limite_de_palabras(self):
+    def test_ya_no_existe_el_endpoint_duplicado_de_calificaciones(self):
+        # Las reseñas se publican únicamente con POST /api/resenas.
         id_solicitud = self.solicitud('Realizada', fecha=date(2020, 1, 10))
-        ruta = f'/api/solicitudes/{id_solicitud}/calificaciones'
-        for datos in (
-            {'estrellas': 0, 'comentario': 'Opinión'},
-            {'estrellas': 6, 'comentario': 'Opinión'},
-            {'estrellas': True, 'comentario': 'Opinión'},
-            {'estrellas': 5, 'comentario': ''},
-            {'estrellas': 5, 'comentario': 'palabra ' * 251},
-        ):
-            with self.subTest(datos=datos):
-                self.assertEqual(
-                    self.client.post(ruta, headers=self.headers(), json=datos).status_code,
-                    400,
-                )
-        response = self.client.post(
-            ruta,
-            headers=self.headers(),
-            json={'estrellas': 1, 'comentario': 'palabra ' * 249 + 'final'},
-        )
-        self.assertEqual(response.status_code, 201)
-
-    def test_solo_participantes_y_servicios_realizados_pueden_calificar(self):
-        ruta = f'/api/solicitudes/{self.solicitud("Realizada", fecha=date(2020, 1, 10))}/calificaciones'
-        datos = {'estrellas': 5, 'comentario': 'Buen servicio.'}
-        self.assertEqual(
-            self.client.post(ruta, headers=self.headers(12), json=datos).status_code,
-            403,
-        )
-        self.assertEqual(self.client.post(ruta, json=datos).status_code, 401)
-
-        pendiente = self.solicitud('Pendiente', fecha=date(2020, 1, 10))
-        response = self.client.post(
-            f'/api/solicitudes/{pendiente}/calificaciones',
-            headers=self.headers(),
-            json=datos,
-        )
-        self.assertEqual(response.status_code, 409)
-
-        futura = self.solicitud(fecha=date(2030, 1, 10))
-        response = self.client.post(
-            f'/api/solicitudes/{futura}/calificaciones',
-            headers=self.headers(),
-            json=datos,
-        )
-        self.assertEqual(response.status_code, 409)
-
-        # HU11: aceptada y vencida no alcanza; el enfermero debe marcarla como realizada.
-        vencida = self.solicitud('Aceptada', fecha=date(2020, 1, 10))
-        response = self.client.post(
-            f'/api/solicitudes/{vencida}/calificaciones',
-            headers=self.headers(),
-            json=datos,
-        )
-        self.assertEqual(response.status_code, 409)
-        self.assertIn('realizado', response.json['error'])
+        for usuario in (11, 21):
+            response = self.client.post(f'/api/solicitudes/{id_solicitud}/calificaciones',
+                                        headers=self.headers(usuario),
+                                        json={'estrellas': 5, 'comentario': 'Hola'})
+            self.assertIn(response.status_code, (404, 405))
+        self.assertEqual(Calificacion.query.count(), 0)
 
     def test_chat_bidireccional_orden_y_fecha_utc(self):
         ruta = f'/api/solicitudes/{self.solicitud()}/mensajes'

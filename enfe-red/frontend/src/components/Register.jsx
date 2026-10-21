@@ -74,7 +74,7 @@ export default function Register() {
           )}
           <form className="form-stack" onSubmit={submit} aria-busy={loading}>
             <fieldset className="role-options">
-              <legend>¿Cómo vas a usar Enfe-red?</legend>
+              <legend>¿Cómo vas a usar Enfe-Red?</legend>
               <div>
                 <label className="role-option">
                   <input

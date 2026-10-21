@@ -39,8 +39,8 @@ class Usuario(db.Model):
         }
 
 
-class Administrador(Usuario):
-    """Perfil administrativo sobre la tabla de usuarios existente."""
+# Administrador (diagrama de clases): es un Usuario con rol 'administrador' y nivelPermiso;
+# sus métodos son las rutas de admin_routes.py. No necesita una tabla ni una clase propia.
 
 class Paciente(db.Model):
     __tablename__ = 'pacientes'
@@ -53,6 +53,8 @@ class Paciente(db.Model):
     direccion = db.Column(db.String(200), nullable=True)
     telefono = db.Column(db.String(20), nullable=True)
     historial_medico = db.Column(db.Text, nullable=True)
+    # Paciente.obraSocial del diagrama de clases (opcional).
+    obraSocial = db.Column(db.String(100), nullable=True)
     latitud = db.Column(db.Float, nullable=True)
     longitud = db.Column(db.Float, nullable=True)
     ubicacion_compartida = db.Column(
@@ -70,6 +72,7 @@ class Paciente(db.Model):
             "direccion": self.direccion,
             "telefono": self.telefono,
             "historial_medico": self.historial_medico,
+            "obraSocial": self.obraSocial,
             "latitud": self.latitud,
             "longitud": self.longitud,
             "ubicacion_compartida": self.ubicacion_compartida,

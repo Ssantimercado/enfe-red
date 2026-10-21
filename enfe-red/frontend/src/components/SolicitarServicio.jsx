@@ -84,7 +84,9 @@ export default function SolicitarServicio() {
           {servicios.map(s => <option key={s.idServicio} value={s.idServicio}>
             {s.tipoServicio} · {s.precioEstimado == null ? 'A consultar' : new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(s.precioEstimado)}
           </option>)}
-        </select>{catalogoDisponible && <span className="field-hint">Elegí el servicio que necesitás.</span>}</label>
+        </select>{catalogoDisponible && <span className="field-hint">
+          {servicios.find(s => String(s.idServicio) === String(datos.idServicio))?.descripcion || 'Elegí el servicio que necesitás.'}
+        </span>}</label>
         <label className="field">Fecha<input type="date" name="fecha" lang="es-AR" min={hoy} required value={datos.fecha} onChange={cambiar} disabled={!catalogoDisponible || enviando || creada} /></label>
         <label className="field">Hora<input type="time" name="hora" required value={datos.hora} onChange={cambiar} disabled={!catalogoDisponible || enviando || creada} /></label>
         <label className="field">Dirección de atención<input name="direccionAtencion" autoComplete="street-address" maxLength={200} required value={datos.direccionAtencion} onChange={cambiar} disabled={!catalogoDisponible || enviando || creada} /></label>

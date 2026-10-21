@@ -2770,3 +2770,37 @@
     scroll-padding-bottom: calc(90px + env(safe-area-inset-bottom));
   }
 }
+
+/* HU3: búsqueda por cercanía en la cartilla */
+.nearby-search {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+  margin: -6px 0 22px;
+}
+.nearby-search .button { gap: 8px; }
+.nearby-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--ink);
+  font-size: 15px;
+}
+.nearby-radius {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  color: var(--ink);
+}
+.nearby-radius select {
+  min-height: 42px;
+  padding: 8px 12px;
+  border: 1px solid #8399a6;
+  border-radius: 10px;
+  background: #fff;
+  font: inherit;
+}
+.nearby-search .notice { flex-basis: 100%; margin: 0; }

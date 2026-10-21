@@ -122,7 +122,7 @@ export default function AdminUsuarios() {
         <div>
           <span className="eyebrow">ADMINISTRACIÓN</span>
           <h1>Gestión de usuarios</h1>
-          <p>Buscá cuentas y administrá su acceso a Enfe-red.</p>
+          <p>Buscá cuentas y administrá su acceso a Enfe-Red.</p>
         </div>
       </header>
 

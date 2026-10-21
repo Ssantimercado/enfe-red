@@ -127,16 +127,16 @@ class ResenasTest(unittest.TestCase):
         self.assertEqual(Calificacion.query.count(), 0)
         self.assertIsNone(db.session.get(Enfermero, 201).calificacionPromedio)
 
-    def test_calificar_desde_el_historial_tambien_actualiza_el_promedio(self):
+    def test_calificaciones_antiguas_del_enfermero_no_cuentan_en_el_promedio(self):
         id_solicitud = self.solicitud(estado='Realizada', fecha=date(2020, 1, 10))
-        ruta = f'/api/solicitudes/{id_solicitud}/calificaciones'
-        respuesta = self.client.post(ruta, headers=self.headers(11), json={'estrellas': 4, 'comentario': 'Bien'})
-        self.assertEqual(respuesta.status_code, 201)
-        self.assertEqual(db.session.get(Enfermero, 201).calificacionPromedio, 4.0)
-        # La calificación del enfermero al paciente no cuenta para su propio promedio.
-        self.client.post(ruta, headers=self.headers(21), json={'estrellas': 1, 'comentario': 'Ok'})
+        # Dato previo a la unificación: el enfermero había calificado al paciente.
+        db.session.add(Calificacion(idSolicitud=id_solicitud, idUsuarioAutor=21, idUsuarioCalificado=11,
+                                    estrellas=1, comentario='Ok'))
+        db.session.commit()
+        self.assertEqual(self.publicar(id_solicitud, puntuacion=4).status_code, 201)
         enfermero = db.session.get(Enfermero, 201)
         self.assertEqual((enfermero.calificacionPromedio, enfermero.cantidadResenas), (4.0, 1))
+        self.assertEqual(len(self.client.get('/api/enfermeros/201/resenas', headers=self.headers(11)).json['resenas']), 1)
 
     def test_consulta_de_enfermero_sin_resenas_o_inexistente(self):
         sin_resenas = self.client.get('/api/enfermeros/202/resenas', headers=self.headers(11))

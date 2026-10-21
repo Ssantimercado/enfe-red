@@ -77,28 +77,19 @@ export default function HistorialServicios({ userId, nurse }) {
     setErrorCalificacion('');
     setMensaje('');
     try {
-      let calificacion;
-      if (nurse) {
-        const resultado = await api(`/solicitudes/${solicitud.idSolicitud}/calificaciones`, {
-          method: 'POST',
-          body: { estrellas, comentario },
-        });
-        calificacion = resultado.calificacion;
-      } else {
-        // SCRUM-66.2: el paciente publica una reseña del enfermero (endpoint de Santiago).
-        const resultado = await api('/resenas', {
-          method: 'POST',
-          body: { idSolicitud: solicitud.idSolicitud, puntuacion: estrellas, comentario },
-        });
-        calificacion = resultado.resena && {
-          idCalificacion: resultado.resena.idResena,
-          idSolicitud: resultado.resena.idSolicitud,
-          idUsuarioAutor: userId,
-          estrellas: resultado.resena.puntuacion,
-          comentario: resultado.resena.comentario,
-          fecha: resultado.resena.fecha,
-        };
-      }
+      // SCRUM-66.2 / HU11: solo el paciente reseña al enfermero (una reseña por solicitud).
+      const resultado = await api('/resenas', {
+        method: 'POST',
+        body: { idSolicitud: solicitud.idSolicitud, puntuacion: estrellas, comentario },
+      });
+      const calificacion = resultado.resena && {
+        idCalificacion: resultado.resena.idResena,
+        idSolicitud: resultado.resena.idSolicitud,
+        idUsuarioAutor: userId,
+        estrellas: resultado.resena.puntuacion,
+        comentario: resultado.resena.comentario,
+        fecha: resultado.resena.fecha,
+      };
       if (!calificacion?.idCalificacion) {
         throw new Error('El servidor no devolvió la calificación guardada.');
       }
@@ -123,8 +114,8 @@ export default function HistorialServicios({ userId, nurse }) {
           <h2>{titulo}</h2>
           <p>
             {nurse
-              ? 'Consultá las atenciones aceptadas cuya fecha y hora ya pasó.'
-              : 'Consultá los servicios aceptados cuya fecha y hora ya pasó.'}
+              ? 'Consultá las atenciones realizadas, rechazadas o canceladas y las reseñas que recibiste.'
+              : 'Consultá tus servicios realizados, rechazados o cancelados y calificá las atenciones realizadas.'}
           </p>
         </div>
         <button
@@ -216,9 +207,8 @@ export default function HistorialServicios({ userId, nurse }) {
             <div className="service-history-list">
               {visibles.map((solicitud) => {
                 const persona = nurse ? solicitud.paciente : solicitud.enfermero;
-                const calificaciones = solicitud.calificaciones || [];
-                const propia = calificaciones.find((item) => item.idUsuarioAutor === userId);
-                const recibida = calificaciones.find((item) => item.idUsuarioCalificado === userId);
+                // El backend devuelve como máximo la reseña del paciente (multiplicidad 0..1).
+                const resena = (solicitud.calificaciones || [])[0];
                 return (
                   <article className="service-history-item" key={solicitud.idSolicitud}>
                     <div>
@@ -238,32 +228,23 @@ export default function HistorialServicios({ userId, nurse }) {
                       </div>
                     </dl>
                     <div className="service-rating">
-                      {propia ? (
+                      {resena ? (
                         <p>
-                          Tu calificación: <EstrellasLectura valor={propia.estrellas} />
-                          <span> · {propia.comentario}</span>
+                          {nurse ? 'Reseña del paciente: ' : 'Tu calificación: '}
+                          <EstrellasLectura valor={resena.estrellas} />
+                          <span> · {resena.comentario}</span>
                         </p>
-                      ) : solicitud.estado === 'Realizada' ? (
+                      ) : solicitud.estado !== 'Realizada' ? null : nurse ? (
+                        <p className="filter-hint">El paciente todavía no dejó una reseña.</p>
+                      ) : (
+                        // HU11: la reseña se habilita una vez finalizada la atención.
                         <button
                           className="text-link"
                           type="button"
                           onClick={() => iniciarCalificacion(solicitud)}
                         >
-                          Calificar {nurse ? 'paciente' : 'enfermero'}
+                          Calificar enfermero
                         </button>
-                      ) : (
-                        // HU11: la reseña se habilita una vez finalizada la atención.
-                        <p className="filter-hint">
-                          {nurse
-                            ? 'Marcá el servicio como realizado desde Solicitudes para poder calificar.'
-                            : 'Vas a poder calificar cuando el enfermero marque el servicio como realizado.'}
-                        </p>
-                      )}
-                      {recibida && (
-                        <p>
-                          Calificación recibida: <EstrellasLectura valor={recibida.estrellas} />
-                          <span> · {recibida.comentario}</span>
-                        </p>
                       )}
                     </div>
                   </article>
@@ -278,22 +259,19 @@ export default function HistorialServicios({ userId, nurse }) {
             </>
           ) : (
             <p className="service-history-empty">
-              Todavía no hay servicios aceptados cuya fecha y hora hayan pasado.
+              Todavía no tenés servicios realizados, rechazados o cancelados.
             </p>
           )
         )}
       </div>
       {mensaje && <p className="notice notice-success" role="status">{mensaje}</p>}
-      {calificando && (
+      {calificando && !nurse && (
         <ModalCalificacion
           key={calificando.idSolicitud}
           id={`calificacion-${calificando.idSolicitud}`}
-          titulo={nurse ? 'Calificar paciente' : 'Calificar enfermero'}
+          titulo="Calificar enfermero"
           descripcion={[
-            [
-              (nurse ? calificando.paciente : calificando.enfermero)?.nombre,
-              (nurse ? calificando.paciente : calificando.enfermero)?.apellido,
-            ].filter(Boolean).join(' '),
+            [calificando.enfermero?.nombre, calificando.enfermero?.apellido].filter(Boolean).join(' '),
             calificando.servicio?.tipoServicio,
             fechaLegible(calificando.fecha),
           ].filter(Boolean).join(' · ')}

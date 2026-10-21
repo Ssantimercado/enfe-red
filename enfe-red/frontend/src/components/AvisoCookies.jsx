@@ -28,7 +28,7 @@ export default function AvisoCookies() {
   return (
     <aside className="aviso-cookies" role="region" aria-label="Aviso sobre cookies y almacenamiento">
       <p>
-        Enfe-red no usa cookies publicitarias ni de seguimiento. Guardamos en tu navegador solo lo
+        Enfe-Red no usa cookies publicitarias ni de seguimiento. Guardamos en tu navegador solo lo
         necesario para mantener tu sesión iniciada.{' '}
         <Link to="/privacidad">Conocé más en la Política de privacidad</Link>.
       </p>

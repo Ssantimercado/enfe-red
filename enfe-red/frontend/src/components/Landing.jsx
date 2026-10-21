@@ -82,7 +82,7 @@ const testimonials = [
 
 const questions = [
   [
-    '¿Qué es Enfe-red?',
+    '¿Qué es Enfe-Red?',
     'Es una plataforma que conecta a personas que necesitan cuidados de enfermería a domicilio con profesionales que ofrecen sus servicios. Te ayuda a buscar, conocer perfiles y establecer contacto para coordinar la atención.',
   ],
   [
@@ -94,8 +94,8 @@ const questions = [
     'Buscá por nombre, zona o especialidad y combiná filtros de precio, disponibilidad y día de atención. En cada perfil podés revisar la experiencia, los horarios y los datos de contacto publicados.',
   ],
   [
-    '¿La atención se reserva y se paga desde Enfe-red?',
-    'Por ahora, el servicio, el horario y la forma de pago se acuerdan directamente con el profesional. Enfe-red te permite encontrarlo y acceder a sus datos de contacto.',
+    '¿La atención se reserva y se paga desde Enfe-Red?',
+    'Por ahora, el servicio, el horario y la forma de pago se acuerdan directamente con el profesional. Enfe-Red te permite encontrarlo y acceder a sus datos de contacto.',
   ],
   [
     '¿Tengo que compartir mi ubicación?',
@@ -239,7 +239,7 @@ export default function Landing() {
           <nav
             className={`lp-nav ${menuOpen ? 'is-open' : ''}`}
             id="landing-menu"
-            aria-label="Navegación de Enfe-red"
+            aria-label="Navegación de Enfe-Red"
           >
             {navigation.map(([href, label]) => (
               <a href={href} key={href} onClick={() => setMenuOpen(false)}>
@@ -627,7 +627,7 @@ export default function Landing() {
                 <br /> con un encuentro.
               </h2>
               <p>
-                Busques atención o quieras ofrecerla, tu lugar está en Enfe-red.
+                Busques atención o quieras ofrecerla, tu lugar está en Enfe-Red.
               </p>
               <div className="lp-final-actions">
                 <Link
@@ -659,8 +659,8 @@ export default function Landing() {
                 <br /> para cuidar de personas.
               </p>
             </div>
-            <nav aria-label="Conocé Enfe-red">
-              <strong>Conocé Enfe-red</strong>
+            <nav aria-label="Conocé Enfe-Red">
+              <strong>Conocé Enfe-Red</strong>
               <a href="#como-funciona">Cómo funciona</a>
               <a href="#que-ofrecemos">Qué ofrecemos</a>
               <a href="#profesionales">Para profesionales</a>
@@ -673,7 +673,7 @@ export default function Landing() {
             </nav>
           </div>
           <div className="lp-footer-bottom">
-            <span>© {new Date().getFullYear()} Enfe-red.</span>
+            <span>© {new Date().getFullYear()} Enfe-Red.</span>
             <span>Enfermería a domicilio, cerca de vos.</span>
             <Link to="/terminos">Términos y condiciones</Link>
             <Link to="/privacidad">Política de privacidad</Link>

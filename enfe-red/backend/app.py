@@ -17,6 +17,7 @@ from routes.admin_routes import admin_bp
 from schema_sprint4 import inicializar_bd_sprint4, inicializar_catalogo_servicios
 from schema_sprint6 import inicializar_bd_sprint6
 from schema_legal import inicializar_bd_legal
+from seguridad import configurar_sesiones
 from seed_sprint3 import inicializar_bd_sprint3
 
 load_dotenv()
@@ -51,6 +52,8 @@ app.config['MAX_CONTENT_LENGTH'] = 1024 * 1024
 db.init_app(app)
 jwt = JWTManager(app)
 bcrypt.init_app(app)
+
+configurar_sesiones(jwt)
 
 @jwt.invalid_token_loader
 def token_invalido(_motivo):

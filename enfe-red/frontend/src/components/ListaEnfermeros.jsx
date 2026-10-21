@@ -15,6 +15,9 @@ const FILTERS = [
   'hora_desde',
   'hora_hasta',
 ];
+// HU3 "enfermeros cercanos": la ubicación del paciente ordena los resultados por distancia.
+const UBICACION = ['lat', 'lng', 'radio_km'];
+const RADIOS_KM = ['5', '10', '25', '50'];
 const optionalNumber = (value) =>
   value == null || value === '' || !Number.isFinite(Number(value))
     ? null
@@ -32,9 +35,12 @@ export default function ListaEnfermeros() {
     [...params].filter(([key]) =>
       nurse
         ? key === 'q' || key === 'page'
-        : FILTERS.includes(key) || key === 'q' || key === 'page',
+        : FILTERS.includes(key) || UBICACION.includes(key) || key === 'q' || key === 'page',
     ),
   ).toString();
+  const cercania = !nurse && params.get('lat') && params.get('lng');
+  const [ubicando, setUbicando] = useState(false);
+  const [errorUbicacion, setErrorUbicacion] = useState('');
   const [data, setData] = useState({
     enfermeros: [],
     total_resultados: 0,
@@ -150,11 +156,52 @@ export default function ListaEnfermeros() {
       { replace: key !== 'page' },
     );
   }
+  function ordenarPorCercania() {
+    setErrorUbicacion('');
+    if (!navigator.geolocation) {
+      setErrorUbicacion('Tu navegador no permite obtener la ubicación. Podés buscar por zona.');
+      return;
+    }
+    setUbicando(true);
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        setUbicando(false);
+        setParams(
+          (current) => {
+            const next = new URLSearchParams(current);
+            // Tres decimales (~100 m): alcanza para ordenar sin enviar la ubicación exacta.
+            next.set('lat', coords.latitude.toFixed(3));
+            next.set('lng', coords.longitude.toFixed(3));
+            next.delete('page');
+            return next;
+          },
+          { replace: true },
+        );
+      },
+      () => {
+        setUbicando(false);
+        setErrorUbicacion('No pudimos obtener tu ubicación. Revisá el permiso del navegador o buscá por zona.');
+      },
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 },
+    );
+  }
+  function quitarCercania() {
+    setParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        UBICACION.forEach((key) => next.delete(key));
+        next.delete('page');
+        return next;
+      },
+      { replace: true },
+    );
+  }
   function clear(keepQuery = false) {
     setParams(
       (current) => {
         const next = new URLSearchParams(current);
         FILTERS.forEach((key) => next.delete(key));
+        UBICACION.forEach((key) => next.delete(key));
         next.delete('disponible');
         next.delete('page');
         if (!keepQuery) next.delete('q');
@@ -182,7 +229,7 @@ export default function ListaEnfermeros() {
     setFiltersOpen(false);
   }
   const active = nurse ? [] : FILTERS.filter((key) => filterValues[key]);
-  const hasFilters = Boolean(query || active.length);
+  const hasFilters = Boolean(query || active.length || cercania);
   const labels = {
     especialidad: filterValues.especialidad,
     precio_min: `Desde $${Number(filterValues.precio_min).toLocaleString('es-AR')}`,
@@ -238,6 +285,41 @@ export default function ListaEnfermeros() {
           )}
         </button>}
       </div>
+      {!nurse && (
+        <div className="nearby-search" role="group" aria-label="Buscar cerca de tu ubicación">
+          {cercania ? (
+            <>
+              <p className="nearby-status">
+                <Icon name="pin" size={18} />
+                Mostrando primero a los profesionales más cercanos a tu ubicación.
+              </p>
+              <label className="nearby-radius">
+                Distancia máxima
+                <select
+                  value={params.get('radio_km') || ''}
+                  onChange={(e) => update('radio_km', e.target.value)}
+                >
+                  <option value="">Sin límite</option>
+                  {RADIOS_KM.map((km) => (
+                    <option key={km} value={km}>Hasta {km} km</option>
+                  ))}
+                </select>
+              </label>
+            </>
+          ) : (
+            <button
+              type="button"
+              className="button button-secondary"
+              onClick={ordenarPorCercania}
+              disabled={ubicando}
+            >
+              <Icon name="pin" size={18} />
+              {ubicando ? 'Buscando tu ubicación…' : 'Ordenar por cercanía'}
+            </button>
+          )}
+          {errorUbicacion && <p className="notice notice-error" role="alert">{errorUbicacion}</p>}
+        </div>
+      )}
       <div className={`directory-layout ${nurse ? 'patient-directory-layout' : ''}`}>
         {!nurse && (
         <aside
@@ -320,6 +402,17 @@ export default function ListaEnfermeros() {
                   aria-label={`Quitar búsqueda ${query}`}
                 >
                   “{query}”<Icon name="close" size={13} />
+                </button>
+              )}
+              {cercania && (
+                <button
+                  className="filter-chip"
+                  onClick={quitarCercania}
+                  aria-label="Quitar orden por cercanía"
+                >
+                  Cerca de tu ubicación
+                  {params.get('radio_km') ? ` · hasta ${params.get('radio_km')} km` : ''}
+                  <Icon name="close" size={13} />
                 </button>
               )}
               {active.map((key) => (

@@ -589,59 +589,35 @@ test('cerrar sesión elimina también los datos del usuario', async () => {
   assert.equal(localStorage.length, 0);
 });
 
-test('el enfermero puede calificar un paciente desde el historial', async () => {
+test('el enfermero ve la reseña del paciente pero no califica al paciente (Reseña 0..1)', async () => {
   session('enfermero');
   const original = globalThis.fetch;
-  let payload;
+  const llamadas = [];
   globalThis.fetch = async (url, options = {}) => {
+    llamadas.push(String(url));
     if (String(url).endsWith('/usuarios/1/historial')) {
-      return response([{
-        idSolicitud: 45,
-        fecha: '2020-02-03',
-        hora: '10:30',
-        estado: 'Realizada',
-        servicio: { tipoServicio: 'Curaciones' },
-        paciente: { nombre: 'Paciente', apellido: 'anterior' },
-        enfermero: { nombre: 'Enfermera', apellido: 'actual' },
-        calificaciones: [],
-      }]);
-    }
-    if (String(url).endsWith('/solicitudes/45/calificaciones')) {
-      payload = JSON.parse(options.body);
-      return response({
-        mensaje: 'Calificación guardada',
-        calificacion: {
-          idCalificacion: 3,
-          idSolicitud: 45,
-          idUsuarioAutor: 1,
-          idUsuarioCalificado: 2,
-          ...payload,
+      return response([
+        {
+          idSolicitud: 45, fecha: '2020-02-03', hora: '10:30', estado: 'Realizada',
+          servicio: { tipoServicio: 'Curaciones' }, paciente: { nombre: 'Paciente', apellido: 'anterior' },
+          calificaciones: [{ idCalificacion: 3, idSolicitud: 45, idUsuarioAutor: 7, estrellas: 4, comentario: 'Muy amable.' }],
         },
-      }, 201);
+        {
+          idSolicitud: 46, fecha: '2020-02-01', hora: '09:00', estado: 'Realizada',
+          servicio: { tipoServicio: 'Inyecciones' }, paciente: { nombre: 'Otro' }, calificaciones: [],
+        },
+      ]);
     }
     return original(url, options);
   };
   try {
     await mount('/perfil-enfermero');
     await click(button('Ver historial de pacientes'));
-    await click(button('Calificar paciente'));
-    const modal = document.querySelector('dialog.rating-dialog');
-    assert.equal(modal.open, true);
-    assert.match(modal.textContent, /Paciente anterior · Curaciones/);
-    await click(modal.querySelector('input[type="radio"][value="4"]'));
-    await typeTextArea(modal.querySelector('textarea'), 'Muy buena comunicación.');
-    await act(async () => modal.querySelector('.service-rating-form').dispatchEvent(
-      new window.Event('submit', { bubbles: true, cancelable: true }),
-    ));
-    assert.deepEqual(payload, {
-      estrellas: 4,
-      comentario: 'Muy buena comunicación.',
-    });
-    assert.equal(document.querySelector('dialog.rating-dialog'), null);
-    assert.match(document.body.textContent, /Tu calificación:/);
-    assert.ok(document.querySelector('[aria-label="4,0 de 5 estrellas"]'));
-    assert.match(document.body.textContent, /Muy buena comunicación/);
-    assert.match(document.body.textContent, /Tu calificación se guardó correctamente/);
+    assert.match(document.body.textContent, /Reseña del paciente:/);
+    assert.match(document.body.textContent, /Muy amable\./);
+    assert.match(document.body.textContent, /El paciente todavía no dejó una reseña/);
+    assert.equal([...document.querySelectorAll('button')].some((b) => /Calificar/.test(b.textContent)), false);
+    assert.equal(llamadas.some((u) => u.includes('/calificaciones')), false);
   } finally {
     globalThis.fetch = original;
   }
@@ -1487,20 +1463,25 @@ test('el enfermero marca como realizado un turno pasado y no uno futuro', async 
   } finally { globalThis.fetch = original; }
 });
 
-test('el historial no ofrece calificar un servicio aceptado que no se marcó como realizado', async () => {
+test('el historial muestra solicitudes cerradas y solo ofrece calificar las realizadas', async () => {
   session('paciente');
   const original = globalThis.fetch;
   globalThis.fetch = async (url, options = {}) => (String(url).endsWith('/usuarios/1/historial')
-    ? response([{
-      idSolicitud: 46, fecha: '2020-02-03', hora: '10:30', estado: 'Aceptada',
-      servicio: { tipoServicio: 'Curaciones' }, enfermero: { nombre: 'Laura' }, calificaciones: [],
-    }])
+    ? response([
+      { idSolicitud: 46, fecha: '2020-02-03', hora: '10:30', estado: 'Rechazada',
+        servicio: { tipoServicio: 'Curaciones' }, enfermero: { nombre: 'Laura' }, calificaciones: [] },
+      { idSolicitud: 47, fecha: '2020-02-02', hora: '10:30', estado: 'Cancelada',
+        servicio: { tipoServicio: 'Curaciones' }, enfermero: { nombre: 'Laura' }, calificaciones: [] },
+      { idSolicitud: 48, fecha: '2020-02-01', hora: '10:30', estado: 'Realizada',
+        servicio: { tipoServicio: 'Curaciones' }, enfermero: { nombre: 'Laura' }, calificaciones: [] },
+    ])
     : original(url, options));
   try {
     await mount('/perfil-paciente');
     await click(button('Ver historial'));
-    assert.equal([...document.querySelectorAll('button')].some(b => /Calificar/.test(b.textContent)), false);
-    assert.match(document.body.textContent, /cuando el enfermero marque el servicio como realizado/);
+    assert.match(document.body.textContent, /realizados, rechazados o cancelados/);
+    const botones = [...document.querySelectorAll('button')].filter((b) => /Calificar enfermero/.test(b.textContent));
+    assert.equal(botones.length, 1);
   } finally { globalThis.fetch = original; }
 });
 
@@ -1555,4 +1536,46 @@ test('Mis solicitudes muestra estados, enlaza al comprobante y permite cancelar 
     assert.match(document.body.textContent, /En curso \(1\)/);
     assert.match(document.body.textContent, /Anteriores \(3\)/);
   } finally { globalThis.fetch = original; }
+});
+
+// HU3: "El sistema muestra enfermeros cercanos": la cartilla ordena por la ubicación del paciente.
+test('ordenar por cercanía envía la ubicación aproximada y permite limitar la distancia', async () => {
+  session('paciente');
+  const original = globalThis.fetch;
+  const busquedas = [];
+  globalThis.fetch = async (url, options = {}) => {
+    if (String(url).includes('/enfermeros/buscar')) {
+      busquedas.push(new URL(String(url)).searchParams);
+      return response({ enfermeros: [{ id: 2, usuario_id: 2, nombre: 'Laura', distancia_km: 3.4 }], total_resultados: 1, total_paginas: 1 });
+    }
+    return original(url, options);
+  };
+  Object.defineProperty(globalThis.navigator, 'geolocation', {
+    configurable: true,
+    value: { getCurrentPosition: (ok) => ok({ coords: { latitude: -32.889512, longitude: -68.845812 } }) },
+  });
+  try {
+    await mount('/cartilla');
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 300)));
+    await click(button('Ordenar por cercanía'));
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 300)));
+    const ultima = busquedas.at(-1);
+    assert.equal(ultima.get('lat'), '-32.890');
+    assert.equal(ultima.get('lng'), '-68.846');
+    assert.match(document.body.textContent, /más cercanos a tu ubicación/);
+    assert.match(document.body.textContent, /A 3\.4\s*km/);
+    const radio = document.querySelector('.nearby-radius select');
+    await act(async () => {
+      radio.value = '10';
+      radio.dispatchEvent(new window.Event('change', { bubbles: true }));
+    });
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 300)));
+    assert.equal(busquedas.at(-1).get('radio_km'), '10');
+    await click(button('Quitar orden por cercanía'));
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 300)));
+    assert.equal(busquedas.at(-1).get('lat'), null);
+  } finally {
+    globalThis.fetch = original;
+    delete globalThis.navigator.geolocation;
+  }
 });

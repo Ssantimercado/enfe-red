@@ -102,7 +102,8 @@ class SolicitudesTest(unittest.TestCase):
     def test_catalogo_real_con_precio_y_autenticacion(self):
         response = self.client.get('/api/servicios', headers=self.headers())
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json, [{'idServicio': 301, 'tipoServicio': 'Curaciones', 'precioEstimado': '8500.50'}])
+        self.assertEqual(response.json, [{'idServicio': 301, 'tipoServicio': 'Curaciones', 'descripcion': None,
+                                          'precioEstimado': '8500.50'}])
         self.assertEqual(self.client.get('/api/servicios').status_code, 401)
         self.assertEqual(self.client.get('/api/servicios', headers=self.headers(999)).status_code, 401)
         creado = self.crear(idServicio=response.json[0]['idServicio'])
