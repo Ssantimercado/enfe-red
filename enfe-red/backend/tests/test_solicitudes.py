@@ -16,6 +16,7 @@ from models.usuario_models import Enfermero, Paciente, Usuario
 from routes.solicitud_routes import solicitud_bp
 from routes.usuario_routes import usuario_bp
 from schema_sprint4 import inicializar_bd_sprint4, inicializar_catalogo_servicios
+from schema_sprint6 import inicializar_bd_sprint6
 from seed_sprint3 import inicializar_bd_sprint3
 
 
@@ -644,7 +645,9 @@ class MigracionSprint4Test(unittest.TestCase):
             connection.execute(text(
                 "INSERT INTO pacientes (id, usuario_id, nombre) VALUES (1, 2, 'Paciente previo')"
             ))
+        # Mismo orden que el arranque de app.py.
         inicializar_bd_sprint4()
+        inicializar_bd_sprint6()
         inicializar_bd_sprint3()
         enfermero = db.session.get(Enfermero, 1)
         self.assertFalse(enfermero.verificado)
