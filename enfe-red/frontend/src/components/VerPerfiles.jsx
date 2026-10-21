@@ -5,6 +5,7 @@ import Avatar from './ui/Avatar';
 import Icon from './ui/Icon';
 import ProfileSkeleton from './ui/ProfileSkeleton';
 import ProfessionalContact from './ProfessionalContact';
+import ResenasProfesional from './ResenasProfesional';
 
 export default function VerPerfiles() {
   const { id } = useParams();
@@ -32,6 +33,8 @@ export default function VerPerfiles() {
         DAYS.indexOf(a.dia_semana) - DAYS.indexOf(b.dia_semana) ||
         a.hora_inicio.localeCompare(b.hora_inicio),
     );
+  // Las reseñas usan el ID de perfil; la ruta /perfil/:id usa Usuario.id.
+  const idEnfermero = profile?.enfermero_id ?? profile?.idEnfermero;
   const returnPath = location.state?.from || location.state?.volverA;
   const back = returnPath?.startsWith('/cartilla') ? returnPath : '/cartilla';
 
@@ -171,6 +174,9 @@ export default function VerPerfiles() {
                   contactar.
                 </p>
               </section>
+              {profile.rol === 'enfermero' && idEnfermero != null && (
+                <ResenasProfesional idEnfermero={idEnfermero} />
+              )}
             </div>
           </div>
         </>

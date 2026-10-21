@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { requestApi as api } from '../api';
 import Icon from './ui/Icon';
+import ModalCalificacion from './ModalCalificacion';
+import { EstrellasLectura } from './SelectorEstrellas';
 
 function fechaLegible(fecha) {
   const [year, month, day] = fecha.split('-').map(Number);
@@ -21,8 +23,6 @@ export default function HistorialServicios({ userId, nurse }) {
   const [error, setError] = useState('');
   const [intento, setIntento] = useState(0);
   const [calificando, setCalificando] = useState(null);
-  const [estrellas, setEstrellas] = useState(0);
-  const [comentario, setComentario] = useState('');
   const [guardando, setGuardando] = useState(false);
   const [errorCalificacion, setErrorCalificacion] = useState('');
   const [mensaje, setMensaje] = useState('');
@@ -47,7 +47,6 @@ export default function HistorialServicios({ userId, nurse }) {
   }, [abierto, intento, userId]);
 
   const titulo = nurse ? 'Historial de pacientes' : 'Historial de enfermeros';
-  const palabras = comentario.trim() ? comentario.trim().split(/\s+/).length : 0;
   // Las opciones salen de la respuesta: el backend decide qué estados integran el historial.
   const estados = [...new Set(solicitudes.map((item) => item.estado).filter(Boolean))]
     .sort((a, b) => a.localeCompare(b, 'es'));
@@ -65,31 +64,47 @@ export default function HistorialServicios({ userId, nurse }) {
     setFiltros((actuales) => ({ ...actuales, [campo]: valor }));
   }
 
-  function iniciarCalificacion(idSolicitud) {
-    setCalificando(idSolicitud);
-    setEstrellas(0);
-    setComentario('');
+  function iniciarCalificacion(solicitud) {
+    setCalificando(solicitud);
     setErrorCalificacion('');
     setMensaje('');
   }
 
-  async function enviarCalificacion(event, solicitud) {
-    event.preventDefault();
-    if (guardando || !estrellas || palabras > 250) return;
+  async function enviarCalificacion({ estrellas, comentario }) {
+    const solicitud = calificando;
+    if (guardando || !solicitud) return;
     setGuardando(true);
     setErrorCalificacion('');
     setMensaje('');
     try {
-      const resultado = await api(`/solicitudes/${solicitud.idSolicitud}/calificaciones`, {
-        method: 'POST',
-        body: { estrellas, comentario },
-      });
-      if (!resultado.calificacion?.idCalificacion) {
+      let calificacion;
+      if (nurse) {
+        const resultado = await api(`/solicitudes/${solicitud.idSolicitud}/calificaciones`, {
+          method: 'POST',
+          body: { estrellas, comentario },
+        });
+        calificacion = resultado.calificacion;
+      } else {
+        // SCRUM-66.2: el paciente publica una reseña del enfermero (endpoint de Santiago).
+        const resultado = await api('/resenas', {
+          method: 'POST',
+          body: { idSolicitud: solicitud.idSolicitud, puntuacion: estrellas, comentario },
+        });
+        calificacion = resultado.resena && {
+          idCalificacion: resultado.resena.idResena,
+          idSolicitud: resultado.resena.idSolicitud,
+          idUsuarioAutor: userId,
+          estrellas: resultado.resena.puntuacion,
+          comentario: resultado.resena.comentario,
+          fecha: resultado.resena.fecha,
+        };
+      }
+      if (!calificacion?.idCalificacion) {
         throw new Error('El servidor no devolvió la calificación guardada.');
       }
       setSolicitudes((actuales) => actuales.map((item) => (
         item.idSolicitud === solicitud.idSolicitud
-          ? { ...item, calificaciones: [...(item.calificaciones || []), resultado.calificacion] }
+          ? { ...item, calificaciones: [...(item.calificaciones || []), calificacion] }
           : item
       )));
       setCalificando(null);
@@ -225,14 +240,14 @@ export default function HistorialServicios({ userId, nurse }) {
                     <div className="service-rating">
                       {propia ? (
                         <p>
-                          Tu calificación: <strong>{'★'.repeat(propia.estrellas)}{'☆'.repeat(5 - propia.estrellas)}</strong>
+                          Tu calificación: <EstrellasLectura valor={propia.estrellas} />
                           <span> · {propia.comentario}</span>
                         </p>
                       ) : solicitud.estado === 'Realizada' ? (
                         <button
                           className="text-link"
                           type="button"
-                          onClick={() => iniciarCalificacion(solicitud.idSolicitud)}
+                          onClick={() => iniciarCalificacion(solicitud)}
                         >
                           Calificar {nurse ? 'paciente' : 'enfermero'}
                         </button>
@@ -246,65 +261,9 @@ export default function HistorialServicios({ userId, nurse }) {
                       )}
                       {recibida && (
                         <p>
-                          Calificación recibida: <strong>{'★'.repeat(recibida.estrellas)}{'☆'.repeat(5 - recibida.estrellas)}</strong>
+                          Calificación recibida: <EstrellasLectura valor={recibida.estrellas} />
                           <span> · {recibida.comentario}</span>
                         </p>
-                      )}
-                      {calificando === solicitud.idSolicitud && (
-                        <form
-                          className="service-rating-form"
-                          onSubmit={(event) => enviarCalificacion(event, solicitud)}
-                        >
-                          <fieldset className="service-rating-stars">
-                            <legend>Calificación (1 a 5 estrellas)</legend>
-                            {Array.from({ length: 5 }, (_, index) => index + 1).map((valor) => (
-                              <label key={valor}>
-                                <input
-                                  type="radio"
-                                  name={`calificacion-${solicitud.idSolicitud}`}
-                                  value={valor}
-                                  checked={estrellas === valor}
-                                  onChange={() => setEstrellas(valor)}
-                                  required
-                                />
-                                <span aria-hidden="true">{valor <= estrellas ? '★' : '☆'}</span>
-                                <span className="service-rating-label">{valor}</span>
-                              </label>
-                            ))}
-                          </fieldset>
-                          <label className="field">
-                            Comentario (máximo 250 palabras)
-                            <textarea
-                              value={comentario}
-                              onChange={(event) => setComentario(event.target.value)}
-                              aria-describedby={`comentario-palabras-${solicitud.idSolicitud}`}
-                              required
-                            />
-                          </label>
-                          <p id={`comentario-palabras-${solicitud.idSolicitud}`} className="filter-hint">
-                            {palabras}/250 palabras
-                          </p>
-                          {errorCalificacion && (
-                            <p className="notice notice-error" role="alert">{errorCalificacion}</p>
-                          )}
-                          <div className="service-rating-actions">
-                            <button
-                              className="button button-primary"
-                              type="submit"
-                              disabled={guardando || !estrellas || !palabras || palabras > 250}
-                            >
-                              {guardando ? 'Guardando…' : 'Enviar calificación'}
-                            </button>
-                            <button
-                              className="button button-secondary"
-                              type="button"
-                              disabled={guardando}
-                              onClick={() => setCalificando(null)}
-                            >
-                              Cancelar
-                            </button>
-                          </div>
-                        </form>
                       )}
                     </div>
                   </article>
@@ -325,6 +284,25 @@ export default function HistorialServicios({ userId, nurse }) {
         )}
       </div>
       {mensaje && <p className="notice notice-success" role="status">{mensaje}</p>}
+      {calificando && (
+        <ModalCalificacion
+          key={calificando.idSolicitud}
+          id={`calificacion-${calificando.idSolicitud}`}
+          titulo={nurse ? 'Calificar paciente' : 'Calificar enfermero'}
+          descripcion={[
+            [
+              (nurse ? calificando.paciente : calificando.enfermero)?.nombre,
+              (nurse ? calificando.paciente : calificando.enfermero)?.apellido,
+            ].filter(Boolean).join(' '),
+            calificando.servicio?.tipoServicio,
+            fechaLegible(calificando.fecha),
+          ].filter(Boolean).join(' · ')}
+          guardando={guardando}
+          error={errorCalificacion}
+          onEnviar={enviarCalificacion}
+          onCerrar={() => setCalificando(null)}
+        />
+      )}
     </section>
   );
 }

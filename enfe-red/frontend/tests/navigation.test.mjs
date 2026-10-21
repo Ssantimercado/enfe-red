@@ -366,6 +366,31 @@ test('la cartilla filtra profesionales por un rango horario', async () => {
   assert.equal(new URL(search.url).searchParams.get('hora_hasta'), '16:00');
 });
 
+test('las tarjetas de la cartilla muestran el promedio y la cantidad de reseñas', async () => {
+  session();
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url, options) => (String(url).includes('/buscar')
+    ? response({
+      enfermeros: [
+        { ...profile, id: 1, usuario_id: 1, especialidad: 'Pediatría', disponible: true, puntuacion: 4.5, cantidadResenas: 2 },
+        { ...profile, id: 2, usuario_id: 2, nombre: 'Nora', especialidad: 'General', disponible: true, puntuacion: null, cantidadResenas: 0 },
+      ],
+      total_resultados: 2,
+      total_paginas: 1,
+    })
+    : original(url, options));
+  try {
+    await mount('/cartilla');
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 350)));
+    const cards = document.querySelectorAll('.professional-card');
+    assert.equal(cards.length, 2);
+    assert.match(cards[0].textContent, /4,5 \(2 reseñas\)/);
+    assert.doesNotMatch(cards[1].textContent, /reseña/);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
 for (const [rol, path] of [
   ['paciente', '/perfil-paciente'],
   ['enfermero', '/perfil-enfermero'],
@@ -558,21 +583,184 @@ test('el enfermero puede calificar un paciente desde el historial', async () => 
     await mount('/perfil-enfermero');
     await click(button('Ver historial de pacientes'));
     await click(button('Calificar paciente'));
-    await click(document.querySelector('input[type="radio"][value="4"]'));
-    await typeTextArea(document.querySelector('.service-rating-form textarea'), 'Muy buena comunicación.');
-    await act(async () => document.querySelector('.service-rating-form').dispatchEvent(
+    const modal = document.querySelector('dialog.rating-dialog');
+    assert.equal(modal.open, true);
+    assert.match(modal.textContent, /Paciente anterior · Curaciones/);
+    await click(modal.querySelector('input[type="radio"][value="4"]'));
+    await typeTextArea(modal.querySelector('textarea'), 'Muy buena comunicación.');
+    await act(async () => modal.querySelector('.service-rating-form').dispatchEvent(
       new window.Event('submit', { bubbles: true, cancelable: true }),
     ));
     assert.deepEqual(payload, {
       estrellas: 4,
       comentario: 'Muy buena comunicación.',
     });
+    assert.equal(document.querySelector('dialog.rating-dialog'), null);
     assert.match(document.body.textContent, /Tu calificación:/);
+    assert.ok(document.querySelector('[aria-label="4,0 de 5 estrellas"]'));
     assert.match(document.body.textContent, /Muy buena comunicación/);
     assert.match(document.body.textContent, /Tu calificación se guardó correctamente/);
   } finally {
     globalThis.fetch = original;
   }
+});
+
+test('el paciente publica la reseña del enfermero en POST /resenas', async () => {
+  session('paciente');
+  const original = globalThis.fetch;
+  let resenaUrl;
+  let payload;
+  globalThis.fetch = async (url, options = {}) => {
+    if (String(url).endsWith('/usuarios/1/historial')) {
+      return response([{
+        idSolicitud: 48, fecha: '2020-02-03', hora: '10:30', estado: 'Realizada',
+        servicio: { tipoServicio: 'Curaciones' }, enfermero: { nombre: 'Laura', apellido: 'Gómez' }, calificaciones: [],
+      }]);
+    }
+    if (String(url).endsWith('/resenas') && options.method === 'POST') {
+      resenaUrl = String(url);
+      payload = JSON.parse(options.body);
+      return response({
+        mensaje: 'Reseña publicada',
+        resena: { idResena: 12, idSolicitud: 48, puntuacion: 5, comentario: payload.comentario, fecha: '2026-10-21T12:00:00Z', paciente: 'Ana P.' },
+        calificacionPromedio: 5,
+        cantidadResenas: 1,
+      }, 201);
+    }
+    return original(url, options);
+  };
+  try {
+    await mount('/perfil-paciente');
+    await click(button('Ver historial'));
+    await click(button('Calificar enfermero'));
+    const modal = document.querySelector('dialog.rating-dialog');
+    assert.match(modal.textContent, /Laura Gómez · Curaciones/);
+    await click(modal.querySelector('input[type="radio"][value="5"]'));
+    await typeTextArea(modal.querySelector('textarea'), 'Muy puntual.');
+    await act(async () => modal.querySelector('form').dispatchEvent(
+      new window.Event('submit', { bubbles: true, cancelable: true }),
+    ));
+    assert.equal(resenaUrl, 'http://localhost:5000/api/resenas');
+    assert.deepEqual(payload, { idSolicitud: 48, puntuacion: 5, comentario: 'Muy puntual.' });
+    assert.equal(requests.some((entry) => entry.url.includes('/calificaciones')), false);
+    assert.equal(document.querySelector('dialog.rating-dialog'), null);
+    assert.match(document.body.textContent, /Tu calificación:/);
+    assert.match(document.body.textContent, /Muy puntual\./);
+    assert.equal([...document.querySelectorAll('button')].some((b) => /Calificar/.test(b.textContent)), false);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test('el modal de calificación se cierra sin enviar y vuelve a abrirse vacío', async () => {
+  session('paciente');
+  const original = globalThis.fetch;
+  let enviada = false;
+  globalThis.fetch = async (url, options = {}) => {
+    if (String(url).endsWith('/usuarios/1/historial')) {
+      return response([{
+        idSolicitud: 47, fecha: '2020-02-03', hora: '10:30', estado: 'Realizada',
+        servicio: { tipoServicio: 'Curaciones' }, enfermero: { nombre: 'Laura' }, calificaciones: [],
+      }]);
+    }
+    if (String(url).includes('/calificaciones')) enviada = true;
+    return original(url, options);
+  };
+  try {
+    await mount('/perfil-paciente');
+    await click(button('Ver historial'));
+    await click(button('Calificar enfermero'));
+    let modal = document.querySelector('dialog.rating-dialog');
+    assert.equal(modal.open, true);
+    const enviar = [...modal.querySelectorAll('button')].find((b) => b.type === 'submit');
+    assert.equal(enviar.disabled, true);
+    await click(modal.querySelector('input[type="radio"][value="2"]'));
+    await typeTextArea(modal.querySelector('textarea'), 'Borrador');
+    assert.equal(enviar.disabled, false);
+    await act(async () => modal.dispatchEvent(new window.Event('cancel', { cancelable: true })));
+    assert.equal(document.querySelector('dialog.rating-dialog'), null);
+    await click(button('Calificar enfermero'));
+    modal = document.querySelector('dialog.rating-dialog');
+    assert.equal(modal.querySelector('textarea').value, '');
+    assert.equal(modal.querySelector('input[type="radio"]:checked'), null);
+    await click(button('Cancelar'));
+    assert.equal(document.querySelector('dialog.rating-dialog'), null);
+    assert.equal(enviada, false);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test('el perfil público muestra las reseñas y el promedio del profesional', async () => {
+  session();
+  const original = globalThis.fetch;
+  let resenasUrl;
+  globalThis.fetch = async (url, options) => {
+    if (String(url).endsWith('/usuarios/1')) {
+      return response({ ...profile, enfermero_id: 7, verificado: true, disponible: true });
+    }
+    if (String(url).endsWith('/enfermeros/7/resenas')) {
+      resenasUrl = String(url);
+      return response({
+        idEnfermero: 7,
+        calificacionPromedio: 4.5,
+        cantidadResenas: 2,
+        resenas: [
+          { idResena: 9, idSolicitud: 3, puntuacion: 5, comentario: 'Muy puntual.', fecha: '2026-10-20T12:00:00Z', paciente: 'Juan P.' },
+          { idResena: 8, idSolicitud: 2, puntuacion: 4, comentario: 'Muy amable.', fecha: null, paciente: 'Marta G.' },
+        ],
+      });
+    }
+    return original(url, options);
+  };
+  try {
+    await mount('/perfil/1');
+    assert.equal(resenasUrl, 'http://localhost:5000/api/enfermeros/7/resenas');
+    const panel = document.querySelector('.profile-reviews');
+    assert.match(panel.textContent, /Reseñas de pacientes/);
+    assert.match(panel.textContent, /4,5/);
+    assert.match(panel.textContent, /2 reseñas/);
+    assert.match(panel.textContent, /Juan P\..*Muy puntual\./);
+    assert.match(panel.textContent, /Marta G\..*Muy amable\./);
+    assert.equal(panel.querySelectorAll('li').length, 2);
+    assert.ok(panel.querySelector('[aria-label="5,0 de 5 estrellas"]'));
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test('las reseñas del perfil muestran el vacío y permiten reintentar tras un error', async () => {
+  session();
+  const original = globalThis.fetch;
+  let intentos = 0;
+  globalThis.fetch = async (url, options) => {
+    if (String(url).endsWith('/usuarios/1')) return response({ ...profile, enfermero_id: 7 });
+    if (String(url).endsWith('/enfermeros/7/resenas')) {
+      intentos += 1;
+      return intentos === 1
+        ? response({ error: 'Enfermero no encontrado' }, 404)
+        : response({ idEnfermero: 7, calificacionPromedio: null, cantidadResenas: 0, resenas: [] });
+    }
+    return original(url, options);
+  };
+  try {
+    await mount('/perfil/1');
+    const panel = () => document.querySelector('.profile-reviews');
+    assert.match(panel().textContent, /Enfermero no encontrado/);
+    await click(button('Reintentar'));
+    assert.equal(intentos, 2);
+    assert.match(panel().textContent, /Todavía no tiene reseñas/);
+    assert.equal(panel().querySelector('[role="alert"]'), null);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test('un perfil sin ID profesional no consulta reseñas', async () => {
+  session();
+  await mount('/perfil/1');
+  assert.equal(document.querySelector('.profile-reviews'), null);
+  assert.equal(requests.some((entry) => entry.url.includes('/resenas')), false);
 });
 
 test('un perfil con solo nombre puede guardar el teléfono sin exigir apellido', async () => {

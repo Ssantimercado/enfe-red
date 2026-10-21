@@ -23,7 +23,7 @@ código activo; no sustituye una revisión visual en navegador.
 | `/recuperar-password` | `RecuperarPassword.jsx` dentro de `AuthLayout` | Correo, código y nueva contraseña, confirmación final; permite reenviar código y cambiar correo. |
 | `/home` | `Home.jsx` dentro de `AppShell` | Paciente: buscar cuidados. Enfermero: gestionar perfil y horarios. |
 | `/cartilla` | `ListaEnfermeros.jsx`, `DirectoryFilters.jsx` y `MapaEnfermeros.jsx` | Paciente: búsqueda de profesionales, filtros, lista/mapa y paginación. Enfermero: lista de pacientes que le enviaron solicitudes en cualquier estado; en el mapa solo aparecen puntos compartidos de pacientes con una solicitud Pendiente o Aceptada asignada. Al seleccionar un punto y usar la ubicación propia, ambos roles ven ruta por calles, distancia y tiempo estimado. |
-| `/perfil/:id` | `VerPerfiles.jsx` y `ProfessionalContact.jsx` | Perfil profesional; el botón para solicitar servicio queda a la derecha de la tarjeta de encabezado en escritorio y se apila debajo en pantallas angostas. Conserva el retorno a la cartilla con búsqueda, filtros y página. `id` identifica a Usuario. |
+| `/perfil/:id` | `VerPerfiles.jsx`, `ProfessionalContact.jsx` y `ResenasProfesional.jsx` | Perfil profesional; el botón para solicitar servicio queda a la derecha de la tarjeta de encabezado en escritorio y se apila debajo en pantallas angostas. Debajo de los horarios muestra el promedio y las reseñas de pacientes (`GET /api/enfermeros/<idEnfermero>/resenas`, con el ID de perfil). Conserva el retorno a la cartilla con búsqueda, filtros y página. `id` identifica a Usuario. |
 | `/perfil/:id/solicitar` | `SolicitarServicio.jsx` | El paciente elige un servicio del catálogo real, fecha, hora y dirección; confirma el envío en verde y puede abrir el comprobante. |
 | `/solicitudes/:idSolicitud` | `ConfirmacionSolicitud.jsx` | Comprobante privado del paciente o del enfermero asignado. |
 | `/perfil-paciente` | `PerfilPaciente.jsx` → `ProfileEditor` | Perfil propio, consulta y edición; acceso de paciente. Incluye el historial de servicios aceptados o realizados cuya fecha y hora ya pasó, con los datos del enfermero y opción de calificarlo. El historial filtra por rango de fechas y por estado; las opciones de estado salen de la respuesta del backend. |
@@ -54,6 +54,15 @@ Después de la fecha y hora de un servicio aceptado o realizado, cada participan
 puede dejar una calificación de 1 a 5 estrellas y un comentario obligatorio de
 hasta 250 palabras. Cada participante califica una sola vez por servicio; ambas
 calificaciones se muestran en el historial privado de sus participantes.
+El paciente publica su reseña del enfermero con `POST /api/resenas`
+(`idSolicitud`, `puntuacion`, `comentario`); el enfermero califica al paciente con
+`POST /api/solicitudes/<id>/calificaciones`. Las tarjetas de la cartilla muestran
+el promedio y la cantidad de reseñas solo cuando existen.
+La calificación se completa en `ModalCalificacion.jsx` (`<dialog>` con
+`showModal()`, cierre con Escape o Cancelar y borrador descartado al cerrar).
+`SelectorEstrellas.jsx` reúne el selector de 1 a 5 estrellas con radios nativos y
+`EstrellasLectura`, que muestra una puntuación con su texto accesible; reutilizarlos
+en lugar de volver a dibujar estrellas.
 
 `App.jsx` protege la sesión y los roles y gestiona el desplazamiento al cambiar de
 ruta. El acceso directo a `/perfil-enfermero#horarios` espera la carga del perfil

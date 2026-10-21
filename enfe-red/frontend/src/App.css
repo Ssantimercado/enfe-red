@@ -1759,6 +1759,54 @@
 .panel-title .icon {
   color: var(--teal);
 }
+.rating-stars-read {
+  color: #9a6800;
+  letter-spacing: 1px;
+  white-space: nowrap;
+}
+.profile-reviews-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0 18px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.profile-reviews-summary > strong {
+  color: var(--ink);
+  font-size: 26px;
+  line-height: 1;
+}
+.profile-reviews-list {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.profile-reviews-list li {
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.profile-review-heading {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+  color: var(--ink);
+  font-size: 14px;
+}
+.profile-review-heading time {
+  color: var(--muted);
+  font-size: 12px;
+}
+.profile-reviews-list p {
+  margin: 6px 0 0;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
 .weekly-schedule {
   margin: 0;
 }
@@ -1916,6 +1964,32 @@
   margin-bottom: 18px;
   color: var(--muted);
   font-size: 14px;
+}
+.rating-dialog {
+  width: min(520px, calc(100% - 32px));
+  max-width: 520px;
+  margin: auto;
+  border: 1px solid var(--border);
+  color: var(--ink);
+}
+.rating-dialog::backdrop {
+  background: #193b4d66;
+}
+.rating-dialog .service-rating-form {
+  padding: 0;
+  border: 0;
+  background: none;
+}
+.rating-dialog h2 {
+  margin-bottom: 6px;
+}
+.rating-dialog h2 + p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+.rating-dialog .service-rating-actions {
+  justify-content: flex-end;
 }
 .admin-dialog-actions {
   display: flex;

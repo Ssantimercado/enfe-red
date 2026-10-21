@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import Avatar from './ui/Avatar';
 import Icon from './ui/Icon';
 import DirectoryFilters from './DirectoryFilters';
+import { formatoPuntuacion } from './SelectorEstrellas';
 import { requestApi as api, formatPrice, sesionActual } from '../api';
 const MapaEnfermeros = lazy(() => import('./MapaEnfermeros'));
 
@@ -500,7 +501,9 @@ export default function ListaEnfermeros() {
                         {rating !== null && (
                           <span>
                             <Icon name="star" size={14} />
-                            {rating.toFixed(1)}
+                            {formatoPuntuacion(rating)}
+                            {Number(person.cantidadResenas) > 0 &&
+                              ` (${person.cantidadResenas} ${Number(person.cantidadResenas) === 1 ? 'reseña' : 'reseñas'})`}
                           </span>
                         )}
                         {distance !== null && (
