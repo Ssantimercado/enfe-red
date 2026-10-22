@@ -1,8 +1,7 @@
-"""HU12: búsqueda en lenguaje natural con tres niveles.
+"""HU12: búsqueda en lenguaje natural con dos niveles.
 
 1. Gemini (API de Google, con los créditos de Google AI Pro: el uso pago no se usa para entrenar).
-2. Ollama (modelo abierto que corre en la propia PC: el texto no sale de la computadora).
-3. Reglas propias (palabras clave): siempre disponibles, también como respaldo si la IA falla.
+2. Reglas propias (palabras clave): siempre disponibles, también como respaldo si la IA falla.
 
 La IA solo completa filtros de la cartilla: nunca da indicaciones médicas. El texto se anonimiza
 antes de enviarse, no se guarda y no se escribe en los logs.
@@ -121,7 +120,7 @@ def consultar_gemini(texto, permitidos):
     clave = os.getenv('GEMINI_API_KEY', '').strip()
     if not clave:
         raise IAError('Falta GEMINI_API_KEY')
-    modelo = os.getenv('GEMINI_MODELO', 'gemini-flash-latest').strip()
+    modelo = os.getenv('GEMINI_MODELO', 'gemini-flash-lite-latest').strip()
     esquema = esquema_respuesta(permitidos)
     # Gemini usa "nullable" en lugar de tipos combinados.
     propiedades = {
@@ -146,25 +145,6 @@ def consultar_gemini(texto, permitidos):
         return json.loads(respuesta['candidates'][0]['content']['parts'][0]['text'])
     except (KeyError, IndexError, TypeError, ValueError) as error:
         raise IAError('Respuesta de Gemini inválida') from error
-
-
-def consultar_ollama(texto, permitidos):
-    url = os.getenv('OLLAMA_URL', 'http://localhost:11434').rstrip('/')
-    modelo = os.getenv('OLLAMA_MODELO', 'qwen3:4b').strip()
-    respuesta = _post_json(f'{url}/api/chat', {
-        'model': modelo,
-        'stream': False,
-        'format': esquema_respuesta(permitidos),
-        'options': {'temperature': 0},
-        'messages': [
-            {'role': 'system', 'content': INSTRUCCIONES},
-            {'role': 'user', 'content': _mensaje_usuario(texto, permitidos)},
-        ],
-    }, {})
-    try:
-        return json.loads(respuesta['message']['content'])
-    except (KeyError, TypeError, ValueError) as error:
-        raise IAError('Respuesta de Ollama inválida') from error
 
 
 def interpretar_con_reglas(texto, permitidos):
@@ -234,7 +214,7 @@ def validar(crudo, permitidos):
     return resultado
 
 
-PROVEEDORES = {'gemini': consultar_gemini, 'ollama': consultar_ollama}
+PROVEEDORES = {'gemini': consultar_gemini}
 
 
 def interpretar(texto, permitidos, proveedor=None):

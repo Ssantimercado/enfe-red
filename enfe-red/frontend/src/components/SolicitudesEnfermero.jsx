@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { requestApi as api } from '../api';
+import { requestApi as api, enlaceWhatsapp } from '../api';
 import {
   aceptarSolicitud,
   errorSolicitud,
@@ -132,7 +132,24 @@ export default function SolicitudesEnfermero() {
                 <dt>Paciente</dt>
                 <dd>{solicitud.paciente?.nombre} {solicitud.paciente?.apellido}</dd>
                 <dt>Teléfono</dt>
-                <dd>{solicitud.paciente?.telefono || 'No informado'}</dd>
+                <dd>
+                  {solicitud.paciente?.telefono || 'No informado'}
+                  {enlaceWhatsapp(solicitud.paciente?.telefono) && (
+                    <>
+                      {' · '}
+                      <a
+                        href={enlaceWhatsapp(
+                          solicitud.paciente.telefono,
+                          `Hola, te escribo desde Enfered por tu solicitud de ${solicitud.servicio?.tipoServicio || 'atención'} del ${solicitud.fecha}.`,
+                        )}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        Escribir por WhatsApp
+                      </a>
+                    </>
+                  )}
+                </dd>
                 <dt>Fecha y hora</dt>
                 <dd>{solicitud.fecha} · {solicitud.hora}</dd>
                 <dt>Dirección</dt>

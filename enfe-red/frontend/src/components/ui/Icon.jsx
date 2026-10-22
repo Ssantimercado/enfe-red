@@ -96,6 +96,12 @@ const paths = {
     </>
   ),
   phone: <path d="m7 3 3 5-3 2a16 16 0 0 0 7 7l2-3 5 3-1 4C11 23 1 13 3 4Z" />,
+  chat: (
+    <>
+      <path d="M4 20l1.4-4.2A8 8 0 1 1 8.6 19L4 20Z" />
+      <path d="M9 11h.01M12 11h.01M15 11h.01" />
+    </>
+  ),
   grid: (
     <>
       <rect x="3" y="3" width="7" height="7" rx="1" />

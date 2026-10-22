@@ -7,7 +7,6 @@ const MAX_TEXTO = 300;
 const EJEMPLO = 'Necesito que alguien le ponga insulina a mi mamá los martes a la tarde en Godoy Cruz';
 const FUENTES = {
   gemini: 'Interpretado con inteligencia artificial.',
-  ollama: 'Interpretado con inteligencia artificial en el servidor de Enfered.',
   reglas: 'Interpretado con el asistente de búsqueda.',
 };
 

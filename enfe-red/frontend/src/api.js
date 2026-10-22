@@ -89,3 +89,18 @@ export const formatPrice = (value) =>
   Number(value) > 0
     ? `$${Number(value).toLocaleString('es-AR')}`
     : 'A consultar';
+
+// wa.me pide el número internacional sin "+": en Argentina los celulares van como 54 9 + área + número,
+// sin el 0 del área ni el 15.
+export function enlaceWhatsapp(telefono, mensaje = 'Hola, te escribo desde Enfered por tus servicios de enfermería.') {
+  let digitos = String(telefono || '').replace(/\D/g, '');
+  if (digitos.startsWith('54')) digitos = digitos.slice(2);
+  if (digitos.startsWith('9')) digitos = digitos.slice(1);
+  digitos = digitos.replace(/^0/, '');
+  if (digitos.length === 12) {
+    const quince = [2, 3, 4].find((i) => digitos.slice(i, i + 2) === '15');
+    if (quince !== undefined) digitos = digitos.slice(0, quince) + digitos.slice(quince + 2);
+  }
+  if (digitos.length !== 10) return null;
+  return `https://wa.me/549${digitos}?text=${encodeURIComponent(mensaje)}`;
+}

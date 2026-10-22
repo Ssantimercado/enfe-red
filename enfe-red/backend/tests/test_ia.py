@@ -1,4 +1,4 @@
-"""HU12: búsqueda asistida por IA con tres niveles (Gemini, Ollama y reglas). Sin llamadas reales."""
+"""HU12: búsqueda asistida por IA con dos niveles (Gemini y reglas). Sin llamadas reales."""
 import json
 import logging
 import unittest
@@ -100,32 +100,21 @@ class ProveedoresTest(unittest.TestCase):
         esquema = enviado['cuerpo']['generationConfig']['responseSchema']
         self.assertEqual(esquema['properties']['dia_semana']['enum'][0], 'Lunes')
 
-    def test_ollama_usa_el_modelo_local(self):
-        enviado = {}
-
-        def falso_urlopen(req, timeout):
-            enviado['url'], enviado['cuerpo'] = req.full_url, json.loads(req.data)
-            return _Respuesta({'message': {'content': json.dumps({'servicio': 'Curaciones', 'ciudad': 'Guaymallén'})}})
-
-        with patch('services.ia_busqueda.urllib.request.urlopen', falso_urlopen):
-            filtros, fuente = ia_busqueda.interpretar('curación en Guaymallén', PERMITIDOS, 'ollama')
-        self.assertEqual((fuente, filtros['servicio'], filtros['ciudad']), ('ollama', 'Curaciones', 'Guaymallén'))
-        self.assertTrue(enviado['url'].endswith('/api/chat'))
-        self.assertIn('properties', enviado['cuerpo']['format'])
-
+    @patch.dict('os.environ', {'GEMINI_API_KEY': 'clave-de-prueba'})
     def test_si_la_ia_falla_usa_las_reglas(self):
         with patch('services.ia_busqueda.urllib.request.urlopen', side_effect=TimeoutError()):
-            filtros, fuente = ia_busqueda.interpretar(PEDIDO, PERMITIDOS, 'ollama')
+            filtros, fuente = ia_busqueda.interpretar(PEDIDO, PERMITIDOS, 'gemini')
         self.assertEqual((fuente, filtros['servicio']), ('reglas', 'Inyecciones'))
 
     @patch.dict('os.environ', {'GEMINI_API_KEY': ''})
     def test_gemini_sin_clave_usa_las_reglas(self):
         self.assertEqual(ia_busqueda.interpretar(PEDIDO, PERMITIDOS, 'gemini')[1], 'reglas')
 
+    @patch.dict('os.environ', {'GEMINI_API_KEY': 'clave-de-prueba'})
     def test_el_aviso_de_urgencia_no_depende_del_modelo(self):
         with patch('services.ia_busqueda.urllib.request.urlopen',
-                   return_value=_Respuesta({'message': {'content': json.dumps({'aclaracion': None})}})):
-            filtros, _ = ia_busqueda.interpretar('urgente, se desmayó', PERMITIDOS, 'ollama')
+                   return_value=gemini_responde({'aclaracion': None})):
+            filtros, _ = ia_busqueda.interpretar('urgente, se desmayó', PERMITIDOS, 'gemini')
         self.assertEqual(filtros['aclaracion'], AVISO_URGENCIA)
 
 

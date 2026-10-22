@@ -1,7 +1,8 @@
-import { formatPrice } from '../api';
+import { enlaceWhatsapp, formatPrice } from '../api';
 import Icon from './ui/Icon';
 
 export default function ProfessionalContact({ profile }) {
+  const whatsapp = enlaceWhatsapp(profile.telefono);
   return (
     <aside
       className="content-panel contact-panel"
@@ -27,18 +28,20 @@ export default function ProfessionalContact({ profile }) {
         </p>
       )}
       <div className="contact-actions">
-        {profile.telefono && (
+        {whatsapp && (
           <a
             className="button button-primary button-full"
-            href={`tel:${String(profile.telefono).replace(/[^+\d]/g, '')}`}
+            href={whatsapp}
+            target="_blank"
+            rel="noopener noreferrer"
           >
-            <Icon name="phone" size={18} />
-            Llamar al profesional
+            <Icon name="chat" size={18} />
+            Escribir por WhatsApp
           </a>
         )}
         {profile.email && (
           <a
-            className={`button ${profile.telefono ? 'button-secondary' : 'button-primary'} button-full`}
+            className={`button ${whatsapp ? 'button-secondary' : 'button-primary'} button-full`}
             href={`mailto:${profile.email}`}
           >
             <Icon name="mail" size={18} />
