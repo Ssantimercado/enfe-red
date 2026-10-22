@@ -1648,3 +1648,12 @@ test('la búsqueda asistida avisa ante una urgencia y si falla deja los filtros 
     globalThis.fetch = original;
   }
 });
+
+test('el contacto con el profesional abre WhatsApp con el número en formato internacional', async () => {
+  const { enlaceWhatsapp } = await import(pathToFileURL(resolve('.test-build/api.mjs')));
+  for (const telefono of ['2615551234', '0261 15 555-1234', '+54 9 261 555 1234', '11 15 5555 1234']) {
+    assert.match(enlaceWhatsapp(telefono), /^https:\/\/wa\.me\/549(2615551234|1155551234)\?text=Hola/);
+  }
+  assert.equal(enlaceWhatsapp('1234'), null);
+  assert.equal(enlaceWhatsapp(''), null);
+});
