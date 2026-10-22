@@ -62,7 +62,7 @@ export default function Register() {
         </>
       ) : (
         <>
-          <span className="eyebrow">UNITE A ENFE-RED</span>
+          <span className="eyebrow">UNITE A ENFERED</span>
           <h2 className="auth-title">El primer paso es conectar.</h2>
           <p className="auth-subtitle">
             Creá tu cuenta y encontrá tu lugar en la red.
@@ -74,7 +74,7 @@ export default function Register() {
           )}
           <form className="form-stack" onSubmit={submit} aria-busy={loading}>
             <fieldset className="role-options">
-              <legend>¿Cómo vas a usar Enfe-Red?</legend>
+              <legend>¿Cómo vas a usar Enfered?</legend>
               <div>
                 <label className="role-option">
                   <input

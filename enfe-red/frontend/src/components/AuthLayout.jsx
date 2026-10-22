@@ -47,7 +47,7 @@ export default function AuthLayout({ children }) {
         </div>
         <div className="auth-form-wrap">{children}</div>
         <p className="auth-footnote">
-          Enfe-Red · Enfermería a domicilio ·{' '}
+          Enfered · Enfermería a domicilio ·{' '}
           <Link to="/terminos">Términos</Link> · <Link to="/privacidad">Privacidad</Link>
         </p>
       </main>

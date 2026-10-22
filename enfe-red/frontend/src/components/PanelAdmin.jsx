@@ -91,7 +91,7 @@ export default function PanelAdmin() {
         <div>
           <span className="eyebrow">ADMINISTRACIÓN</span>
           <h1>Panel de administración</h1>
-          <p>Un resumen de las cuentas y la actividad de Enfe-Red.</p>
+          <p>Un resumen de las cuentas y la actividad de Enfered.</p>
         </div>
         <Link className="button button-primary" to="/admin/usuarios">
           Gestionar usuarios

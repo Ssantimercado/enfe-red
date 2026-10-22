@@ -14,14 +14,14 @@ function Contacto() {
   return SOPORTE ? (
     <a href={`mailto:${SOPORTE}`}>{SOPORTE}</a>
   ) : (
-    'el correo de soporte de Enfe-Red'
+    'el correo de soporte de Enfered'
   );
 }
 
 function PaginaLegal({ titulo, intro, children }) {
   useEffect(() => {
     const anterior = document.title;
-    document.title = `${titulo} · Enfe-Red`;
+    document.title = `${titulo} · Enfered`;
     return () => { document.title = anterior; };
   }, [titulo]);
   return (
@@ -54,17 +54,17 @@ export function Terminos() {
   return (
     <PaginaLegal
       titulo="Términos y condiciones"
-      intro="Estos términos regulan el uso de Enfe-Red. Al crear una cuenta declarás que los leíste y que los aceptás."
+      intro="Estos términos regulan el uso de Enfered. Al crear una cuenta declarás que los leíste y que los aceptás."
     >
       <section>
-        <h2>1. Qué es Enfe-Red</h2>
+        <h2>1. Qué es Enfered</h2>
         <p>
-          Enfe-Red es una plataforma que conecta a pacientes y familias con profesionales de enfermería
-          independientes para la atención a domicilio. Enfe-Red actúa como intermediaria: no presta
+          Enfered es una plataforma que conecta a pacientes y familias con profesionales de enfermería
+          independientes para la atención a domicilio. Enfered actúa como intermediaria: no presta
           servicios de salud, no emplea a los profesionales y no reemplaza la indicación de un médico.
         </p>
         <p className="legal-destacado">
-          Enfe-Red no es un servicio de emergencias. Ante una urgencia, llamá al 107 o al servicio de
+          Enfered no es un servicio de emergencias. Ante una urgencia, llamá al 107 o al servicio de
           emergencias de tu localidad.
         </p>
       </section>
@@ -81,7 +81,7 @@ export function Terminos() {
         <h2>3. Profesionales de enfermería</h2>
         <ul>
           <li>Los profesionales declaran contar con matrícula habilitante vigente y cargan su número en el perfil.</li>
-          <li>Enfe-Red revisa la matrícula antes de mostrar al profesional en la cartilla. Mientras está pendiente, el perfil no aparece en las búsquedas ni recibe solicitudes.</li>
+          <li>Enfered revisa la matrícula antes de mostrar al profesional en la cartilla. Mientras está pendiente, el perfil no aparece en las búsquedas ni recibe solicitudes.</li>
           <li>Cada profesional es responsable de la atención que brinda, de cumplir las normas de su ejercicio y de contar con la cobertura de responsabilidad profesional que corresponda.</li>
           <li>La información de horarios, tarifas y especialidad la carga y actualiza el propio profesional.</li>
         </ul>
@@ -91,7 +91,7 @@ export function Terminos() {
         <ul>
           <li>Una solicitud queda confirmada cuando el profesional la acepta. Hasta ese momento el paciente puede cancelarla.</li>
           <li>El chat de cada solicitud es solo para coordinar la atención. No compartas información que no sea necesaria.</li>
-          <li>Los precios que muestra la plataforma son estimados de referencia. El valor final lo acuerdan el paciente y el profesional, y el pago se realiza fuera de Enfe-Red.</li>
+          <li>Los precios que muestra la plataforma son estimados de referencia. El valor final lo acuerdan el paciente y el profesional, y el pago se realiza fuera de Enfered.</li>
         </ul>
       </section>
       <section>
@@ -99,7 +99,7 @@ export function Terminos() {
         <p>
           El paciente puede calificar al profesional una vez finalizada la atención. Las reseñas tienen
           que basarse en una experiencia real y no pueden incluir insultos, datos personales de terceros
-          ni información de salud. Enfe-Red puede ocultar las que no cumplan estas reglas.
+          ni información de salud. Enfered puede ocultar las que no cumplan estas reglas.
         </p>
       </section>
       <section>
@@ -113,7 +113,7 @@ export function Terminos() {
       <section>
         <h2>7. Responsabilidad</h2>
         <p>
-          Enfe-Red pone los medios razonables para que la plataforma funcione correctamente y para
+          Enfered pone los medios razonables para que la plataforma funcione correctamente y para
           verificar a los profesionales, pero no garantiza el resultado de la atención ni responde por
           los acuerdos entre pacientes y profesionales.
         </p>
@@ -176,7 +176,7 @@ export function Privacidad() {
       <section>
         <h2>5. Cookies y almacenamiento en tu navegador</h2>
         <p>
-          Enfe-Red no usa cookies publicitarias ni de seguimiento. Guardamos en el almacenamiento local de
+          Enfered no usa cookies publicitarias ni de seguimiento. Guardamos en el almacenamiento local de
           tu navegador solo lo necesario para que funcione: la sesión iniciada y tus preferencias, como
           haber leído este aviso. Se borra al cerrar sesión o al limpiar los datos del navegador.
         </p>

@@ -1,4 +1,4 @@
-# Frontend de Enfe-red
+# Frontend de Enfered
 
 Único proyecto React/Vite de la aplicación. El código que se ejecuta está en
 `src/`; `index.html` carga `src/main.jsx`, que monta `App.jsx`.
