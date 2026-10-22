@@ -17,6 +17,8 @@ from routes.solicitud_routes import solicitud_bp
 from routes.usuario_routes import usuario_bp
 from schema_sprint4 import inicializar_bd_sprint4, inicializar_catalogo_servicios
 from schema_sprint6 import inicializar_bd_sprint6
+from schema_legal import inicializar_bd_legal
+from schema_sprint7 import inicializar_bd_sprint7
 from seed_sprint3 import inicializar_bd_sprint3
 
 
@@ -103,7 +105,7 @@ class SolicitudesTest(unittest.TestCase):
         response = self.client.get('/api/servicios', headers=self.headers())
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json, [{'idServicio': 301, 'tipoServicio': 'Curaciones', 'descripcion': None,
-                                          'precioEstimado': '8500.50'}])
+                                          'precioEstimado': '8500.50', 'duracionMinutos': 60}])
         self.assertEqual(self.client.get('/api/servicios').status_code, 401)
         self.assertEqual(self.client.get('/api/servicios', headers=self.headers(999)).status_code, 401)
         creado = self.crear(idServicio=response.json[0]['idServicio'])
@@ -276,7 +278,7 @@ class SolicitudesTest(unittest.TestCase):
         response = self.client.get('/api/solicitudes/enfermero/201', headers=self.headers(21))
         self.assertEqual(response.status_code, 200)
         self.assertEqual({item['estado'] for item in response.json}, set(ESTADOS_SOLICITUD))
-        self.assertEqual(len(response.json), 5)
+        self.assertEqual(len(response.json), len(ESTADOS_SOLICITUD))
         for item in response.json:
             self.assertEqual(item['idEnfermero'], 201)
             self.assertEqual(item['paciente']['telefono'], '2611111111')
@@ -333,7 +335,10 @@ class SolicitudesTest(unittest.TestCase):
         antes = db.session.get(SolicitudServicio, id_solicitud).to_dict()
         response = self.client.put(f'/api/solicitudes/{id_solicitud}/aceptar', headers=self.headers(21))
         self.assertEqual(response.status_code, 200, response.json)
-        esperado = {**antes, 'estado': 'Aceptada'}
+        # Con la solicitud aceptada el paciente recibe el contacto del enfermero.
+        esperado = {**antes, 'estado': 'Aceptada',
+                    'contacto': {'telefono': '2612222222', 'email': 'enfermero@test.local'}}
+        self.assertIsNone(antes['contacto'])
         self.assertEqual(response.json['solicitud'], esperado)
         self.assertTrue(db.session.get(Enfermero, 201).disponible)
         detalle = self.client.get(f'/api/solicitudes/{id_solicitud}', headers=self.headers())
@@ -508,7 +513,10 @@ class SolicitudesTest(unittest.TestCase):
                 ruta = f'/api/solicitudes/{id_solicitud}/{accion}'
                 response = self.client.put(ruta, headers=self.headers(usuario))
                 self.assertEqual(response.status_code, 200, response.json)
-                self.assertEqual(response.json['solicitud'], {**antes, 'estado': destino})
+                # Al cerrarse deja de mostrar el contacto del enfermero y guarda quién canceló.
+                cancelacion = {'canceladaPor': 'paciente'} if destino == 'Cancelada' else {}
+                self.assertEqual(response.json['solicitud'],
+                                 {**antes, 'estado': destino, 'contacto': None, **cancelacion})
                 self.assertEqual(self.client.put(ruta, headers=self.headers(usuario)).status_code, 400)
                 self.assertEqual(self.client.get('/api/solicitudes/paciente/101', headers=self.headers()).json, [])
                 recibidas = self.client.get('/api/solicitudes/enfermero/201', headers=self.headers(21)).json
@@ -576,11 +584,13 @@ class SolicitudesTest(unittest.TestCase):
                 self.assertEqual(self.crear().status_code, 409)
                 self.assertEqual(self.client.put(ruta, headers=self.headers(usuario)).status_code, 200)
 
-    def test_reserva_solo_bloquea_mismo_enfermero_fecha_y_hora_activos(self):
+    def test_reserva_solo_bloquea_turnos_aceptados_o_propios_que_se_superponen(self):
         id_solicitud = self.guardar_solicitud()
-        self.assertEqual(self.crear(usuario_id=12).status_code, 409)
+        # Un Pendiente de otro paciente no reserva el horario: el enfermero elige cuál acepta.
+        self.assertEqual(self.crear(usuario_id=12).status_code, 201)
         self.assertEqual(self.client.put(f'/api/solicitudes/{id_solicitud}/aceptar', headers=self.headers(21)).status_code, 200)
         self.assertEqual(self.crear().status_code, 409)
+        self.assertEqual(self.crear(usuario_id=12, hora='15:00').status_code, 409)
         for cambios in ({'fecha': '2030-01-12'}, {'hora': '15:30'}, {'idEnfermero': 202}):
             with self.subTest(cambios=cambios):
                 self.assertEqual(self.crear(**cambios).status_code, 201)
@@ -591,9 +601,10 @@ class SolicitudesTest(unittest.TestCase):
         self.assertEqual(self.client.put(f'/api/solicitudes/{primero}/aceptar', headers=self.headers(21)).status_code, 200)
         self.assertEqual(self.client.put(f'/api/solicitudes/{segundo}/aceptar', headers=self.headers(21)).status_code, 409)
         self.assertEqual(self.client.put(f'/api/solicitudes/{primero}/cancelar', headers=self.headers()).status_code, 200)
-        # El segundo pedido pendiente conserva su reserva aunque se cancele el primero.
-        self.assertEqual(self.crear().status_code, 409)
+        # Cancelado el primero, el horario queda libre: se puede pedir y aceptar uno solo.
+        tercero = self.crear().json['solicitud']['idSolicitud']
         self.assertEqual(self.client.put(f'/api/solicitudes/{segundo}/aceptar', headers=self.headers(21)).status_code, 200)
+        self.assertEqual(self.client.put(f'/api/solicitudes/{tercero}/aceptar', headers=self.headers(21)).status_code, 409)
 
     def test_liberar_turno_no_reactiva_enfermero_no_disponible(self):
         id_solicitud = self.guardar_solicitud()
@@ -622,6 +633,7 @@ class MigracionSprint4Test(unittest.TestCase):
         inspector = inspect(db.engine)
         self.assertEqual({c['name'] for c in inspector.get_columns('solicitudes_servicio')}, {
             'idSolicitud', 'idPaciente', 'idEnfermero', 'idServicio', 'fecha', 'hora', 'estado', 'direccionAtencion',
+            'canceladaPor', 'motivoCancelacion',
         })
         self.assertEqual({fk['referred_table'] for fk in inspector.get_foreign_keys('solicitudes_servicio')},
                          {'pacientes', 'enfermeros', 'servicios'})
@@ -649,6 +661,8 @@ class MigracionSprint4Test(unittest.TestCase):
         # Mismo orden que el arranque de app.py.
         inicializar_bd_sprint4()
         inicializar_bd_sprint6()
+        inicializar_bd_legal()
+        inicializar_bd_sprint7()
         inicializar_bd_sprint3()
         enfermero = db.session.get(Enfermero, 1)
         self.assertFalse(enfermero.verificado)

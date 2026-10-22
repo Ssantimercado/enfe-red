@@ -4,3 +4,5 @@ backend/__pycache__/
 backend/**/__pycache__/
 backend/instance/
 *.pyc
+# Copias de seguridad de la base (tienen datos personales)
+backend/backups/

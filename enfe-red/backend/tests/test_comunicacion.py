@@ -63,7 +63,8 @@ class ComunicacionTest(unittest.TestCase):
         return item.idSolicitud
 
     def test_historial_filtra_estados_y_participantes(self):
-        # SCRUM-62.1: solo solicitudes cerradas (Realizada, Rechazada o Cancelada).
+        # SCRUM-62.1: solo solicitudes cerradas (Realizada, Rechazada, Cancelada o Vencida).
+        # La Pendiente cuyo turno ya pasó se vence al consultar y entra al historial.
         hoy = datetime.now(timezone(timedelta(hours=-3))).date()
         pasado = hoy - timedelta(days=2)
         ids = {
@@ -80,8 +81,9 @@ class ComunicacionTest(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertEqual(
                 [item['idSolicitud'] for item in response.json],
-                [ids['Realizada'], ids['Cancelada'], ids['Rechazada']],
+                [ids['Realizada'], ids['Cancelada'], ids['Rechazada'], ids['Pendiente']],
             )
+            self.assertEqual(response.json[-1]['estado'], 'Vencida')
             self.assertNotIn('CONFIDENCIAL', response.get_data(as_text=True))
             self.assertNotIn('password_hash', response.get_data(as_text=True))
 

@@ -4,7 +4,14 @@ from datetime import datetime, timezone
 from database import db
 from models.solicitud_models import SolicitudServicio  # noqa: F401  (registra la FK)
 
-TIPOS_NOTIFICACION = ('aceptada', 'rechazada', 'mensaje')
+# 'cancelada': la otra parte (o un administrador al suspender una cuenta) canceló el turno.
+# 'matricula': resultado de la revisión de la matrícula del enfermero (sin solicitud).
+TIPOS_NOTIFICACION = (
+    'aceptada', 'rechazada', 'mensaje', 'cancelada',
+    'nueva', 'reprogramada', 'realizada', 'vencida', 'matricula',
+)
+# schema_sprint7.py recrea la restricción en bases existentes con este mismo texto.
+CHECK_TIPO_NOTIFICACION = 'tipo IN (' + ', '.join(f"'{tipo}'" for tipo in TIPOS_NOTIFICACION) + ')'
 MAX_MENSAJE = 255
 
 
@@ -16,10 +23,7 @@ def _ahora_utc():
 class Notificacion(db.Model):
     __tablename__ = 'notificaciones'
     __table_args__ = (
-        db.CheckConstraint(
-            "tipo IN ('aceptada', 'rechazada', 'mensaje')",
-            name='ck_notificacion_tipo',
-        ),
+        db.CheckConstraint(CHECK_TIPO_NOTIFICACION, name='ck_notificacion_tipo'),
         # La campana lista las del usuario de la más nueva a la más vieja.
         db.Index('ix_notificacion_usuario_orden', 'idUsuario', 'idNotificacion'),
     )

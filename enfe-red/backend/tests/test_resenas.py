@@ -108,9 +108,9 @@ class ResenasTest(unittest.TestCase):
         casos = [
             {'idSolicitud': id_solicitud, 'puntuacion': 6, 'comentario': 'x'},
             {'idSolicitud': id_solicitud, 'puntuacion': True, 'comentario': 'x'},
-            {'idSolicitud': id_solicitud, 'puntuacion': 4, 'comentario': '   '},
+            {'idSolicitud': id_solicitud, 'puntuacion': 4, 'comentario': 12},
             {'idSolicitud': id_solicitud, 'puntuacion': 4, 'comentario': 'a' * 2001},
-            {'idSolicitud': id_solicitud, 'puntuacion': 4},
+            {'idSolicitud': id_solicitud, 'comentario': 'Sin estrellas'},
             {'idSolicitud': id_solicitud, 'puntuacion': 4, 'comentario': 'x', 'idUsuarioAutor': 12},
         ]
         for datos in casos:
@@ -119,6 +119,20 @@ class ResenasTest(unittest.TestCase):
                 self.assertEqual(respuesta.status_code, 400)
         self.assertEqual(self.client.post('/api/resenas', headers=self.headers(11), data='no json').status_code, 400)
         self.assertEqual(self.client.post('/api/resenas', json=casos[0]).status_code, 401)
+
+    def test_el_comentario_es_opcional(self):
+        sin_comentario = self.client.post('/api/resenas', headers=self.headers(11), json={
+            'idSolicitud': self.solicitud(), 'puntuacion': 4,
+        })
+        self.assertEqual(sin_comentario.status_code, 201)
+        self.assertEqual(sin_comentario.json['resena']['comentario'], '')
+        en_blanco = self.publicar(self.solicitud(fecha=date(2026, 1, 11)), puntuacion=2, comentario='   ')
+        self.assertEqual(en_blanco.status_code, 201)
+        nulo = self.publicar(self.solicitud(fecha=date(2026, 1, 12)), puntuacion=3, comentario=None)
+        self.assertEqual(nulo.status_code, 201)
+        consulta = self.client.get('/api/enfermeros/201/resenas', headers=self.headers(12)).json
+        self.assertEqual([r['comentario'] for r in consulta['resenas']], ['', '', ''])
+        self.assertEqual(consulta['calificacionPromedio'], 3.0)
 
     def test_error_de_base_revierte_resena_y_promedio(self):
         id_solicitud = self.solicitud()

@@ -1,40 +1,55 @@
-from sqlalchemy import text
+import logging
+
+from sqlalchemy import inspect, text
 from database import db
 from models.usuario_models import Usuario, Enfermero, Disponibilidad
 from extensions import bcrypt
 from datetime import time
 
+logger = logging.getLogger(__name__)
+
+# Columnas del Sprint 3 en bases creadas antes de que existieran.
+COLUMNAS_ENFERMEROS = {
+    'telefono': 'VARCHAR(20) NULL',
+    'experiencia_anios': 'INT DEFAULT 0',
+    'descripcion': 'TEXT NULL',
+    'direccion': 'VARCHAR(200) NULL',
+    'ciudad': 'VARCHAR(100) NULL',
+    'tarifa_hora': 'FLOAT DEFAULT 0',
+    'disponible': 'BOOLEAN DEFAULT TRUE',
+    'latitud': 'FLOAT NULL',
+    'longitud': 'FLOAT NULL',
+}
+INDICE_BUSQUEDA = 'idx_enfermeros_busqueda'
+
+
 def inicializar_bd_sprint3():
-    # 1. Agregar columnas nuevas a 'enfermeros' si no existen todavía
-    columnas_nuevas = [
-        "ADD COLUMN telefono VARCHAR(20) NULL",
-        "ADD COLUMN experiencia_anios INT DEFAULT 0",
-        "ADD COLUMN descripcion TEXT NULL",
-        "ADD COLUMN direccion VARCHAR(200) NULL",
-        "ADD COLUMN ciudad VARCHAR(100) NULL",
-        "ADD COLUMN tarifa_hora FLOAT DEFAULT 0",
-        "ADD COLUMN disponible BOOLEAN DEFAULT TRUE",
-        "ADD COLUMN latitud FLOAT NULL",
-        "ADD COLUMN longitud FLOAT NULL"
-    ]
-    
-    for col in columnas_nuevas:
+    """Agrega las columnas y el índice de búsqueda de enfermeros si faltan. No carga datos."""
+    inspector = inspect(db.engine)
+    columnas = {columna['name'] for columna in inspector.get_columns('enfermeros')}
+    indices = {indice['name'] for indice in inspector.get_indexes('enfermeros')}
+    with db.engine.begin() as connection:
+        for columna, definicion in COLUMNAS_ENFERMEROS.items():
+            if columna not in columnas:
+                connection.execute(text(f'ALTER TABLE enfermeros ADD COLUMN {columna} {definicion}'))
+    if INDICE_BUSQUEDA not in indices:
         try:
-            db.session.execute(text(f"ALTER TABLE enfermeros {col};"))
-            db.session.commit()
+            with db.engine.begin() as connection:
+                connection.execute(text(
+                    f'CREATE INDEX {INDICE_BUSQUEDA} ON enfermeros '
+                    '(nombre, apellido, especialidad, ciudad, tarifa_hora, disponible)'
+                ))
         except Exception:
-            db.session.rollback()
+            # Sin el índice la búsqueda funciona igual, solo más lenta: se avisa y se sigue.
+            logger.exception('No se pudo crear el índice de búsqueda de enfermeros')
 
-    # 2. Crear el índice compuesto de optimización si no existe
-    try:
-        db.session.execute(text(
-            "CREATE INDEX idx_enfermeros_busqueda ON enfermeros (nombre, apellido, especialidad, ciudad, tarifa_hora, disponible);"
-        ))
-        db.session.commit()
-    except Exception:
-        db.session.rollback()
 
-    # 3. Cargar los 4 enfermeros de prueba con coordenadas de Mendoza
+def cargar_datos_demo():
+    """Cuentas demo de enfermeros (clave 123456). Solo con CARGAR_DEMO=1 o el comando cargar-demo.
+
+    No pisa cuentas existentes. Devuelve cuántas cuentas creó.
+    """
+    # Los 4 enfermeros de prueba con coordenadas de Mendoza
     datos_prueba = [
         {
             "email": "laura.gomez@test.com", "nombre": "Laura", "apellido": "Gómez",
@@ -72,12 +87,14 @@ def inicializar_bd_sprint3():
 
     pass_hash = bcrypt.generate_password_hash("123456").decode('utf-8')
 
+    creadas = 0
     for item in datos_prueba:
         usuario_existente = Usuario.query.filter_by(email=item["email"]).first()
         if not usuario_existente:
             nuevo_u = Usuario(email=item["email"], password_hash=pass_hash, rol="enfermero")
             db.session.add(nuevo_u)
             db.session.flush()
+            creadas += 1
 
             nuevo_enf = Enfermero(
                 usuario_id=nuevo_u.id, nombre=item["nombre"], apellido=item["apellido"],
@@ -97,4 +114,4 @@ def inicializar_bd_sprint3():
                 ))
 
     db.session.commit()
-    print("BD verificada: datos del Sprint 3 listos.")
+    return creadas

@@ -1,23 +1,78 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from flask import Blueprint, request, jsonify, current_app
-from flask_jwt_extended import jwt_required, get_jwt_identity, create_access_token
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import and_, or_
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import joinedload, selectinload
 import math
+import re
+import unicodedata
 
 from database import db
 from extensions import bcrypt
-from models.usuario_models import Usuario, Paciente, Enfermero, Disponibilidad
+from models.usuario_models import DECIMALES_UBICACION_PUBLICA, Usuario, Paciente, Enfermero, Disponibilidad
 from models.solicitud_models import ESTADOS_ACTIVOS, SolicitudServicio
-from routes.auth_routes import error_password
+from routes.auth_routes import (
+    buscar_usuario_por_email, clave_de_cuenta, error_password, normalizar_email, verificar_password,
+)
 from schema_legal import VERSION_TERMINOS
+from seguridad import crear_tokens
+from services.limites import borrar_intentos, ip_cliente, registrar_intento, supera_limite
 
 usuario_bp = Blueprint('usuario_bp', __name__)
 LIMITES_PERFIL_PACIENTE = {
     'nombre': 100, 'apellido': 100, 'direccion': 200, 'telefono': 20,
     'obraSocial': 100, 'historial_medico': 5000,
 }
+# Límites de intentos: guardados en la base para que valgan con varios procesos del servidor.
+VENTANA_LOGIN = timedelta(minutes=15)
+MAX_FALLIDOS_LOGIN_EMAIL, MAX_FALLIDOS_LOGIN_IP = 5, 20
+VENTANA_REGISTRO, MAX_REGISTROS_POR_IP = timedelta(hours=1), 5
+MENSAJE_LIMITE_LOGIN = (
+    'Hiciste muchos intentos para entrar. Esperá 15 minutos y probá de nuevo. '
+    'Si no recordás la contraseña, tocá "¿Olvidaste tu contraseña?".'
+)
+MENSAJE_TELEFONO = 'Escribí el teléfono con código de área, sin 0 ni 15. Por ejemplo: 261 555 1234.'
+MAX_TELEFONO_ESCRITO = 40
+
+
+def normalizar_telefono(telefono):
+    """Celular argentino de 10 dígitos (área + número), o None si no se puede armar.
+
+    Misma regla que enlaceWhatsapp en frontend/src/api.js: acepta +54, 9, el 0 del área y el 15.
+    """
+    digitos = re.sub(r'\D', '', telefono)
+    if digitos.startswith('54'):
+        digitos = digitos[2:]
+    if digitos.startswith('9'):
+        digitos = digitos[1:]
+    if digitos.startswith('0'):
+        digitos = digitos[1:]
+    if len(digitos) == 12:
+        quince = next((i for i in (2, 3, 4) if digitos[i:i + 2] == '15'), None)
+        if quince is not None:
+            digitos = digitos[:quince] + digitos[quince + 2:]
+    return digitos if len(digitos) == 10 else None
+
+
+def _identidad(texto):
+    # Corregir mayúsculas o espacios no cambia a la persona: no hace falta volver a verificarla.
+    return ' '.join((texto or '').split()).casefold()
+
+
+def _validar_telefono(data):
+    """Deja en data el teléfono normalizado. Devuelve el mensaje de error o None."""
+    telefono = data.get('telefono')
+    if telefono is None:
+        return None
+    if not isinstance(telefono, str) or len(telefono) > MAX_TELEFONO_ESCRITO:
+        return MENSAJE_TELEFONO
+    if not telefono.strip():
+        data['telefono'] = ''
+        return None
+    # Se guardan solo los 10 dígitos: igual que los datos existentes y fácil de usar en WhatsApp.
+    data['telefono'] = normalizar_telefono(telefono)
+    return None if data['telefono'] else MENSAJE_TELEFONO
 
 # ==========================================
 # 1. RUTA DE LOGIN
@@ -33,25 +88,28 @@ def login():
     if not isinstance(email, str) or not isinstance(password, str) or not email.strip() or not password:
         return jsonify({"error": "Faltan datos"}), 400
 
-    usuario = Usuario.query.filter_by(email=email.strip()).first()
+    email = normalizar_email(email)
+    ip = ip_cliente()
+    usuario = buscar_usuario_por_email(email)
+    # Por cuenta y no por lo escrito: "aná@..." y "ana@..." son la misma cuenta en MySQL.
+    clave = clave_de_cuenta(usuario, email)
+    if supera_limite('login_email', clave, MAX_FALLIDOS_LOGIN_EMAIL, VENTANA_LOGIN) or supera_limite(
+        'login_ip', ip, MAX_FALLIDOS_LOGIN_IP, VENTANA_LOGIN
+    ):
+        return jsonify({"error": MENSAJE_LIMITE_LOGIN}), 429
 
-    try:
-        valida = bool(usuario) and bcrypt.check_password_hash(usuario.password_hash, password)
-    except ValueError:
-        # bcrypt rechaza contraseñas de más de 72 bytes: nunca pueden coincidir.
-        valida = False
-    if not valida:
+    if not verificar_password(usuario, password):
+        registrar_intento('login_email', clave)
+        registrar_intento('login_ip', ip)
         return jsonify({"error": "Credenciales incorrectas"}), 401
+    borrar_intentos('login_email', clave)
 
     if usuario.estado == 'Suspendido':
         return jsonify({"error": "La cuenta está suspendida. Contactá a soporte."}), 403
 
-    token = create_access_token(
-        identity=str(usuario.id),
-        additional_claims={"rol": usuario.rol, "nivelPermiso": usuario.nivelPermiso}
-    )
+    tokens = crear_tokens(usuario)
 
-    return jsonify({"mensaje": "Login exitoso", "token": token, "rol": usuario.rol}), 200
+    return jsonify({"mensaje": "Login exitoso", **tokens, "rol": usuario.rol}), 200
 
 
 # ==========================================
@@ -63,6 +121,10 @@ def registrar_usuario():
     if not isinstance(data, dict):
         return jsonify({"error": "Datos inválidos"}), 400
 
+    ip = ip_cliente()
+    if supera_limite('registro_ip', ip, MAX_REGISTROS_POR_IP, VENTANA_REGISTRO):
+        return jsonify({"error": "Hiciste muchos intentos de crear una cuenta. Esperá una hora y probá de nuevo."}), 429
+
     nombre_completo = data.get('nombre')
     email = data.get('email')
     password = data.get('password')
@@ -71,7 +133,7 @@ def registrar_usuario():
     if not all(isinstance(valor, str) and valor.strip() for valor in (nombre_completo, email, password)):
         return jsonify({"error": "Todos los campos son obligatorios"}), 400
     nombre_completo = nombre_completo.strip()
-    email = email.strip()
+    email = normalizar_email(email)
     if len(email) > 120 or '@' not in email or len(nombre_completo) > 200:
         return jsonify({"error": "Revisá el nombre y el email"}), 400
     if rol not in ('paciente', 'enfermero'):
@@ -83,7 +145,9 @@ def registrar_usuario():
     if data.get('aceptaTerminos') is not True:
         return jsonify({"error": "Para crear la cuenta tenés que aceptar los Términos y condiciones y la Política de privacidad"}), 400
 
-    usuario_existente = Usuario.query.filter_by(email=email).first()
+    # Cuenta solo los pedidos completos: equivocarse en el formulario no bloquea a nadie.
+    registrar_intento('registro_ip', ip)
+    usuario_existente = buscar_usuario_por_email(email)
     if usuario_existente:
         return jsonify({"error": "El email ya está registrado"}), 400
 
@@ -167,6 +231,9 @@ def perfil_paciente():
         data = request.get_json(silent=True)
         if not isinstance(data, dict):
             return jsonify({"error": "Datos inválidos"}), 400
+        mensaje_telefono = _validar_telefono(data)
+        if mensaje_telefono:
+            return jsonify({"error": mensaje_telefono}), 400
         if paciente:
             coordenadas = ('latitud', 'longitud')
             for campo in coordenadas:
@@ -208,7 +275,10 @@ def perfil_paciente():
             paciente.apellido = data.get('apellido', paciente.apellido)
             paciente.direccion = data.get('direccion', paciente.direccion)
             paciente.telefono = data.get('telefono', paciente.telefono)
-            paciente.historial_medico = data.get('historial_medico', paciente.historial_medico)
+            # Solo si viene en el pedido: así cambiar el teléfono no depende de poder leer el historial.
+            # Si el guardado no se puede descifrar, un campo vacío no lo pisa (se puede recuperar).
+            if 'historial_medico' in data and not (paciente.historial_ilegible() and not data['historial_medico']):
+                paciente.historial_medico = data['historial_medico']
             paciente.obraSocial = data.get('obraSocial', paciente.obraSocial)
             paciente.latitud = data.get('latitud', paciente.latitud)
             paciente.longitud = data.get('longitud', paciente.longitud)
@@ -254,6 +324,9 @@ def perfil_enfermero():
             return jsonify({'error': 'Datos inválidos'}), 400
         if not enfermero:
             return jsonify({'error': 'Perfil profesional no encontrado'}), 404
+        mensaje_telefono = _validar_telefono(data)
+        if mensaje_telefono:
+            return jsonify({'error': mensaje_telefono}), 400
         for campo, limite in {'nombre': 100, 'apellido': 100, 'especialidad': 100, 'matricula': 50,
                               'telefono': 20, 'direccion': 200, 'ciudad': 100}.items():
             if campo != 'matricula' and data.get(campo) is None:
@@ -303,13 +376,24 @@ def perfil_enfermero():
         if direccion_cambiada and not any(campo in data for campo in coordenadas):
             data.update(latitud=None, longitud=None)
         if enfermero:
+            # La matrícula se verifica contra el nombre: cambiar la identidad exige revisarla de nuevo.
+            identidad_cambiada = any(
+                campo in data and _identidad(data[campo]) != _identidad(getattr(enfermero, campo))
+                for campo in ('nombre', 'apellido')
+            )
             enfermero.nombre = data.get('nombre', enfermero.nombre)
             enfermero.apellido = data.get('apellido', enfermero.apellido)
             enfermero.especialidad = data.get('especialidad', enfermero.especialidad)
             nueva_matricula = data.get('matricula', enfermero.matricula)
-            if nueva_matricula != enfermero.matricula:
-                # Una matrícula distinta tiene que volver a validarse (HU9).
+            if nueva_matricula != enfermero.matricula or (
+                identidad_cambiada and (enfermero.verificado or enfermero.matricula_rechazada)
+            ):
+                # Una matrícula distinta (o con otro titular) tiene que volver a validarse (HU9).
                 enfermero.verificado = False
+                enfermero.matricula_rechazada = False
+            if enfermero.matricula_rechazada:
+                # Con la matrícula rechazada, guardar el perfil (el aviso pide corregir y guardar) la manda
+                # de nuevo a revisión: el motivo puede ser la especialidad u otro dato, no solo la matrícula.
                 enfermero.matricula_rechazada = False
             enfermero.matricula = nueva_matricula
             enfermero.telefono = data.get('telefono', enfermero.telefono)
@@ -381,10 +465,7 @@ def gestionar_horarios(horario_id=None):
         return jsonify({'error': 'Elegí un estado válido'}), 400
 
     if not (dia_semana and str_inicio and str_fin):
-        return jsonify({
-            "error": "Faltan datos requeridos",
-            "recibido": data
-        }), 400
+        return jsonify({'error': 'Completá el día, la hora de inicio y la hora de fin'}), 400
 
     try:
         # Función auxiliar para convertir múltiples formatos de hora
@@ -441,6 +522,25 @@ def gestionar_horarios(horario_id=None):
     }), 200 if horario else 201
 
 
+@usuario_bp.route('/perfil/enfermero/horarios/<int:horario_id>', methods=['DELETE'])
+@jwt_required()
+def eliminar_horario(horario_id):
+    """Quita una franja de la agenda; los turnos ya pedidos no cambian."""
+    enfermero = Enfermero.query.filter_by(usuario_id=int(get_jwt_identity())).first()
+    if not enfermero:
+        return jsonify({'error': 'Enfermero no encontrado'}), 404
+    horario = Disponibilidad.query.filter_by(id=horario_id, enfermero_id=enfermero.id).first()
+    if not horario:
+        return jsonify({'error': 'Horario no encontrado'}), 404
+    try:
+        db.session.delete(horario)
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        return jsonify({'error': 'No se pudo eliminar el horario. Intentá nuevamente.'}), 500
+    return jsonify({'mensaje': 'Horario eliminado', 'id': horario_id}), 200
+
+
 # ==========================================
 # 6. OBTENER TODOS LOS ENFERMEROS (Incluye Horarios)
 # ==========================================
@@ -452,10 +552,8 @@ def obtener_enfermeros():
     ).all()
     lista_enfermeros = []
     for enfermero in enfermeros_db:
-        datos = enfermero.to_dict()
-        datos['id'] = enfermero.usuario_id
-        datos['usuario_id'] = enfermero.usuario_id
-        datos['email'] = enfermero.usuario.email
+        # Público y sin login: nada de email, teléfono, dirección ni ubicación exacta.
+        datos = enfermero.to_dict_publico()
         # Se adjunta la lista de disponibilidades/horarios del enfermero
         datos['horarios'] = [d.to_dict() for d in enfermero.disponibilidades]
         lista_enfermeros.append(datos)
@@ -537,19 +635,56 @@ def buscar_pacientes_con_solicitudes():
 @usuario_bp.route('/usuarios/<int:id>', methods=['GET'])
 @jwt_required()
 def obtener_usuario_por_id(id):
-    usuario = Usuario.query.get(id)
+    visitante = db.session.get(Usuario, int(get_jwt_identity()))
+    if not visitante:
+        return jsonify({"error": "La sesión no corresponde a un usuario existente"}), 401
+    usuario = db.session.get(Usuario, id)
     if not usuario:
         return jsonify({"error": "Usuario no encontrado"}), 404
 
-    datos = usuario.to_dict()
-    
-    if usuario.rol == 'enfermero':
-        enfermero = Enfermero.query.filter_by(usuario_id=id).first()
-        if enfermero:
-            datos.update(enfermero.to_dict())
-            datos['horarios'] = [d.to_dict() for d in enfermero.disponibilidades]
-            
+    if visitante.id == usuario.id or es_administrador_activo(visitante):
+        # La cuenta propia y los administradores ven el perfil completo (con email y rol).
+        datos = usuario.to_dict()
+        datos['estado'] = usuario.estado
+        datos['eliminado'] = bool(usuario.eliminado)
+        if usuario.perfil_enfermero:
+            datos.update(usuario.perfil_enfermero.to_dict())
+            datos['horarios'] = [d.to_dict() for d in usuario.perfil_enfermero.disponibilidades]
+        elif usuario.perfil_paciente:
+            datos.update(usuario.perfil_paciente.to_dict())
+            if visitante.id != usuario.id:
+                # El historial médico es solo de su titular (y del enfermero que lo atiende).
+                datos.pop('historial_medico')
+                datos.pop('historialIlegible', None)
+        return jsonify(datos), 200
+
+    # Para el resto, solo el perfil público de un enfermero de la cartilla.
+    enfermero = consulta_enfermeros_visibles().filter(Enfermero.usuario_id == id).first()
+    if not enfermero:
+        return jsonify({"error": "Usuario no encontrado"}), 404
+    datos = enfermero.to_dict_publico()
+    datos['rol'] = 'enfermero'
+    datos['horarios'] = [d.to_dict() for d in enfermero.disponibilidades]
+    # El teléfono (WhatsApp) solo llega al paciente que tiene una atención aceptada con él.
+    datos['contacto_habilitado'] = contacto_habilitado(visitante, enfermero)
+    if datos['contacto_habilitado']:
+        datos['telefono'] = enfermero.telefono
     return jsonify(datos), 200
+
+
+def es_administrador_activo(usuario):
+    return bool(
+        usuario and usuario.rol == 'administrador' and usuario.nivelPermiso
+        and not usuario.suspendido and not usuario.eliminado
+    )
+
+
+def contacto_habilitado(usuario, enfermero):
+    if usuario.rol != 'paciente' or not usuario.perfil_paciente:
+        return False
+    return db.session.query(SolicitudServicio.query.filter_by(
+        idPaciente=usuario.perfil_paciente.id, idEnfermero=enfermero.id, estado='Aceptada',
+    ).exists()).scalar()
 
 
 # ==========================================
@@ -563,6 +698,24 @@ def obtener_horarios_por_id(id):
         return jsonify([]), 200
     horarios = Disponibilidad.query.filter_by(enfermero_id=enfermero.id).all()
     return jsonify([h.to_dict() for h in horarios]), 200
+
+
+@usuario_bp.route('/enfermeros/ciudades', methods=['GET'])
+def ciudades_enfermeros():
+    """Zonas con profesionales en la cartilla, para el filtro por ciudad."""
+    ciudades = {}
+    for (ciudad,) in consulta_enfermeros_visibles().with_entities(Enfermero.ciudad).order_by(Enfermero.id):
+        ciudad = ' '.join((ciudad or '').split())
+        if ciudad:
+            # "Godoy Cruz" y "godoy cruz" son la misma zona: queda la primera forma escrita.
+            ciudades.setdefault(_clave_orden(ciudad), ciudad)
+    return jsonify([ciudades[clave] for clave in sorted(ciudades)]), 200
+
+
+def _clave_orden(texto):
+    # Sin tildes ni mayúsculas: "Luján" se ordena como "Lujan" y no después de la "z".
+    sin_tildes = unicodedata.normalize('NFKD', texto).encode('ascii', 'ignore').decode('ascii')
+    return sin_tildes.casefold()
 
 
 # ==========================================
@@ -610,9 +763,10 @@ def buscar_enfermeros():
             return jsonify({'error': 'La ubicación debe incluir latitud y longitud numéricas'}), 400
         if not (-90 <= origen[0] <= 90 and -180 <= origen[1] <= 180):
             return jsonify({'error': 'La ubicación no es válida'}), 400
-    radio_km = request.args.get('radio_km', type=float)
+    # Solo kilómetros enteros: con decimales se podría ir achicando el radio hasta ubicar a alguien.
+    radio_km = request.args.get('radio_km', type=int)
     if 'radio_km' in request.args and (radio_km is None or not 0 < radio_km <= 500):
-        return jsonify({'error': 'El radio debe estar entre 0 y 500 km'}), 400
+        return jsonify({'error': 'El radio tiene que ser un número entero de kilómetros entre 1 y 500'}), 400
     if radio_km is not None and origen is None:
         return jsonify({'error': 'Para filtrar por radio indicá tu ubicación'}), 400
 
@@ -625,8 +779,8 @@ def buscar_enfermeros():
                 Enfermero.nombre.ilike(patron),
                 Enfermero.apellido.ilike(patron),
                 Enfermero.especialidad.ilike(patron),
+                # Sin la dirección: buscarla permitiría confirmar dónde vive un profesional.
                 Enfermero.ciudad.ilike(patron),
-                Enfermero.direccion.ilike(patron)
             )
         )
 
@@ -659,11 +813,11 @@ def buscar_enfermeros():
     query = query.distinct()
 
     def serializar(enf, distancia=None):
-        datos_enf = enf.to_dict()
-        datos_enf['email'] = enf.usuario.email if enf.usuario else None
+        datos_enf = enf.to_dict_publico()
         datos_enf['horarios'] = [d.to_dict() for d in enf.disponibilidades]
         if origen is not None:
-            datos_enf['distancia_km'] = None if distancia is None else round(distancia, 1)
+            # En kilómetros enteros: desde varios puntos, decimales permitirían triangular el domicilio.
+            datos_enf['distancia_km'] = None if distancia is None else round(distancia)
         return datos_enf
 
     if origen is None:
@@ -682,7 +836,12 @@ def buscar_enfermeros():
     for enf in query.all():
         distancia = None
         if enf.latitud is not None and enf.longitud is not None:
-            distancia = distancia_km(origen[0], origen[1], enf.latitud, enf.longitud)
+            # Con la misma ubicación aproximada que se publica (B2): distancia, orden y radio
+            # no pueden revelar más que el punto que ya muestra el mapa.
+            distancia = distancia_km(
+                origen[0], origen[1],
+                round(enf.latitud, DECIMALES_UBICACION_PUBLICA), round(enf.longitud, DECIMALES_UBICACION_PUBLICA),
+            )
         if radio_km is not None and (distancia is None or distancia > radio_km):
             continue
         candidatos.append((distancia, enf))

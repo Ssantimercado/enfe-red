@@ -76,7 +76,9 @@ class AlineacionTest(unittest.TestCase):
         self.assertEqual(respuesta.status_code, 200)
         enfermeros = respuesta.json['enfermeros']
         self.assertEqual([e['nombre'] for e in enfermeros], ['Cerca', 'Lejos', 'Sin ubicación'])
-        self.assertAlmostEqual(enfermeros[0]['distancia_km'], 4.0, delta=0.5)
+        # En km enteros y con la ubicación aproximada (2 decimales), como el punto del mapa.
+        self.assertIsInstance(enfermeros[0]['distancia_km'], int)
+        self.assertAlmostEqual(enfermeros[0]['distancia_km'], 4, delta=1)
         self.assertGreater(enfermeros[1]['distancia_km'], 150)
         self.assertIsNone(enfermeros[2]['distancia_km'])
 

@@ -36,6 +36,25 @@ def listarNotificaciones(idUsuario):
     return jsonify([notificacion.to_dict() for notificacion in notificaciones]), 200
 
 
+@notificacion_bp.put('/notificaciones/leer-todas')
+@jwt_required()
+def marcarTodasLeidas():
+    """Marca como leídas todas las notificaciones pendientes del propio usuario."""
+    usuario = _usuario_actual()
+    if not usuario:
+        return jsonify(error='La sesión no corresponde a un usuario existente'), 401
+    try:
+        actualizadas = Notificacion.query.filter_by(idUsuario=usuario.id, leida=False).update(
+            {'leida': True}, synchronize_session=False,
+        )
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.exception('No se pudieron marcar las notificaciones como leídas')
+        return jsonify(error='No se pudieron marcar las notificaciones. Intentá nuevamente.'), 500
+    return jsonify(mensaje='Notificaciones leídas', actualizadas=actualizadas), 200
+
+
 @notificacion_bp.put('/notificaciones/<int:idNotificacion>/leer')
 @jwt_required()
 def marcarNotificacionLeida(idNotificacion):

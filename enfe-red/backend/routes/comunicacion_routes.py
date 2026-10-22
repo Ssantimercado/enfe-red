@@ -13,11 +13,12 @@ from models.solicitud_models import SolicitudServicio
 from models.calificacion_models import Calificacion
 from models.mensaje_models import Mensaje
 from models.notificacion_models import notificar
+from services.turnos import ahora_local, vencer_solicitudes
 
 
 comunicacion_bp = Blueprint('comunicacion', __name__)
 # SCRUM-62.1: el historial reúne las solicitudes ya cerradas.
-ESTADOS_HISTORIAL = ('Realizada', 'Rechazada', 'Cancelada')
+ESTADOS_HISTORIAL = ('Realizada', 'Rechazada', 'Cancelada', 'Vencida')
 MAX_CONTENIDO = 2000
 
 
@@ -31,7 +32,7 @@ def _usuario_actual():
 @comunicacion_bp.get('/usuarios/<int:idUsuario>/historial')
 @jwt_required()
 def historialSolicitudes(idUsuario):
-    """SCRUM-62.1: solicitudes cerradas (Realizada, Rechazada o Cancelada) del propio usuario."""
+    """SCRUM-62.1: solicitudes cerradas (Realizada, Rechazada, Cancelada o Vencida) del propio usuario."""
     usuario = _usuario_actual()
     if not usuario:
         return jsonify(error='La sesión no corresponde a un usuario existente'), 401
@@ -44,10 +45,14 @@ def historialSolicitudes(idUsuario):
     )
     if usuario.rol == 'paciente':
         consulta = consulta.join(Paciente).filter(Paciente.usuario_id == usuario.id)
+        propias = SolicitudServicio.paciente.has(Paciente.usuario_id == usuario.id)
     elif usuario.rol == 'enfermero':
         consulta = consulta.join(Enfermero).filter(Enfermero.usuario_id == usuario.id)
+        propias = SolicitudServicio.enfermero.has(Enfermero.usuario_id == usuario.id)
     else:
         return jsonify(error='Este rol no tiene historial de servicios'), 403
+    # Las Pendientes cuyo turno ya pasó se cierran como Vencidas antes de armar el historial.
+    vencer_solicitudes(ahora_local(), propias)
     solicitudes = consulta.filter(
         SolicitudServicio.estado.in_(ESTADOS_HISTORIAL),
     ).order_by(
@@ -106,7 +111,14 @@ def mensajesSolicitud(idSolicitud):
         if request.method == 'GET':
             # Los participantes conservan acceso al registro después del cierre;
             # únicamente el envío exige que el servicio esté Aceptado.
-            mensajes = Mensaje.query.filter_by(idSolicitud=idSolicitud).order_by(Mensaje.idMensaje).all()
+            consulta_mensajes = Mensaje.query.filter_by(idSolicitud=idSolicitud)
+            desde = request.args.get('desde')
+            if desde is not None:
+                # ?desde=<idMensaje> trae solo los posteriores: el chat consulta seguido sin bajar todo.
+                if not desde.isdigit() or int(desde) > 2147483647:
+                    return jsonify(error='El parámetro desde tiene que ser el número de un mensaje'), 400
+                consulta_mensajes = consulta_mensajes.filter(Mensaje.idMensaje > int(desde))
+            mensajes = consulta_mensajes.order_by(Mensaje.idMensaje).all()
             return jsonify([mensaje.to_dict() for mensaje in mensajes]), 200
 
         if solicitud.estado != 'Aceptada':

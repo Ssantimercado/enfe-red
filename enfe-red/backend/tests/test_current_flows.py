@@ -11,9 +11,10 @@ from extensions import bcrypt
 from models.usuario_models import Disponibilidad, Enfermero, Paciente, Usuario
 from models.servicio_models import Servicio
 from models.solicitud_models import SolicitudServicio
-from routes.auth_routes import auth_bp, codigos_recuperacion, limites_recuperacion
+from models.acceso_models import CodigoRecuperacion, ahora_utc
+from routes.auth_routes import auth_bp, hash_codigo
 from routes.usuario_routes import usuario_bp
-from seed_sprint3 import inicializar_bd_sprint3
+from seed_sprint3 import cargar_datos_demo
 
 
 class CurrentFlowsTest(unittest.TestCase):
@@ -47,15 +48,21 @@ class CurrentFlowsTest(unittest.TestCase):
         db.session.commit()
         self.headers = {'Authorization': 'Bearer ' + create_access_token(identity='1')}
         self.client = self.app.test_client()
-        codigos_recuperacion.clear()
-        limites_recuperacion.clear()
 
     def tearDown(self):
         db.session.remove()
         db.drop_all()
         self.context.pop()
-        codigos_recuperacion.clear()
-        limites_recuperacion.clear()
+
+    def codigo_guardado(self, email):
+        usuario = Usuario.query.filter_by(email=email).one()
+        return CodigoRecuperacion.query.filter_by(usuario_id=usuario.id).first()
+
+    def pedir_codigo(self, email, numero=246810):
+        with patch('routes.auth_routes.secrets.randbelow', return_value=numero):
+            respuesta = self.client.post('/api/recuperar-password', json={'email': email})
+        self.assertEqual(respuesta.status_code, 200)
+        return f'{numero:06d}'
 
     def test_busqueda_solo_muestra_disponibles_y_verificados(self):
         ocultos = Enfermero.query.filter(Enfermero.matricula.in_(('MAT-0', 'MAT-1'))).all()
@@ -108,7 +115,10 @@ class CurrentFlowsTest(unittest.TestCase):
             for _ in range(4):
                 self.client.post('/api/recuperar-password', json={'email': email})
         # El cuarto pedido de la ventana no genera código nuevo: sigue vigente el tercero.
-        self.assertEqual(codigos_recuperacion[email]['codigo'], '333333')
+        registro = self.codigo_guardado(email)
+        self.assertEqual(registro.codigo_hash, hash_codigo(registro.usuario_id, '333333'))
+        # El código se guarda hasheado, nunca en claro.
+        self.assertNotIn('333333', registro.codigo_hash)
 
     def test_pedir_otro_codigo_no_reinicia_los_intentos_fallidos(self):
         email = 'nurse0@test.local'
@@ -126,8 +136,7 @@ class CurrentFlowsTest(unittest.TestCase):
 
     def test_reset_valida_la_nueva_contrasena_sin_consumir_el_codigo(self):
         email = 'nurse0@test.local'
-        self.client.post('/api/recuperar-password', json={'email': email})
-        codigo = codigos_recuperacion[email]['codigo']
+        codigo = self.pedir_codigo(email)
         corta = self.client.post('/api/reset-password', json=dict(email=email, codigo=codigo, nueva_password='corta'))
         self.assertEqual(corta.status_code, 400)
         valida = self.client.post('/api/reset-password', json=dict(email=email, codigo=codigo, nueva_password='nueva-clave'))
@@ -469,7 +478,7 @@ class CurrentFlowsTest(unittest.TestCase):
         nurse.latitud, nurse.longitud = -32.89, -68.84
         db.session.commit()
         response = self.client.put('/api/perfil/enfermero', headers=self.headers,
-                                   json={'direccion': 'Casa 123', 'ciudad': 'Mendoza', 'telefono': '123'})
+                                   json={'direccion': 'Casa 123', 'ciudad': 'Mendoza', 'telefono': '261 555 1234'})
         self.assertEqual(response.status_code, 200)
         self.assertEqual((response.json['latitud'], response.json['longitud']), (-32.89, -68.84))
 
@@ -492,8 +501,9 @@ class CurrentFlowsTest(unittest.TestCase):
         user = Usuario.query.filter_by(email='ana@test.local').one()
         headers = {'Authorization': 'Bearer ' + create_access_token(identity=str(user.id))}
         response = self.client.put('/api/perfil/paciente', headers=headers,
-                                   json={'nombre': 'Ana', 'apellido': '', 'telefono': '123'})
+                                   json={'nombre': 'Ana', 'apellido': '', 'telefono': '0261 15 555-1234'})
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json['telefono'], '2615551234')
         self.assertEqual(response.json['apellido'], '')
 
     def test_invalid_matricula_is_400(self):
@@ -513,8 +523,7 @@ class CurrentFlowsTest(unittest.TestCase):
 
     def test_recovery_changes_password_and_consumes_code(self):
         email = 'nurse0@test.local'
-        self.assertEqual(self.client.post('/api/recuperar-password', json={'email': email}).status_code, 200)
-        code = codigos_recuperacion[email]['codigo']
+        code = self.pedir_codigo(email)
         payload = dict(email=email, codigo=code, nueva_password='nueva-clave')
         self.assertEqual(self.client.post('/api/reset-password', json=payload).status_code, 200)
         self.assertEqual(self.client.post('/api/reset-password', json=payload).status_code, 400)
@@ -523,14 +532,20 @@ class CurrentFlowsTest(unittest.TestCase):
 
     def test_expired_and_wrong_recovery_codes_do_not_change_password(self):
         email = 'nurse0@test.local'
-        codigos_recuperacion[email] = dict(codigo='123456', vence=datetime.now(timezone.utc) - timedelta(seconds=1), intentos=0)
-        payload = dict(email=email, codigo='123456', nueva_password='nueva')
+        usuario = Usuario.query.filter_by(email=email).one()
+        db.session.add(CodigoRecuperacion(usuario_id=usuario.id, codigo_hash=hash_codigo(usuario.id, '123456'),
+                                          vence=ahora_utc() - timedelta(seconds=1), intentos=0))
+        db.session.commit()
+        payload = dict(email=email, codigo='123456', nueva_password='nueva-clave')
         self.assertEqual(self.client.post('/api/reset-password', json=payload).status_code, 400)
-        codigos_recuperacion[email] = dict(codigo='123456', vence=datetime.now(timezone.utc) + timedelta(minutes=1), intentos=0)
+        self.assertIsNone(self.codigo_guardado(email))
+        db.session.add(CodigoRecuperacion(usuario_id=usuario.id, codigo_hash=hash_codigo(usuario.id, '123456'),
+                                          vence=ahora_utc() + timedelta(minutes=1), intentos=0))
+        db.session.commit()
         payload['codigo'] = '000000'
         for _ in range(5):
             self.assertEqual(self.client.post('/api/reset-password', json=payload).status_code, 400)
-        self.assertNotIn(email, codigos_recuperacion)
+        self.assertIsNone(self.codigo_guardado(email))
         self.assertEqual(self.client.post('/api/login', json=dict(email=email, password='original')).status_code, 200)
 
     def test_requesting_new_code_invalidates_previous_code(self):
@@ -547,19 +562,19 @@ class CurrentFlowsTest(unittest.TestCase):
         known = self.client.post('/api/recuperar-password', json={'email': 'nurse0@test.local'})
         unknown = self.client.post('/api/recuperar-password', json={'email': 'unknown@test.local'})
         self.assertEqual(known.json, unknown.json)
-        self.assertNotIn('unknown@test.local', codigos_recuperacion)
+        self.assertEqual(CodigoRecuperacion.query.count(), 1)
 
     def test_invalid_json_inputs(self):
         for endpoint in ('/api/reset-password', '/api/recuperar-password', '/api/perfil/enfermero/horarios'):
             self.assertEqual(self.client.post(endpoint, json=[], headers=self.headers).status_code, 400)
 
     def test_seed_preserves_existing_password(self):
-        inicializar_bd_sprint3()
+        self.assertEqual(cargar_datos_demo(), 4)
         user = Usuario.query.filter_by(email='laura.gomez@test.com').one()
         changed = bcrypt.generate_password_hash('conservar').decode()
         user.password_hash = changed
         db.session.commit()
-        inicializar_bd_sprint3()
+        self.assertEqual(cargar_datos_demo(), 0)
         self.assertEqual(user.password_hash, changed)
 
 

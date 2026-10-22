@@ -1,0 +1,15 @@
+# Nada de secretos ni archivos locales dentro de la imagen.
+.env
+.env.*
+!.env.example
+venv/
+.venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+tests/
+instance/
+backups/
+*.sql
+*.sql.gz
+.git

@@ -87,12 +87,16 @@ class NotificacionesTest(unittest.TestCase):
         self.assertEqual(aviso['tipo'], 'rechazada')
         self.assertIn('rechazó', aviso['mensaje'])
 
-    def test_otras_transiciones_no_generan_alertas(self):
+    def test_cancelar_avisa_al_enfermero_y_un_intento_fallido_no_genera_alertas(self):
         cancelada = self.solicitud()
         self.client.put(f'/api/solicitudes/{cancelada}/cancelar', headers=self.headers(11))
+        [aviso] = self.notificaciones(21)
+        self.assertEqual((aviso['tipo'], aviso['idSolicitud']), ('cancelada', cancelada))
+        self.assertEqual(aviso['mensaje'], 'Ana Pérez canceló el turno de Curaciones del 10/01 a las 10:30.')
+        # Finalizar antes del turno devuelve 409 y no avisa a nadie.
         finalizada = self.solicitud(estado='Aceptada')
         self.client.put(f'/api/solicitudes/{finalizada}/finalizar', headers=self.headers(21))
-        self.assertEqual(Notificacion.query.count(), 0)
+        self.assertEqual(Notificacion.query.count(), 1)
 
     def test_transicion_rechazada_no_deja_alerta(self):
         id_solicitud = self.solicitud(estado='Rechazada')

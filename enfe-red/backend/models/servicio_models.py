@@ -1,5 +1,8 @@
 from database import db
 
+# Minutos que ocupa un turno si el servicio no dice otra cosa (bases existentes incluidas).
+DURACION_POR_DEFECTO = 60
+
 
 class Servicio(db.Model):
     """Tipo de atención y precio estimado del catálogo de servicios."""
@@ -13,6 +16,9 @@ class Servicio(db.Model):
     tipoServicio = db.Column(db.String(100), nullable=False)
     descripcion = db.Column(db.String(255), nullable=True)
     precioEstimado = db.Column(db.Numeric(10, 2), nullable=True)
+    # Define el fin del turno para detectar superposiciones y validar la agenda del enfermero.
+    duracionMinutos = db.Column(db.Integer, nullable=False, default=DURACION_POR_DEFECTO,
+                                server_default=str(DURACION_POR_DEFECTO))
 
     def to_dict(self):
         return {
@@ -24,4 +30,5 @@ class Servicio(db.Model):
                 format(self.precioEstimado, '.2f')
                 if self.precioEstimado is not None else None
             ),
+            'duracionMinutos': self.duracionMinutos or DURACION_POR_DEFECTO,
         }

@@ -1,4 +1,5 @@
 """HU12: búsqueda asistida por IA con dos niveles (Gemini y reglas). Sin llamadas reales."""
+import http.client
 import json
 import logging
 import unittest
@@ -106,6 +107,15 @@ class ProveedoresTest(unittest.TestCase):
             filtros, fuente = ia_busqueda.interpretar(PEDIDO, PERMITIDOS, 'gemini')
         self.assertEqual((fuente, filtros['servicio']), ('reglas', 'Inyecciones'))
 
+    @patch.dict('os.environ', {'GEMINI_API_KEY': 'clave-de-prueba'})
+    def test_si_se_corta_la_conexion_usa_las_reglas(self):
+        # Cortes de red que no son URLError: antes terminaban en un 500.
+        for falla in (ConnectionResetError(), http.client.RemoteDisconnected(), http.client.IncompleteRead(b'')):
+            with self.subTest(falla=type(falla).__name__):
+                with patch('services.ia_busqueda.urllib.request.urlopen', side_effect=falla):
+                    filtros, fuente = ia_busqueda.interpretar(PEDIDO, PERMITIDOS, 'gemini')
+                self.assertEqual((fuente, filtros['servicio']), ('reglas', 'Inyecciones'))
+
     @patch.dict('os.environ', {'GEMINI_API_KEY': ''})
     def test_gemini_sin_clave_usa_las_reglas(self):
         self.assertEqual(ia_busqueda.interpretar(PEDIDO, PERMITIDOS, 'gemini')[1], 'reglas')
@@ -172,6 +182,14 @@ class EndpointTest(unittest.TestCase):
         self.assertEqual(self.pedir('   ').status_code, 400)
         self.assertEqual(self.pedir('x' * 301).status_code, 400)
         self.assertEqual(self.client.post('/api/ia/interpretar-busqueda', json={'texto': 'hola'}).status_code, 401)
+
+    @patch.dict('os.environ', {'IA_PROVEEDOR': 'gemini', 'GEMINI_API_KEY': 'clave-de-prueba'})
+    def test_si_gemini_corta_la_conexion_responde_con_las_reglas(self):
+        with patch('services.ia_busqueda.urllib.request.urlopen', side_effect=ConnectionResetError()):
+            respuesta = self.pedir('insulina para mi abuela el martes en Godoy Cruz')
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.json['fuente'], 'reglas')
+        self.assertEqual(respuesta.json['filtros']['servicio'], 'Inyecciones')
 
     def test_limite_de_uso(self):
         for _ in range(10):

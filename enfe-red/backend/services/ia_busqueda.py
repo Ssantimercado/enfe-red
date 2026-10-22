@@ -6,11 +6,11 @@
 La IA solo completa filtros de la cartilla: nunca da indicaciones médicas. El texto se anonimiza
 antes de enviarse, no se guarda y no se escribe en los logs.
 """
+import http.client
 import json
 import os
 import re
 import unicodedata
-import urllib.error
 import urllib.request
 
 DIAS = ('Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo')
@@ -109,10 +109,12 @@ def _post_json(url, cuerpo, headers):
     datos = json.dumps(cuerpo).encode('utf-8')
     req = urllib.request.Request(url, data=datos, method='POST',
                                  headers={'Content-Type': 'application/json', **headers})
+    # OSError cubre URLError, timeouts y cortes de conexión (ConnectionResetError, RemoteDisconnected);
+    # HTTPException, respuestas cortadas a la mitad. Cualquiera de ellos pasa a las reglas.
     try:
         with urllib.request.urlopen(req, timeout=TIMEOUT_SEGUNDOS) as respuesta:
             return json.loads(respuesta.read().decode('utf-8'))
-    except (urllib.error.URLError, TimeoutError, ValueError) as error:
+    except (OSError, http.client.HTTPException, ValueError) as error:
         raise IAError(type(error).__name__) from error
 
 
