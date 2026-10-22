@@ -14,6 +14,7 @@ from routes.comunicacion_routes import comunicacion_bp
 from routes.notificacion_routes import notificacion_bp
 from routes.resena_routes import resena_bp
 from routes.admin_routes import admin_bp
+from routes.ia_routes import ia_bp
 from schema_sprint4 import inicializar_bd_sprint4, inicializar_catalogo_servicios
 from schema_sprint6 import inicializar_bd_sprint6
 from schema_legal import inicializar_bd_legal
@@ -67,6 +68,7 @@ app.register_blueprint(comunicacion_bp, url_prefix='/api')
 app.register_blueprint(notificacion_bp, url_prefix='/api')
 app.register_blueprint(resena_bp, url_prefix='/api')
 app.register_blueprint(admin_bp, url_prefix='/api')
+app.register_blueprint(ia_bp, url_prefix='/api')
 registrar_comandos(app)
 
 # Prepara el esquema de solicitudes antes de consultar/sembrar los perfiles existentes.

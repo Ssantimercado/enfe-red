@@ -2804,3 +2804,29 @@
   font: inherit;
 }
 .nearby-search .notice { flex-basis: 100%; margin: 0; }
+
+/* HU12: búsqueda asistida por IA */
+.assisted-search { margin: 0 0 18px; padding: 22px 24px; }
+.assisted-search h2 { display: flex; align-items: center; gap: 10px; margin: 0 0 6px; font-size: 20px; }
+.assisted-search-help { margin: 0 0 12px; color: var(--muted); font-size: 16px; }
+.assisted-search textarea {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 70px;
+  padding: 12px 14px;
+  border: 1px solid #8399a6;
+  border-radius: 12px;
+  font: inherit;
+  font-size: 17px;
+  resize: vertical;
+}
+.assisted-search textarea:focus { outline: 3px solid rgb(22 123 181 / 35%); border-color: var(--blue); }
+.assisted-search-actions { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 12px; }
+.assisted-search-notice { margin: 0; color: var(--muted); font-size: 14px; max-width: 640px; }
+.assisted-search-actions .button { flex-shrink: 0; }
+.assisted-search-result { margin-top: 14px; font-size: 16px; }
+.assisted-search-result p { margin: 0 0 8px; }
+.assisted-search-source { color: var(--muted); font-size: 14px; }
+@media (max-width: 700px) {
+  .assisted-search-actions { flex-direction: column; align-items: stretch; }
+}

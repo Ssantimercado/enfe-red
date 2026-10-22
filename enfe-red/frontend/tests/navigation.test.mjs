@@ -1579,3 +1579,72 @@ test('ordenar por cercanía envía la ubicación aproximada y permite limitar la
     delete globalThis.navigator.geolocation;
   }
 });
+
+// HU12: búsqueda asistida en lenguaje natural.
+test('la búsqueda asistida convierte el pedido en filtros editables', async () => {
+  session('paciente');
+  const original = globalThis.fetch;
+  const busquedas = [];
+  let pedido;
+  globalThis.fetch = async (url, options = {}) => {
+    const ruta = String(url);
+    if (ruta.endsWith('/ia/interpretar-busqueda')) {
+      pedido = JSON.parse(options.body);
+      return response({
+        fuente: 'gemini',
+        filtros: { especialidad: 'Geriatría', ciudad: 'Godoy Cruz', dia_semana: 'Martes',
+          hora_desde: '14:00', hora_hasta: '18:00', servicio: 'Inyecciones', aclaracion: null },
+      });
+    }
+    if (ruta.includes('/enfermeros/buscar')) {
+      busquedas.push(new URL(ruta).searchParams);
+      return response({ enfermeros: [], total_resultados: 0, total_paginas: 0 });
+    }
+    return original(url, options);
+  };
+  try {
+    await mount('/cartilla');
+    const campo = document.querySelector('#busqueda-asistida');
+    await typeTextArea(campo, 'insulina para mi mamá los martes a la tarde en Godoy Cruz');
+    await act(async () => campo.closest('form').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })));
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 300)));
+    assert.equal(pedido.texto, 'insulina para mi mamá los martes a la tarde en Godoy Cruz');
+    const ultima = busquedas.at(-1);
+    assert.deepEqual(
+      ['especialidad', 'ciudad', 'dia_semana', 'hora_desde', 'hora_hasta'].map((k) => ultima.get(k)),
+      ['Geriatría', 'Godoy Cruz', 'Martes', '14:00', '18:00'],
+    );
+    assert.match(document.body.textContent, /elegí el servicio Inyecciones/);
+    assert.match(document.body.textContent, /Interpretado con inteligencia artificial/);
+    assert.ok(button('Quitar filtro Godoy Cruz'));
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test('la búsqueda asistida avisa ante una urgencia y si falla deja los filtros manuales', async () => {
+  session('paciente');
+  const original = globalThis.fetch;
+  let falla = false;
+  globalThis.fetch = async (url, options = {}) => {
+    if (String(url).endsWith('/ia/interpretar-busqueda')) {
+      if (falla) return response({ error: 'Hiciste muchas búsquedas seguidas.' }, 429);
+      return response({ fuente: 'reglas', filtros: { aclaracion: 'Si es una urgencia, llamá al 107 o al servicio de emergencias de tu zona.' } });
+    }
+    return original(url, options);
+  };
+  try {
+    await mount('/cartilla');
+    const campo = document.querySelector('#busqueda-asistida');
+    const enviar = () => act(async () => campo.closest('form').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })));
+    await typeTextArea(campo, 'es urgente, se desmayó');
+    await enviar();
+    assert.match(document.body.textContent, /llamá al 107/);
+    assert.match(document.body.textContent, /No encontramos datos para filtrar/);
+    falla = true;
+    await enviar();
+    assert.match(document.querySelector('.assisted-search [role="alert"]').textContent, /Podés usar los filtros de abajo/);
+  } finally {
+    globalThis.fetch = original;
+  }
+});

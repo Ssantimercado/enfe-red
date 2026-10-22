@@ -3,12 +3,14 @@ import { Link, useSearchParams } from 'react-router-dom';
 import Avatar from './ui/Avatar';
 import Icon from './ui/Icon';
 import DirectoryFilters from './DirectoryFilters';
+import BusquedaAsistida from './BusquedaAsistida';
 import { formatoPuntuacion } from './SelectorEstrellas';
 import { requestApi as api, formatPrice, sesionActual } from '../api';
 const MapaEnfermeros = lazy(() => import('./MapaEnfermeros'));
 
 const FILTERS = [
   'especialidad',
+  'ciudad',
   'precio_min',
   'precio_max',
   'dia_semana',
@@ -185,6 +187,22 @@ export default function ListaEnfermeros() {
       { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 },
     );
   }
+  // HU12: reemplaza los filtros por los que interpretó la búsqueda asistida.
+  function aplicarBusquedaAsistida(filtros) {
+    setParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        FILTERS.forEach((key) => next.delete(key));
+        ['especialidad', 'ciudad', 'dia_semana', 'hora_desde', 'hora_hasta'].forEach((key) => {
+          if (filtros[key]) next.set(key, filtros[key]);
+        });
+        next.delete('q');
+        next.delete('page');
+        return next;
+      },
+      { replace: true },
+    );
+  }
   function quitarCercania() {
     setParams(
       (current) => {
@@ -232,6 +250,7 @@ export default function ListaEnfermeros() {
   const hasFilters = Boolean(query || active.length || cercania);
   const labels = {
     especialidad: filterValues.especialidad,
+    ciudad: filterValues.ciudad,
     precio_min: `Desde $${Number(filterValues.precio_min).toLocaleString('es-AR')}`,
     precio_max: `Hasta $${Number(filterValues.precio_max).toLocaleString('es-AR')}`,
     dia_semana: filterValues.dia_semana,
@@ -285,6 +304,7 @@ export default function ListaEnfermeros() {
           )}
         </button>}
       </div>
+      {!nurse && <BusquedaAsistida onAplicar={aplicarBusquedaAsistida} />}
       {!nurse && (
         <div className="nearby-search" role="group" aria-label="Buscar cerca de tu ubicación">
           {cercania ? (
