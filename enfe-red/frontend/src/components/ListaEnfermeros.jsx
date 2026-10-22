@@ -20,6 +20,9 @@ const FILTERS = [
 // HU3 "enfermeros cercanos": la ubicación del paciente ordena los resultados por distancia.
 const UBICACION = ['lat', 'lng', 'radio_km'];
 const RADIOS_KM = ['5', '10', '25', '50'];
+// El mapa junta todas las páginas del filtro (100 por pedido, el máximo del backend).
+const POR_PAGINA_MAPA = 100;
+const MAX_PAGINAS_MAPA = 10;
 const optionalNumber = (value) =>
   value == null || value === '' || !Number.isFinite(Number(value))
     ? null
@@ -40,6 +43,9 @@ export default function ListaEnfermeros() {
         : FILTERS.includes(key) || UBICACION.includes(key) || key === 'q' || key === 'page',
     ),
   ).toString();
+  const mapKey = new URLSearchParams(
+    [...new URLSearchParams(requestKey)].filter(([key]) => key !== 'page'),
+  ).toString();
   const cercania = !nurse && params.get('lat') && params.get('lng');
   const [ubicando, setUbicando] = useState(false);
   const [errorUbicacion, setErrorUbicacion] = useState('');
@@ -49,6 +55,8 @@ export default function ListaEnfermeros() {
     total_paginas: 0,
   });
   const [specialties, setSpecialties] = useState([]);
+  const [zonas, setZonas] = useState([]);
+  const [mapa, setMapa] = useState({ clave: null, personas: null });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
@@ -109,6 +117,9 @@ export default function ListaEnfermeros() {
         );
       })
       .catch(() => {});
+    api('/enfermeros/ciudades', { signal: controller.signal })
+      .then((lista) => setZonas(Array.isArray(lista) ? lista : []))
+      .catch(() => {});
     return () => controller.abort();
   }, [nurse]);
 
@@ -145,6 +156,35 @@ export default function ListaEnfermeros() {
       controller.abort();
     };
   }, [requestKey, page, retry, invalidRange, invalidHoursRange, nurse]);
+
+  // El mapa muestra a todos los que cumplen el filtro, no solo a los de la página actual.
+  useEffect(() => {
+    if (!showMap || (!nurse && (invalidRange || invalidHoursRange))) return undefined;
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      const ruta = nurse ? '/pacientes/solicitudes-activas' : '/enfermeros/buscar';
+      const personas = [];
+      try {
+        for (let pagina = 1; pagina <= MAX_PAGINAS_MAPA; pagina += 1) {
+          const search = new URLSearchParams(mapKey);
+          search.set('per_page', String(POR_PAGINA_MAPA));
+          search.set('page', String(pagina));
+          const resultado = await api(`${ruta}?${search}`, { signal: controller.signal });
+          personas.push(...((nurse ? resultado.pacientes : resultado.enfermeros) || []));
+          if (pagina >= (resultado.total_paginas || 0)) break;
+        }
+        if (!controller.signal.aborted) setMapa({ clave: mapKey, personas });
+      } catch {
+        // Si falla, el mapa sigue mostrando a los de la página actual.
+        if (!controller.signal.aborted) setMapa({ clave: mapKey, personas: null });
+      }
+    }, 250);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [showMap, mapKey, nurse, invalidRange, invalidHoursRange, retry]);
+  const personasMapa = mapa.clave === mapKey && mapa.personas ? mapa.personas : data.enfermeros;
 
   function update(key, value) {
     setParams(
@@ -365,6 +405,7 @@ export default function ListaEnfermeros() {
           <DirectoryFilters
             values={filterValues}
             specialties={specialties}
+            zonas={zonas}
             onChange={update}
             prefix="desktop"
           />
@@ -484,7 +525,7 @@ export default function ListaEnfermeros() {
                 <div className="results-map" ref={mapRef}>
                   <Suspense fallback={<p role="status">Cargando mapa…</p>}>
                     <MapaEnfermeros
-                      personas={data.enfermeros}
+                      personas={personasMapa}
                       tipoPersona={nurse ? 'paciente' : 'enfermero'}
                       selectedId={selected}
                       onSelect={setSelected}
@@ -494,7 +535,7 @@ export default function ListaEnfermeros() {
                   <p className="map-results-note">
                     {nurse
                       ? 'El mapa muestra únicamente ubicaciones que cada paciente eligió compartir y solo para enfermeros con una solicitud activa asignada.'
-                      : 'El mapa muestra los profesionales de esta página con ubicación informada.'}
+                      : 'El mapa muestra a todos los profesionales de esta búsqueda que informaron su zona. La ubicación es aproximada.'}
                   </p>
                 </div>
               )}
@@ -521,7 +562,7 @@ export default function ListaEnfermeros() {
                 <div className="results-map" ref={mapRef}>
                   <Suspense fallback={<p role="status">Cargando mapa…</p>}>
                     <MapaEnfermeros
-                      personas={data.enfermeros}
+                      personas={personasMapa}
                       tipoPersona={nurse ? 'paciente' : 'enfermero'}
                       selectedId={selected}
                       onSelect={setSelected}
@@ -531,7 +572,7 @@ export default function ListaEnfermeros() {
                   <p className="map-results-note">
                     {nurse
                       ? 'El mapa muestra únicamente ubicaciones que cada paciente eligió compartir y solo para enfermeros con una solicitud activa asignada.'
-                      : 'El mapa muestra los profesionales de esta página con ubicación informada.'}
+                      : 'El mapa muestra a todos los profesionales de esta búsqueda que informaron su zona. La ubicación es aproximada.'}
                   </p>
                 </div>
               )}
@@ -641,8 +682,9 @@ export default function ListaEnfermeros() {
                         )}
                         {distance !== null && (
                           <span>
-                            <Icon name="pin" size={14} />A {distance.toFixed(1)}{' '}
-                            km
+                            <Icon name="pin" size={14} />
+                            {/* El backend la manda en km enteros y aproximada, para no revelar el domicilio. */}
+                            {distance < 1 ? 'A menos de 1 km' : `A unos ${Math.round(distance)} km`}
                           </span>
                         )}
                       </div>
@@ -758,6 +800,7 @@ export default function ListaEnfermeros() {
             <DirectoryFilters
               values={draftFilters}
               specialties={specialties}
+              zonas={zonas}
               onChange={(key, value) =>
                 setDraftFilters((current) => ({ ...current, [key]: value }))
               }

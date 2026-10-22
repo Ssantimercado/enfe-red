@@ -33,8 +33,9 @@ export default function ModalCalificacion({
 
   function enviar(event) {
     event.preventDefault();
-    if (guardando || !estrellas || !palabras || palabras > MAX_PALABRAS) return;
-    onEnviar({ estrellas, comentario });
+    // Solo las estrellas son obligatorias: a muchas personas les cuesta escribir desde el celular.
+    if (guardando || !estrellas || palabras > MAX_PALABRAS) return;
+    onEnviar({ estrellas, comentario: comentario.trim() });
   }
 
   return (
@@ -61,14 +62,13 @@ export default function ModalCalificacion({
           disabled={guardando}
         />
         <label className="field">
-          Comentario (máximo {MAX_PALABRAS} palabras)
+          Comentario (opcional, hasta {MAX_PALABRAS} palabras)
           <textarea
             value={comentario}
             onChange={(event) => setComentario(event.target.value)}
             aria-describedby={`${id}-palabras`}
             maxLength={MAX_CARACTERES}
             readOnly={guardando}
-            required
           />
         </label>
         <p
@@ -90,7 +90,7 @@ export default function ModalCalificacion({
           <button
             className="button button-primary"
             type="submit"
-            disabled={guardando || !estrellas || !palabras || palabras > MAX_PALABRAS}
+            disabled={guardando || !estrellas || palabras > MAX_PALABRAS}
           >
             {guardando ? 'Guardando…' : 'Enviar calificación'}
           </button>

@@ -232,7 +232,7 @@ export default function HistorialServicios({ userId, nurse }) {
                         <p>
                           {nurse ? 'Reseña del paciente: ' : 'Tu calificación: '}
                           <EstrellasLectura valor={resena.estrellas} />
-                          <span> · {resena.comentario}</span>
+                          {resena.comentario && <span> · {resena.comentario}</span>}
                         </p>
                       ) : solicitud.estado !== 'Realizada' ? null : nurse ? (
                         <p className="filter-hint">El paciente todavía no dejó una reseña.</p>

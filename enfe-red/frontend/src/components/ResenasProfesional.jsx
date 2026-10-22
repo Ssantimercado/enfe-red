@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react';
 import { requestApi as api } from '../api';
+import DialogoMotivo from './DialogoMotivo';
 import Icon from './ui/Icon';
 import { EstrellasLectura, formatoPuntuacion } from './SelectorEstrellas';
+
+// Mismos límites y texto que el backend (POST /resenas/<id>/denunciar).
+const MOTIVO_MIN = 5;
+const MOTIVO_MAX = 300;
+const MENSAJE_MOTIVO = 'Contanos por qué querés denunciar esta reseña (entre 5 y 300 caracteres).';
 
 function respuestaValida(data) {
   return Array.isArray(data?.resenas) &&
@@ -28,6 +34,10 @@ export default function ResenasProfesional({ idEnfermero }) {
   const [datos, setDatos] = useState(null);
   const [error, setError] = useState('');
   const [intento, setIntento] = useState(0);
+  const [denunciando, setDenunciando] = useState(null);
+  const [enviando, setEnviando] = useState(false);
+  const [errorDenuncia, setErrorDenuncia] = useState('');
+  const [aviso, setAviso] = useState(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -47,6 +57,36 @@ export default function ResenasProfesional({ idEnfermero }) {
   }, [idEnfermero, intento]);
 
   const cantidad = datos?.cantidadResenas ?? 0;
+
+  function marcarDenunciada(idResena) {
+    setDatos((actual) => ({
+      ...actual,
+      resenas: actual.resenas.map((resena) => (resena.idResena === idResena ? { ...resena, denunciada: true } : resena)),
+    }));
+  }
+
+  async function denunciar(motivo) {
+    const idResena = denunciando;
+    setEnviando(true);
+    setErrorDenuncia('');
+    try {
+      const respuesta = await api(`/resenas/${idResena}/denunciar`, { method: 'POST', body: { motivo } });
+      marcarDenunciada(idResena);
+      setAviso({ idResena, texto: respuesta?.mensaje || 'Recibimos tu denuncia. El equipo de Enfered va a revisar la reseña.' });
+      setDenunciando(null);
+    } catch (err) {
+      if (err.status === 409) {
+        // Ya estaba denunciada (por ejemplo desde otra pestaña): se muestra como enviada.
+        marcarDenunciada(idResena);
+        setAviso({ idResena, texto: err.message });
+        setDenunciando(null);
+      } else {
+        setErrorDenuncia(err.message);
+      }
+    } finally {
+      setEnviando(false);
+    }
+  }
 
   return (
     <section
@@ -93,10 +133,46 @@ export default function ResenasProfesional({ idEnfermero }) {
                   )}
                 </div>
                 <EstrellasLectura valor={resena.puntuacion} />
-                <p>{resena.comentario}</p>
+                {resena.comentario && <p>{resena.comentario}</p>}
+                {/* Solo el profesional calificado recibe "denunciada": para él es la moderación de su perfil. */}
+                {typeof resena.denunciada === 'boolean' && (
+                  resena.denunciada ? (
+                    <p className="field-hint">Denuncia enviada. El equipo de Enfered la está revisando.</p>
+                  ) : (
+                    <button
+                      className="text-link"
+                      type="button"
+                      onClick={() => {
+                        setErrorDenuncia('');
+                        setAviso(null);
+                        setDenunciando(resena.idResena);
+                      }}
+                    >
+                      Denunciar esta reseña
+                    </button>
+                  )
+                )}
+                {aviso?.idResena === resena.idResena && (
+                  <p className="notice notice-success" role="status">{aviso.texto}</p>
+                )}
               </li>
             ))}
           </ul>
+          <DialogoMotivo
+            abierto={denunciando !== null}
+            titulo="Denunciar reseña"
+            descripcion="Contanos qué tiene de malo esta reseña (por ejemplo, si es ofensiva o falsa). Sigue visible hasta que el equipo de Enfered la revise."
+            etiqueta="Motivo de la denuncia"
+            minimo={MOTIVO_MIN}
+            maximo={MOTIVO_MAX}
+            mensajeMotivo={MENSAJE_MOTIVO}
+            textoConfirmar="Enviar denuncia"
+            textoGuardando="Enviando…"
+            guardando={enviando}
+            error={errorDenuncia}
+            onConfirmar={denunciar}
+            onCerrar={() => setDenunciando(null)}
+          />
         </>
       )}
     </section>

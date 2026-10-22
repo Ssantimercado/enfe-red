@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <title>Enfered</title>
+  <!-- Fondo completo y cruz dentro de la zona segura (80 % central) para que sirva también como ícono adaptable -->
+  <rect width="512" height="512" fill="#167bb5"/>
+  <rect x="146" y="219" width="220" height="74" rx="24" fill="#fff"/>
+  <rect x="219" y="146" width="74" height="220" rx="24" fill="#fff"/>
+</svg>

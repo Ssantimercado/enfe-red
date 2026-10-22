@@ -5,8 +5,10 @@ import Icon from './ui/Icon';
 import './Legal.css';
 
 // Versión y fecha deben coincidir con VERSION_TERMINOS en backend/schema_legal.py.
+// Sigue en 1.0: todavía no hay un paso para que las cuentas existentes vuelvan a aceptar
+// una versión nueva, así que subirla solo cambiaría lo que se guarda en los registros nuevos.
 export const VERSION_TERMINOS = '1.0';
-const ACTUALIZACION = '21 de octubre de 2026';
+const ACTUALIZACION = '22 de octubre de 2026';
 // Correo de soporte para ejercer los derechos de la Ley 25.326 (definir en frontend/.env).
 const SOPORTE = import.meta.env?.VITE_SOPORTE_EMAIL;
 
@@ -140,7 +142,7 @@ export function Privacidad() {
         <ul>
           <li><strong>Datos de cuenta:</strong> nombre, apellido, correo electrónico y contraseña (guardada cifrada).</li>
           <li><strong>Datos de contacto y ubicación:</strong> teléfono, dirección y, si la compartís, la ubicación aproximada de tu domicilio.</li>
-          <li><strong>Datos de salud (pacientes):</strong> la información de salud que decidas cargar en tu perfil. Son datos sensibles según el artículo 2 de la ley.</li>
+          <li><strong>Datos de salud (pacientes):</strong> la información de salud que decidas cargar en tu perfil. Son datos sensibles según el artículo 2 de la ley y se guardan cifrados.</li>
           <li><strong>Datos profesionales (enfermeros):</strong> matrícula, especialidad, experiencia, tarifa y horarios.</li>
           <li><strong>Actividad en la plataforma:</strong> solicitudes, mensajes, calificaciones y notificaciones.</li>
         </ul>
@@ -151,6 +153,8 @@ export function Privacidad() {
           <li>Crear y administrar tu cuenta.</li>
           <li>Mostrar a los profesionales verificados en la cartilla y en el mapa.</li>
           <li>Gestionar las solicitudes de atención, el chat y los avisos entre paciente y profesional.</li>
+          <li>Enviarte correos de aviso: cuando llega, se acepta o se cancela un turno, sobre la revisión de la matrícula y el código para recuperar la contraseña. Estos correos solo dicen el día y la hora del turno, sin datos de salud.</li>
+          <li>Ayudarte a buscar con la búsqueda asistida (ver el punto 5).</li>
           <li>Verificar matrículas y mantener la seguridad de la plataforma.</li>
         </ul>
         <p>No vendemos tus datos ni los usamos con fines publicitarios.</p>
@@ -169,12 +173,27 @@ export function Privacidad() {
         <ul>
           <li>Tu información de salud solo la ves vos.</li>
           <li>Cuando enviás una solicitud, el profesional elegido ve tu nombre, tu teléfono, el servicio, la fecha y la dirección de atención.</li>
-          <li>El perfil profesional de los enfermeros (nombre, especialidad, zona, tarifa, horarios y datos de contacto) es visible en la plataforma.</li>
+          <li>El perfil profesional de los enfermeros (nombre, especialidad, zona, tarifa y horarios) es visible en la plataforma. En el mapa se muestra una ubicación aproximada, nunca la dirección.</li>
+          <li>El teléfono y el correo del profesional no se publican: se comparten con el paciente solo cuando el profesional acepta su solicitud, para que puedan coordinar por WhatsApp.</li>
           <li>El personal de administración accede solo a lo necesario para verificar matrículas y gestionar cuentas.</li>
         </ul>
       </section>
       <section>
-        <h2>5. Cookies y almacenamiento en tu navegador</h2>
+        <h2>5. Búsqueda asistida y proveedores externos</h2>
+        <p>
+          La búsqueda asistida (“Contanos qué necesitás”) usa Google Gemini, un servicio de Google que
+          actúa como encargado del tratamiento: solo procesa el texto para convertirlo en filtros de la
+          cartilla. Antes de enviarlo borramos los datos que te identifican, como correos, teléfonos,
+          números de documento y calles con número. Enfered no guarda ese texto. Si no querés usarla, podés
+          buscar con los filtros de la cartilla.
+        </p>
+        <p>
+          Para enviar los correos de aviso usamos un servicio de correo electrónico, que recibe tu
+          dirección de correo y el texto del aviso.
+        </p>
+      </section>
+      <section>
+        <h2>6. Cookies y almacenamiento en tu navegador</h2>
         <p>
           Enfered no usa cookies publicitarias ni de seguimiento. Guardamos en el almacenamiento local de
           tu navegador solo lo necesario para que funcione: la sesión iniciada y tus preferencias, como
@@ -186,18 +205,21 @@ export function Privacidad() {
         </p>
       </section>
       <section>
-        <h2>6. Seguridad y conservación</h2>
+        <h2>7. Seguridad y conservación</h2>
         <p>
-          Aplicamos medidas técnicas para proteger tus datos: contraseñas cifradas, acceso con sesión,
-          permisos por rol y control de quién puede ver cada solicitud. Conservamos los datos mientras
-          tengas la cuenta y el tiempo que exija la ley.
+          Aplicamos medidas técnicas para proteger tus datos: contraseñas cifradas, información de salud
+          guardada cifrada, acceso con sesión, permisos por rol y control de quién puede ver cada
+          solicitud. Conservamos los datos mientras tengas la cuenta y el tiempo que exija la ley.
         </p>
       </section>
       <section>
-        <h2>7. Tus derechos</h2>
+        <h2>8. Tus derechos</h2>
         <p>
-          Podés pedir acceder, rectificar, actualizar o suprimir tus datos escribiendo a <Contacto />.
-          También podés corregir la mayoría de tus datos desde tu perfil.
+          Desde tu perfil, en “Mi cuenta”, podés descargar todos tus datos en un archivo y eliminar tu
+          cuenta. Al eliminarla borramos tus datos personales y cancelamos tus turnos pendientes; los
+          mensajes y reseñas que escribiste quedan sin tu nombre para no borrar el historial de la otra
+          persona. También podés corregir la mayoría de tus datos desde tu perfil, o pedir acceder,
+          rectificar, actualizar o suprimir tus datos escribiendo a <Contacto />.
         </p>
         <p className="legal-leyenda">
           El titular de los datos personales tiene la facultad de ejercer el derecho de acceso a los

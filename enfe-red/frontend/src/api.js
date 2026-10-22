@@ -1,70 +1,185 @@
-import axios from 'axios';
-
-export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-
-export function cerrarSesion() {
-  ['token', 'rol', 'usuario'].forEach((key) => localStorage.removeItem(key));
+// En producción, sin VITE_API_URL se usa el mismo dominio del sitio: nunca localhost,
+// que en el celular de una persona apuntaría a su propio teléfono.
+function resolverApiUrl() {
+  const configurada = import.meta.env?.VITE_API_URL;
+  if (configurada) return configurada.replace(/\/$/, '');
+  if (import.meta.env?.PROD) {
+    console.warn('Falta VITE_API_URL: la API se va a buscar en el mismo dominio del sitio.');
+    return window.location.origin;
+  }
+  return 'http://localhost:5000';
 }
 
-export function sesionActual() {
+export const API_URL = resolverApiUrl();
+export const MENSAJE_SIN_CONEXION = 'No pudimos conectarnos. Revisá tu conexión e intentá de nuevo.';
+const ESPERA_MAXIMA_MS = 20000;
+
+export function cerrarSesion() {
+  ['token', 'refresh_token', 'rol', 'usuario'].forEach((key) => localStorage.removeItem(key));
+}
+
+export function guardarSesion({ token, refresh_token: refreshToken, rol, usuario }) {
+  cerrarSesion();
+  localStorage.setItem('token', token);
+  if (refreshToken) localStorage.setItem('refresh_token', refreshToken);
+  localStorage.setItem('rol', rol || 'paciente');
+  if (usuario) localStorage.setItem('usuario', JSON.stringify(usuario));
+}
+
+function leerToken(token) {
   try {
-    const token = localStorage.getItem('token');
     if (!token || token.split('.').length !== 3) return null;
     const encoded = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-    const payload = JSON.parse(
-      atob(encoded.padEnd(Math.ceil(encoded.length / 4) * 4, '=')),
-    );
-    if (!Number.isFinite(payload.exp) || payload.exp * 1000 <= Date.now())
-      return null;
-    if (!['paciente', 'enfermero', 'administrador'].includes(payload.rol)) return null;
-    return payload;
+    return JSON.parse(atob(encoded.padEnd(Math.ceil(encoded.length / 4) * 4, '=')));
   } catch {
     return null;
   }
 }
 
-function revisarSesion(status) {
-  if (status === 401) {
-    cerrarSesion();
-    window.location.replace('/login?sesion=expirada');
+export function sesionActual() {
+  const payload = leerToken(localStorage.getItem('token'));
+  if (!payload) return null;
+  if (!Number.isFinite(payload.exp) || payload.exp * 1000 <= Date.now()) return null;
+  if (!['paciente', 'enfermero', 'administrador'].includes(payload.rol)) return null;
+  return payload;
+}
+
+// Con el token de acceso vencido todavía se puede renovar si el de renovación sigue vigente.
+export function puedeRenovarSesion() {
+  const payload = leerToken(localStorage.getItem('refresh_token'));
+  return Boolean(payload && (!Number.isFinite(payload.exp) || payload.exp * 1000 > Date.now()));
+}
+
+const esCuentaInactiva = (mensaje) => /no está activa/i.test(mensaje || '');
+
+// App registra la navegación del router para no recargar la página al cerrar la sesión.
+const recargarEnLogin = (destino) => window.location.replace(destino);
+let navegarAlLogin = recargarEnLogin;
+export function registrarNavegacion(navegar) {
+  navegarAlLogin = navegar || recargarEnLogin;
+}
+
+// Solo rutas de Enfered: evita que un enlace armado mande a la persona a otro sitio después de entrar.
+// El navegador lee "/\\otro.com" como "//otro.com", así que también se rechazan la barra invertida
+// y los caracteres de control, y se confirma que la dirección resultante sea de este mismo sitio.
+export function rutaInterna(ruta) {
+  if (typeof ruta !== 'string' || !ruta.startsWith('/') || ruta.startsWith('//')) return null;
+  if ([...ruta].some((letra) => letra === '\\' || letra.charCodeAt(0) < 32 || letra.charCodeAt(0) === 127)) return null;
+  try {
+    const url = new URL(ruta, window.location.origin);
+    if (url.origin !== window.location.origin) return null;
+    const limpia = `${url.pathname}${url.search}${url.hash}`;
+    return limpia.startsWith('/login') ? null : limpia;
+  } catch {
+    return null;
   }
 }
 
-export async function apiFetch(url, options) {
-  const response = await fetch(url, options);
-  revisarSesion(response.status);
-  return response;
+export function rutaDeLogin(motivo = 'expirada', volver) {
+  const parametros = new URLSearchParams();
+  const ruta = rutaInterna(volver ?? `${window.location.pathname}${window.location.search}`);
+  if (ruta) parametros.set('volver', ruta);
+  parametros.set('motivo', motivo);
+  return `/login?${parametros}`;
 }
 
-export const api = axios.create({ baseURL: API_URL });
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    revisarSesion(error.response?.status);
-    return Promise.reject(error);
-  },
-);
+export function cerrarSesionForzada(mensaje) {
+  cerrarSesion();
+  navegarAlLogin(rutaDeLogin(esCuentaInactiva(mensaje) ? 'suspendida' : 'expirada'));
+}
+
+// Varias pantallas pueden recibir un 401 a la vez: todas esperan la misma renovación.
+let renovacionEnCurso = null;
+export function renovarSesion() {
+  if (!renovacionEnCurso) {
+    renovacionEnCurso = (async () => {
+      const refreshToken = localStorage.getItem('refresh_token');
+      if (!refreshToken) return { ok: false };
+      let response;
+      try {
+        response = await fetch(`${API_URL}/api/token/refresh`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${refreshToken}` },
+        });
+      } catch {
+        // Sin conexión no se cierra la sesión: puede volver a intentarse.
+        return { ok: false, sinConexion: true };
+      }
+      const data = await response.json().catch(() => ({}));
+      if (response.ok && data.token) {
+        localStorage.setItem('token', data.token);
+        return { ok: true };
+      }
+      return { ok: false, sinConexion: response.status >= 500, mensaje: data.error };
+    })().finally(() => {
+      renovacionEnCurso = null;
+    });
+  }
+  return renovacionEnCurso;
+}
+
+// Decide qué hacer con un 401 de una petición que llevaba token: true = reintentar.
+export async function resolverNoAutorizado(tokenUsado, mensaje) {
+  if (esCuentaInactiva(mensaje)) {
+    cerrarSesionForzada(mensaje);
+    return false;
+  }
+  // Otra petición ya renovó el token mientras esta esperaba respuesta.
+  if (localStorage.getItem('token') && tokenUsado !== localStorage.getItem('token')) return true;
+  const renovacion = await renovarSesion();
+  if (renovacion.ok) return true;
+  if (renovacion.sinConexion) {
+    const error = new Error(MENSAJE_SIN_CONEXION);
+    error.status = 401;
+    throw error;
+  }
+  cerrarSesionForzada(renovacion.mensaje || mensaje);
+  return false;
+}
+
+async function enviar(url, { signal, ...options }) {
+  const controller = new AbortController();
+  let porTiempo = false;
+  const timer = window.setTimeout(() => {
+    porTiempo = true;
+    controller.abort();
+  }, ESPERA_MAXIMA_MS);
+  const cancelar = () => controller.abort();
+  if (signal?.aborted) controller.abort();
+  signal?.addEventListener('abort', cancelar);
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    const data = await response.json().catch(() => ({}));
+    return { response, data };
+  } catch (error) {
+    if (signal?.aborted && !porTiempo) throw error;
+    throw new Error(MENSAJE_SIN_CONEXION);
+  } finally {
+    window.clearTimeout(timer);
+    signal?.removeEventListener('abort', cancelar);
+  }
+}
 
 // Respuestas JSON para los formularios del rediseño; comparte el control de sesión.
-export async function requestApi(path, { body, headers, ...options } = {}) {
-  let response;
-  try {
-    response = await apiFetch(`${API_URL}/api${path}`, {
-      ...options,
-      headers: {
-        ...(body ? { 'Content-Type': 'application/json' } : {}),
-        ...(localStorage.getItem('token')
-          ? { Authorization: `Bearer ${localStorage.getItem('token')}` }
-          : {}),
-        ...headers,
-      },
-      ...(body ? { body: JSON.stringify(body) } : {}),
-    });
-  } catch (error) {
-    if (error.name === 'AbortError') throw error;
-    throw new Error('No podemos conectar con el servidor. Intentá nuevamente.');
+// sesion: false es para el login y otras rutas públicas: un 401 ahí no cierra ninguna sesión.
+export async function requestApi(path, { body, headers, sesion = true, ...options } = {}, reintento = false) {
+  const token = sesion ? localStorage.getItem('token') : null;
+  const { response, data } = await enviar(`${API_URL}/api${path}`, {
+    ...options,
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...headers,
+    },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+  if (response.status === 401 && token && !reintento) {
+    if (await resolverNoAutorizado(token, data.error)) {
+      return requestApi(path, { body, headers, sesion, ...options }, true);
+    }
+  } else if (response.status === 401 && token) {
+    cerrarSesionForzada(data.error);
   }
-  const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     const error = new Error(
       data.error || 'No pudimos completar la solicitud. Intentá nuevamente.',

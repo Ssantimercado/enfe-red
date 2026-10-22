@@ -5,6 +5,7 @@ import Icon from './ui/Icon';
 export default function GestionHorarios() {
   const [schedules, setSchedules] = useState([]);
   const [editingId, setEditingId] = useState(null);
+  const [confirmandoId, setConfirmandoId] = useState(null);
   const [form, setForm] = useState({
     dia_semana: 'Lunes',
     hora_inicio: '08:00',
@@ -70,7 +71,25 @@ export default function GestionHorarios() {
       setSaving(false);
     }
   }
+  async function eliminar(item) {
+    if (saving) return;
+    setSaving(true);
+    setError('');
+    setMessage('');
+    try {
+      await api(`/perfil/enfermero/horarios/${item.id}`, { method: 'DELETE' });
+      setSchedules((current) => current.filter((horario) => horario.id !== item.id));
+      if (editingId === item.id) cancelEdit();
+      setMessage(`Eliminamos el horario del ${item.dia_semana.toLowerCase()} de ${item.hora_inicio} a ${item.hora_fin}. Los turnos ya pedidos no cambian.`);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setConfirmandoId(null);
+      setSaving(false);
+    }
+  }
   function editSchedule(item) {
+    setConfirmandoId(null);
     setEditingId(item.id);
     setForm({
       dia_semana: item.dia_semana,
@@ -124,22 +143,56 @@ export default function GestionHorarios() {
                       {item.hora_inicio} – {item.hora_fin}
                     </p>
                   </div>
-                  <div className="schedule-row-actions">
-                    <span
-                      className={`availability ${item.estado !== 'Disponible' ? 'unavailable' : ''}`}
-                    >
-                      {item.estado}
-                    </span>
-                    <button
-                      className="text-link"
-                      type="button"
-                      disabled={saving}
-                      onClick={() => editSchedule(item)}
-                      aria-label={`Editar horario de ${item.dia_semana}, ${item.hora_inicio} a ${item.hora_fin}`}
-                    >
-                      Editar
-                    </button>
-                  </div>
+                  {confirmandoId === item.id ? (
+                    <div className="schedule-row-actions" role="group" aria-label={`Confirmar eliminación del horario de ${item.dia_semana}`}>
+                      <span>¿Eliminar este horario?</span>
+                      <button
+                        className="button button-secondary"
+                        type="button"
+                        disabled={saving}
+                        onClick={() => eliminar(item)}
+                      >
+                        {saving ? 'Eliminando…' : 'Sí, eliminar'}
+                      </button>
+                      <button
+                        className="text-link"
+                        type="button"
+                        disabled={saving}
+                        onClick={() => setConfirmandoId(null)}
+                      >
+                        No
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="schedule-row-actions">
+                      <span
+                        className={`availability ${item.estado !== 'Disponible' ? 'unavailable' : ''}`}
+                      >
+                        {item.estado}
+                      </span>
+                      <button
+                        className="text-link"
+                        type="button"
+                        disabled={saving}
+                        onClick={() => editSchedule(item)}
+                        aria-label={`Editar horario de ${item.dia_semana}, ${item.hora_inicio} a ${item.hora_fin}`}
+                      >
+                        Editar
+                      </button>
+                      <button
+                        className="text-link"
+                        type="button"
+                        disabled={saving}
+                        onClick={() => {
+                          setMessage('');
+                          setConfirmandoId(item.id);
+                        }}
+                        aria-label={`Eliminar horario de ${item.dia_semana}, ${item.hora_inicio} a ${item.hora_fin}`}
+                      >
+                        Eliminar
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))
           ) : (

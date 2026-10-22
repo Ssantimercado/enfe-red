@@ -1,11 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 import { requestApi as api, sesionActual } from '../api';
+import { fechaHora, quienReviso } from './adminComun';
 
 const PAGE_SIZE = 10;
 const ROLES = {
   paciente: 'Paciente',
   enfermero: 'Enfermero',
   administrador: 'Administrador',
+};
+
+const MATRICULA = {
+  verificada: ['Matrícula verificada', ''],
+  rechazada: ['Matrícula rechazada', 'is-suspended'],
+  pendiente: ['Matrícula en revisión', 'is-pending'],
+  sin_cargar: ['Sin matrícula cargada', 'is-pending'],
 };
 
 function nombreUsuario(usuario) {
@@ -178,6 +186,7 @@ export default function AdminUsuarios() {
             {usuarios.map((usuario) => {
               const suspendido = usuario.suspendido === true;
               const esPropio = String(usuario.id) === administradorId;
+              const matricula = usuario.rol === 'enfermero' ? MATRICULA[usuario.estadoVerificacion] : null;
               return (
                 <article className="content-panel admin-user-card" key={usuario.id}>
                   <div className="admin-user-details">
@@ -188,7 +197,19 @@ export default function AdminUsuarios() {
                       <span className={`admin-user-status ${suspendido ? 'is-suspended' : ''}`}>
                         {suspendido ? 'Suspendido' : 'Activo'}
                       </span>
+                      {matricula && (
+                        <span className={`admin-user-status ${matricula[1]}`}>{matricula[0]}</span>
+                      )}
                     </div>
+                    {usuario.rol === 'enfermero' && usuario.estadoVerificacion === 'rechazada' && usuario.motivoRechazo && (
+                      <p className="admin-review-note"><strong>Motivo del rechazo:</strong> {usuario.motivoRechazo}</p>
+                    )}
+                    {usuario.rol === 'enfermero' && usuario.verificadoEn && (
+                      <p className="admin-review-meta">
+                        Matrícula revisada el {fechaHora(usuario.verificadoEn)}
+                        {quienReviso(usuario.verificadoPor) ? ` por ${quienReviso(usuario.verificadoPor)}` : ''}.
+                      </p>
+                    )}
                   </div>
                   <button
                     className={suspendido ? 'button button-secondary' : 'button button-primary'}
@@ -254,6 +275,11 @@ export default function AdminUsuarios() {
             ? `${nombreUsuario(seleccionado)} podrá volver a iniciar sesión.`
             : `${nombreUsuario(seleccionado)} perderá el acceso hasta que se reactive su cuenta.`}
         </p>
+        {seleccionado?.rol === 'administrador' && (
+          <p className="notice notice-info">
+            Es una cuenta de administrador: solo un administrador con permiso total puede suspenderla o reactivarla.
+          </p>
+        )}
         {errorAccion && <p className="notice notice-error" role="alert">{errorAccion}</p>}
         <div className="admin-dialog-actions">
           <button

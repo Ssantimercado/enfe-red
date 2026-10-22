@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { sesionActual } from '../api';
 import Brand from './ui/Brand';
 import Icon from './ui/Icon';
@@ -28,9 +28,9 @@ const steps = [
     'Filtrá por especialidad, zona, precio y disponibilidad. Conocé los perfiles antes de elegir.',
   ],
   [
-    'phone',
-    'Conectá y coordiná',
-    'Contactá al profesional por teléfono o correo y acordá los detalles de la atención.',
+    'chat',
+    'Pedí tu turno y coordiná',
+    'Elegí el día y la hora en la app. Cuando el profesional acepta, coordinan los detalles por WhatsApp o por el chat de Enfered.',
   ],
 ];
 
@@ -83,19 +83,19 @@ const testimonials = [
 const questions = [
   [
     '¿Qué es Enfered?',
-    'Es una plataforma que conecta a personas que necesitan cuidados de enfermería a domicilio con profesionales que ofrecen sus servicios. Te ayuda a buscar, conocer perfiles y establecer contacto para coordinar la atención.',
+    'Es una plataforma que conecta a personas que necesitan cuidados de enfermería a domicilio con profesionales que ofrecen sus servicios. Te ayuda a buscar, conocer perfiles y pedir un turno para coordinar la atención.',
   ],
   [
     '¿Puedo buscar atención para un familiar?',
-    'Sí. Podés crear una cuenta como paciente y buscar profesionales para vos o para un familiar. Al contactar, explicá qué cuidados necesitás y en qué zona se realizaría la atención.',
+    'Sí. Podés crear una cuenta como paciente y buscar profesionales para vos o para un familiar. Al pedir el turno, contá qué cuidados necesitás y en qué dirección sería la atención.',
   ],
   [
     '¿Cómo encuentro a alguien que se adapte a lo que necesito?',
-    'Buscá por nombre, zona o especialidad y combiná filtros de precio, disponibilidad y día de atención. En cada perfil podés revisar la experiencia, los horarios y los datos de contacto publicados.',
+    'Buscá por nombre, zona o especialidad y combiná filtros de precio, disponibilidad y día de atención. En cada perfil podés revisar la experiencia, los horarios, la tarifa y las reseñas.',
   ],
   [
-    '¿La atención se reserva y se paga desde Enfered?',
-    'Por ahora, el servicio, el horario y la forma de pago se acuerdan directamente con el profesional. Enfered te permite encontrarlo y acceder a sus datos de contacto.',
+    '¿Cómo pido un turno y cómo se paga?',
+    'Pedís el turno desde el perfil del profesional eligiendo el servicio, el día y la hora. Cuando lo acepta, te avisamos y pueden coordinar los detalles por WhatsApp o por el chat de Enfered. El pago se arregla directamente con el profesional: Enfered no cobra la atención.',
   ],
   [
     '¿Tengo que compartir mi ubicación?',
@@ -201,8 +201,8 @@ function SearchPreview() {
             Horarios publicados
           </span>
           <span>
-            <Icon name="phone" size={15} />
-            Contacto directo
+            <Icon name="chat" size={15} />
+            Turnos en la app
           </span>
         </div>
       </div>
@@ -211,6 +211,9 @@ function SearchPreview() {
 }
 
 export default function Landing() {
+  const location = useLocation();
+  // Mensaje de despedida después de eliminar la cuenta desde el perfil.
+  const cuentaEliminada = location.state?.cuentaEliminada;
   const [menuOpen, setMenuOpen] = useState(false);
   const menuButton = useRef(null);
   const session = sesionActual();
@@ -289,6 +292,13 @@ export default function Landing() {
       </header>
 
       <main id="landing-contenido">
+        {cuentaEliminada && (
+          <div className="lp-container">
+            <p className="notice notice-success aviso-cuenta-eliminada" role="status">
+              {cuentaEliminada}
+            </p>
+          </div>
+        )}
         <section className="lp-hero">
           <div className="lp-container lp-hero-grid">
             <div className="lp-hero-copy">
@@ -366,7 +376,7 @@ export default function Landing() {
               ['search', 'Búsqueda a tu medida'],
               ['pin', 'Profesionales por zona'],
               ['calendar', 'Horarios a la vista'],
-              ['phone', 'Contacto directo'],
+              ['chat', 'Turnos y chat en la app'],
             ].map(([icon, text]) => (
               <div key={text}>
                 <Icon name={icon} size={22} />
@@ -520,7 +530,7 @@ export default function Landing() {
               </h2>
               <p>
                 Sumate a una red donde las personas pueden conocer tu trabajo y
-                contactarte por los cuidados que ofrecés.
+                pedirte turnos por los cuidados que ofrecés.
               </p>
               <ul>
                 {[

@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
-import { requestApi as api } from '../api';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { guardarSesion, requestApi as api } from '../api';
+import { MIN_PASSWORD } from './reglasPassword';
 import AuthLayout from './AuthLayout';
 import Icon from './ui/Icon';
 import './Legal.css';
@@ -19,6 +20,7 @@ export default function Register() {
   const [done, setDone] = useState(false);
   const [error, setError] = useState('');
   const [visible, setVisible] = useState(false);
+  const navigate = useNavigate();
   const change = (e) =>
     setForm((current) => ({ ...current, [e.target.name]: e.target.value }));
   async function submit(e) {
@@ -28,18 +30,40 @@ export default function Register() {
       setError('Para crear la cuenta tenés que aceptar los Términos y condiciones y la Política de privacidad.');
       return;
     }
+    if (form.password.length < MIN_PASSWORD) {
+      setError(`La contraseña tiene que tener al menos ${MIN_PASSWORD} caracteres.`);
+      return;
+    }
     setLoading(true);
     setError('');
+    const email = form.email.trim();
     try {
       await api('/registro', {
         method: 'POST',
-        body: { ...form, nombre: form.nombre.trim(), email: form.email.trim(), aceptaTerminos: true },
+        body: { ...form, nombre: form.nombre.trim(), email, aceptaTerminos: true },
+        sesion: false,
       });
-      setDone(true);
-      setForm((current) => ({ ...current, password: '' }));
     } catch (err) {
       setError(err.message);
-    } finally {
+      setLoading(false);
+      return;
+    }
+    // Entra sola para que no tenga que volver a escribir los datos; si falla, va al login.
+    try {
+      const data = await api('/login', {
+        method: 'POST',
+        body: { email, password: form.password },
+        sesion: false,
+      });
+      if (!data.token) throw new Error('Sin sesión');
+      guardarSesion(data);
+      navigate(data.rol === 'administrador' ? '/admin' : '/home', {
+        replace: true,
+        state: { recienRegistrado: true },
+      });
+    } catch {
+      setDone(true);
+      setForm((current) => ({ ...current, password: '' }));
       setLoading(false);
     }
   }
@@ -132,6 +156,8 @@ export default function Register() {
                   value={form.password}
                   onChange={change}
                   required
+                  minLength={MIN_PASSWORD}
+                  aria-describedby="registro-password-pista"
                   placeholder="Creá tu contraseña"
                 />
                 <button
@@ -145,6 +171,9 @@ export default function Register() {
                 >
                   <Icon name={visible ? 'eyeOff' : 'eye'} size={18} />
                 </button>
+              </span>
+              <span id="registro-password-pista" className="filter-hint">
+                Al menos {MIN_PASSWORD} caracteres.
               </span>
             </label>
             <label className="consentimiento">

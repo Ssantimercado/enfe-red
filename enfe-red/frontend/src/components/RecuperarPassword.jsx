@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { requestApi as api } from '../api';
 import AuthLayout from './AuthLayout';
 import Icon from './ui/Icon';
+import { MIN_PASSWORD } from './reglasPassword';
 
 export default function RecuperarPassword() {
   const [step, setStep] = useState(1);
@@ -13,14 +14,16 @@ export default function RecuperarPassword() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
-  async function requestCode() {
+  async function requestCode(otro = false) {
     await api('/recuperar-password', {
-      method: 'POST', body: { email: email.trim() },
+      method: 'POST', body: { email: email.trim() }, sesion: false,
     });
     setCode('');
     setPassword('');
     setNotice(
-      'Si la cuenta existe, hay un nuevo código en la consola del servidor. Usá el más reciente.',
+      otro
+        ? 'Te enviamos un código nuevo a tu correo. Usá el más reciente.'
+        : 'Te enviamos un código a tu correo. Revisá también el correo no deseado.',
     );
   }
 
@@ -30,7 +33,7 @@ export default function RecuperarPassword() {
     setError('');
     setNotice('');
     try {
-      await requestCode();
+      await requestCode(true);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -49,6 +52,7 @@ export default function RecuperarPassword() {
         await api('/reset-password', {
           method: 'POST',
           body: { email: email.trim(), codigo: code, nueva_password: password },
+          sesion: false,
         });
         setCode('');
         setPassword('');
@@ -71,14 +75,14 @@ export default function RecuperarPassword() {
         {step === 1
           ? 'Ingresá el correo de tu cuenta para solicitar un código.'
           : step === 2
-            ? 'Ingresá el código de prueba y elegí una nueva contraseña.'
+            ? 'Escribí el código de 6 números que te enviamos por correo y elegí una nueva contraseña.'
             : 'Tu contraseña se actualizó. Volvé a iniciar sesión.'}
       </p>
-      {step < 3 && (
-        <div className="notice notice-info" role="status">
-          Modo de prueba: todavía no se envían correos. Si la cuenta existe, el
-          código aparece en la consola del servidor y dura 10 minutos.
-        </div>
+      {step === 2 && (
+        <p className="notice notice-info">
+          El código dura 10 minutos. Si no te llega, revisá que el correo sea el
+          de tu cuenta y tocá “Solicitar otro código”.
+        </p>
       )}
       {error && (
         <div className="notice notice-error" role="alert">
@@ -124,9 +128,14 @@ export default function RecuperarPassword() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   autoComplete="new-password"
+                  minLength={MIN_PASSWORD}
+                  aria-describedby="recuperar-password-pista"
                   disabled={loading}
                   required
                 />
+                <span id="recuperar-password-pista" className="filter-hint">
+                  Al menos {MIN_PASSWORD} caracteres.
+                </span>
               </label>
             </>
           )}

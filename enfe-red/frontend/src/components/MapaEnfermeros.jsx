@@ -13,10 +13,9 @@ import {
 } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { MAPA_ATRIBUCION, MAPA_TILES_URL, RUTAS_URL } from './mapaConfig';
 
 const DEFAULT_CENTER = [-32.8895, -68.8458]; // Mendoza capital
-
-const OSRM_URL = 'https://router.project-osrm.org/route/v1/driving';
 
 const nurseIcon = new L.DivIcon({
   className: 'enfermero-marker',
@@ -113,7 +112,7 @@ function useRutaReal(origen, destino) {
   const [routeError, setRouteError] = useState('');
 
   useEffect(() => {
-    if (!origen || !destino) {
+    if (!RUTAS_URL || !origen || !destino) {
       setRuta(null);
       setLoadingRoute(false);
       setRouteError('');
@@ -135,7 +134,7 @@ function useRutaReal(origen, destino) {
         ].join(';');
 
         const url =
-          `${OSRM_URL}/${coordenadas}` +
+          `${RUTAS_URL}/${coordenadas}` +
           '?overview=full&geometries=geojson&steps=true';
 
         const response = await fetch(url, {
@@ -327,7 +326,7 @@ export default function MapaEnfermeros({
         </button>
       </div>
 
-      {selectedPosition && (
+      {selectedPosition && RUTAS_URL && (
         <div className="mapa-route-summary">
           <h3><span aria-hidden="true">🚗</span> Mejor ruta por calles</h3>
           <p>
@@ -363,8 +362,8 @@ export default function MapaEnfermeros({
         scrollWheelZoom
       >
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution={MAPA_ATRIBUCION}
+          url={MAPA_TILES_URL}
         />
 
         <FlyToSelected

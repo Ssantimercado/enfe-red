@@ -27,8 +27,9 @@
 .aviso-cookies {
   position: fixed;
   inset-inline: 16px;
-  bottom: 16px;
-  z-index: 60;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  /* Por encima de la barra inferior (1500), del encabezado de la portada y de las notificaciones (1600). */
+  z-index: 1700;
   display: flex;
   align-items: center;
   gap: 18px;
@@ -46,7 +47,15 @@
 .aviso-cookies a { color: var(--blue-dark); }
 .aviso-cookies .button { flex-shrink: 0; }
 @media (max-width: 600px) {
-  .aviso-cookies { flex-direction: column; align-items: stretch; }
+  .aviso-cookies { flex-direction: column; align-items: stretch; max-height: calc(100svh - 32px); overflow-y: auto; }
+}
+/* En celular la barra de navegación fija mide unos 69 px más la zona segura: el aviso se apoya arriba de ella. */
+@media (max-width: 800px) {
+  body:has(.main-nav) .aviso-cookies {
+    bottom: calc(84px + env(safe-area-inset-bottom));
+    max-height: calc(100svh - 108px - env(safe-area-inset-bottom));
+    overflow-y: auto;
+  }
 }
 
 /* Consentimiento en el registro */
@@ -56,5 +65,5 @@
 
 /* Enlaces legales en pies de página */
 .footer-legal { display: flex; flex-wrap: wrap; gap: 16px; }
-.footer-legal a { color: var(--muted); }
+.footer-legal a { display: inline-flex; align-items: center; min-height: 44px; color: var(--muted); }
 .footer-legal a:hover { color: var(--blue-dark); }

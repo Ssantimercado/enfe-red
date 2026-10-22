@@ -6,6 +6,13 @@ import Icon from './ui/Icon';
 import ProfileSkeleton from './ui/ProfileSkeleton';
 import GestionHorarios from './GestionHorarios';
 import HistorialServicios from './HistorialServicios';
+import MiCuenta from './MiCuenta';
+import AvisoMatricula from './AvisoMatricula';
+import { estadoMatricula, MENSAJE_TELEFONO, TEXTO_MATRICULA, telefonoValido } from './perfilPendiente';
+
+// El servidor no pudo abrir el dato guardado (clave de cifrado distinta): se conserva hasta recuperarlo.
+const HISTORIAL_ILEGIBLE = 'No pudimos mostrar tu información de salud guardada. Si querés, escribila de nuevo.';
+
 const LocationPicker = lazy(() => import('./LocationPicker'));
 
 const COMMON = [
@@ -16,7 +23,7 @@ const COMMON = [
 ];
 // Paciente.obraSocial del diagrama de clases.
 const PATIENT = [['obraSocial', 'Obra social o prepaga', 'text', 'off']];
-const MAX_LENGTH = { telefono: 20, obraSocial: 100 };
+const MAX_LENGTH = { telefono: 40, obraSocial: 100 };
 const PROFESSIONAL = [
   ['especialidad', 'Especialidad'],
   ['matricula', 'Matrícula'],
@@ -54,9 +61,15 @@ export default function ProfileEditor({ role }) {
   async function save(e) {
     e.preventDefault();
     if (saving) return;
-    setSaving(true);
     setError('');
     setSuccess('');
+    // Misma regla que el backend y que el enlace de WhatsApp: celular con código de área.
+    if ((form.telefono || '').trim() && !telefonoValido(form.telefono)) {
+      setError(MENSAJE_TELEFONO);
+      document.querySelector('input[name="telefono"]')?.focus();
+      return;
+    }
+    setSaving(true);
     const payload = Object.fromEntries(
       fields.map(([key, , type]) => [
         key,
@@ -79,10 +92,17 @@ export default function ProfileEditor({ role }) {
         method: 'PUT',
         body: payload,
       });
+      const antes = nurse ? estadoMatricula(profile) : null;
+      const volvioARevision = nurse && estadoMatricula(updated) === 'pendiente'
+        && ['verificada', 'rechazada'].includes(antes);
       setProfile(updated);
       setForm(updated);
       setEditing(false);
-      setSuccess('Tus cambios se guardaron correctamente.');
+      setSuccess(!volvioARevision
+        ? 'Tus cambios se guardaron correctamente.'
+        : antes === 'rechazada'
+          ? 'Tus cambios se guardaron y le pedimos al equipo de Enfered que revise tu matrícula de nuevo. Te avisamos cuando esté lista.'
+          : 'Tus cambios se guardaron. Como cambiaste datos de tu identidad o tu matrícula, vamos a revisarla de nuevo. Mientras tanto no vas a aparecer en la cartilla.');
     } catch (err) {
       setError(err.message);
     } finally {
@@ -143,6 +163,7 @@ export default function ProfileEditor({ role }) {
               <p className="profile-email">{profile.email}</p>
             </div>
           </header>
+          {nurse && <AvisoMatricula perfil={profile} />}
           <div className="profile-columns">
             <section className="content-panel">
               <div className="panel-heading">
@@ -187,8 +208,17 @@ export default function ProfileEditor({ role }) {
                           min={type === 'number' ? '0' : undefined}
                           step={key === 'tarifa_hora' ? '0.01' : undefined}
                           maxLength={MAX_LENGTH[key]}
+                          inputMode={key === 'telefono' ? 'tel' : undefined}
+                          aria-describedby={key === 'telefono' ? 'telefono-pista' : undefined}
+                          aria-invalid={key === 'telefono' && error === MENSAJE_TELEFONO ? true : undefined}
                           disabled={saving}
                         />
+                        {key === 'telefono' && (
+                          <span id="telefono-pista" className="filter-hint">
+                            Código de área + número, sin 0 ni 15. Ej.: 261 555 1234
+                            {nurse && '. Es el número por el que los pacientes te van a escribir por WhatsApp cuando aceptes su solicitud.'}
+                          </span>
+                        )}
                       </label>
                     ))}
                     <div className="field full-width location-field">
@@ -235,7 +265,7 @@ export default function ProfileEditor({ role }) {
                               longitude={form.longitud}
                               helpText={
                                 nurse
-                                  ? 'Marcá tu zona de atención haciendo clic en el mapa. Este punto se muestra en tu perfil profesional.'
+                                  ? 'Marcá tu zona de atención tocando el mapa. En la cartilla se muestra un punto aproximado, no tu dirección.'
                                   : 'Marcá el lugar donde recibirías la atención. Solo se comparte si activás la opción de compartir ubicación.'
                               }
                               onChange={(latitud, longitud) => setForm((current) => ({
@@ -280,6 +310,9 @@ export default function ProfileEditor({ role }) {
                         }
                         disabled={saving}
                       />
+                      {!nurse && profile.historialIlegible && (
+                        <span className="field-hint">{HISTORIAL_ILEGIBLE} Si lo dejás vacío, no se borra.</span>
+                      )}
                     </label>
                     {nurse && (
                       <label className="checkbox-field full-width">
@@ -335,8 +368,9 @@ export default function ProfileEditor({ role }) {
                   <div className="full-width">
                     <dt>{nurse ? 'Presentación' : 'Información de salud'}</dt>
                     <dd>
-                      {profile[nurse ? 'descripcion' : 'historial_medico'] ||
-                        'Sin completar'}
+                      {!nurse && profile.historialIlegible
+                        ? HISTORIAL_ILEGIBLE
+                        : profile[nurse ? 'descripcion' : 'historial_medico'] || 'Sin completar'}
                     </dd>
                   </div>
                   {nurse && (
@@ -351,9 +385,7 @@ export default function ProfileEditor({ role }) {
                     <div>
                       <dt>Verificación de matrícula</dt>
                       <dd>
-                        {profile.verificado === true
-                          ? 'Verificada'
-                          : 'Pendiente de verificación'}
+                        {TEXTO_MATRICULA[estadoMatricula(profile)] || 'En revisión'}
                       </dd>
                     </div>
                   )}
@@ -397,6 +429,7 @@ export default function ProfileEditor({ role }) {
           </div>
           <HistorialServicios userId={profile.id} nurse={nurse} />
           {nurse && <GestionHorarios />}
+          <MiCuenta rol={role} />
         </>
       )}
     </div>

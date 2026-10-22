@@ -99,7 +99,7 @@ export default function VerPerfiles() {
             )}
           </header>
           <div className="profile-columns public-profile-layout">
-            <ProfessionalContact profile={profile} />
+            <ProfessionalContact profile={profile} idUsuario={id} />
             <div className="profile-information">
               <section className="content-panel">
                 <h2 className="panel-title">
@@ -165,13 +165,13 @@ export default function VerPerfiles() {
                   </dl>
                 ) : (
                   <p>
-                    No hay horarios disponibles publicados. Consultá
-                    directamente con el profesional.
+                    Todavía no publicó sus horarios. Podés pedir un turno y el
+                    profesional te va a confirmar si puede atenderte.
                   </p>
                 )}
                 <p className="schedule-note">
-                  Los horarios son orientativos. Confirmá la disponibilidad al
-                  contactar.
+                  Los horarios son orientativos. El profesional confirma el
+                  turno cuando acepta tu solicitud.
                 </p>
               </section>
               {profile.rol === 'enfermero' && idEnfermero != null && (

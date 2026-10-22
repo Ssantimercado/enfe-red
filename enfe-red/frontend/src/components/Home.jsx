@@ -1,10 +1,67 @@
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import Icon from './ui/Icon';
-import { sesionActual } from '../api';
+import AvisoMatricula from './AvisoMatricula';
+import { estadoMatricula, pendientesDelPerfil } from './perfilPendiente';
+import { requestApi as api, sesionActual } from '../api';
+
+// Lo que le falta al perfil para pedir turnos (paciente) o aparecer en la cartilla (enfermero).
+function CompletarPerfil({ rol }) {
+  const [perfil, setPerfil] = useState(null);
+  const [horarios, setHorarios] = useState(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    const { signal } = controller;
+    Promise.all([
+      api(`/perfil/${rol}`, { signal }),
+      rol === 'enfermero'
+        ? api('/perfil/enfermero/horarios', { signal }).catch(() => null)
+        : Promise.resolve(null),
+    ])
+      .then(([datos, lista]) => {
+        if (controller.signal.aborted) return;
+        setPerfil(datos);
+        setHorarios(Array.isArray(lista) ? lista : null);
+      })
+      // Si no carga, el inicio se muestra igual, sin la lista.
+      .catch(() => {});
+    return () => controller.abort();
+  }, [rol]);
+  if (!perfil) return null;
+  const pendientes = pendientesDelPerfil(rol, perfil, horarios);
+  const sinVerificar = rol === 'enfermero' && estadoMatricula(perfil) !== 'verificada';
+  if (!pendientes.length && !sinVerificar) return null;
+  return (
+    <section className="content-panel completar-perfil" aria-labelledby="completar-perfil-titulo">
+      <h2 id="completar-perfil-titulo">Completá tu perfil</h2>
+      {pendientes.length > 0 && (
+        <>
+          <p>
+            {rol === 'enfermero'
+              ? 'Te falta esto para que los pacientes puedan encontrarte y escribirte:'
+              : 'Te falta esto para pedir un turno más rápido:'}
+          </p>
+          <ul>
+            {pendientes.map(([clave, texto, destino]) => (
+              <li key={clave}>
+                <Link to={destino}>
+                  <span>{texto}</span>
+                  <Icon name="arrow" size={17} />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {sinVerificar && <AvisoMatricula perfil={perfil} />}
+    </section>
+  );
+}
 
 export default function Home() {
   const nurse = sesionActual()?.rol === 'enfermero';
+  const location = useLocation();
+  const recienRegistrado = location.state?.recienRegistrado;
   const [query, setQuery] = useState('');
   const navigate = useNavigate();
   const steps = nurse
@@ -16,7 +73,7 @@ export default function Home() {
     : [
         ['Encontrá tu profesional', 'Buscá por nombre, especialidad o zona.'],
         ['Conocé su experiencia', 'Revisá el perfil, los horarios y la tarifa.'],
-        ['Conectá y coordiná', 'Contactá al profesional para acordar la atención.'],
+        ['Pedí tu turno', 'Cuando el profesional acepta, coordinan por WhatsApp o por el chat.'],
       ];
   return (
     <div className="page-container home-page">
@@ -27,6 +84,11 @@ export default function Home() {
           {nurse ? 'Espacio profesional' : 'Espacio de cuidado'}
         </span>
       </div>
+      {recienRegistrado && (
+        <p className="notice notice-success" role="status">
+          ¡Tu cuenta está lista! Ya iniciaste sesión en Enfered.
+        </p>
+      )}
       <section className="home-hero">
         <div className="home-hero-copy">
           <span className="hero-kicker">
@@ -106,6 +168,7 @@ export default function Home() {
           </div>
         </div>
       </section>
+      <CompletarPerfil rol={nurse ? 'enfermero' : 'paciente'} />
       <section className="home-section">
         <div className="section-heading">
           <div>

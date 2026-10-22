@@ -1,0 +1,19 @@
+{
+  "name": "Enfered",
+  "short_name": "Enfered",
+  "description": "Encontrá profesionales de enfermería a domicilio en Mendoza, cerca de vos. Conocé sus perfiles, horarios y especialidades.",
+  "lang": "es-AR",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "theme_color": "#167bb5",
+  "background_color": "#f7f9fb",
+  "icons": [
+    {
+      "src": "/icon-enfered.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

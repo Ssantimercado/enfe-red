@@ -31,7 +31,7 @@ export default function BusquedaAsistida({ onAplicar }) {
       if (encontrados) onAplicar(filtros);
     } catch (err) {
       // Si falla, la búsqueda manual sigue disponible.
-      setError(`${err.message} Podés usar los filtros de abajo.`);
+      setError(`${err.message} Podés buscar con los filtros de la cartilla.`);
     } finally {
       setBuscando(false);
     }

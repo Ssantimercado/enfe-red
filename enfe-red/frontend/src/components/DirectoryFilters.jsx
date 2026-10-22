@@ -3,6 +3,7 @@ import { DAYS } from '../api';
 export default function DirectoryFilters({
   values,
   specialties,
+  zonas = [],
   onChange,
   prefix,
 }) {
@@ -30,6 +31,20 @@ export default function DirectoryFilters({
           {[
             ...new Set([...specialties, values.especialidad].filter(Boolean)),
           ].map((item) => (
+            <option key={item}>{item}</option>
+          ))}
+        </select>
+      </div>
+      <div className="field">
+        <label htmlFor={`${prefix}-ciudad`}>Zona</label>
+        <select
+          id={`${prefix}-ciudad`}
+          value={values.ciudad}
+          onChange={(e) => onChange('ciudad', e.target.value)}
+        >
+          <option value="">Todas las zonas</option>
+          {/* La zona de la búsqueda asistida puede no estar en la lista: se agrega para no perderla. */}
+          {[...new Set([...zonas, values.ciudad].filter(Boolean))].map((item) => (
             <option key={item}>{item}</option>
           ))}
         </select>

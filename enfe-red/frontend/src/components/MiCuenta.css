@@ -1,0 +1,45 @@
+.mi-cuenta { margin-top: 24px; }
+.mi-cuenta-opciones {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 20px;
+}
+.mi-cuenta-opcion {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+.mi-cuenta-opcion h3 { margin: 0; font-size: 17px; }
+.mi-cuenta-opcion p { margin: 0; color: var(--muted); font-size: 15px; }
+.mi-cuenta-form { width: 100%; gap: 14px; }
+.mi-cuenta-form .form-actions { margin-top: 4px; flex-wrap: wrap; }
+/* Rojo con contraste AA sobre blanco: la acción no se puede deshacer. */
+.button-peligro {
+  border-color: #a52e3b;
+  background: #fff;
+  color: #a52e3b;
+}
+.button-peligro:hover { background: #fff2f3; }
+.cuenta-dialogo .button-peligro { background: #a52e3b; color: #fff; }
+.cuenta-dialogo .button-peligro:hover { background: #8a2430; }
+.cuenta-dialogo {
+  width: min(520px, calc(100% - 32px));
+  max-height: calc(100svh - 32px);
+  overflow-y: auto;
+}
+.cuenta-dialogo::backdrop { background: rgb(0 0 0 / 45%); }
+.cuenta-dialogo h2 { margin: 0 0 8px; }
+.cuenta-dialogo p { margin: 0 0 8px; }
+.cuenta-dialogo ul { margin: 0 0 12px; padding-left: 20px; line-height: 1.6; }
+.cuenta-dialogo-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
+}
+@media (max-width: 520px) {
+  .cuenta-dialogo-acciones .button,
+  .mi-cuenta-opcion .button { width: 100%; }
+}

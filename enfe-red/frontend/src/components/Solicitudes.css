@@ -1,6 +1,6 @@
 ﻿.solicitud-page { max-width: 760px; }
 .solicitud-page .form-stack { margin-top: 24px; }
-.solicitud-page .field-hint { color: var(--muted); font-size: 12px; }
+.solicitud-page .field-hint { color: var(--muted); font-size: 14px; }
 .solicitud-toast {
   position: fixed;
   right: 20px;
@@ -57,7 +57,7 @@
   border-radius: 999px;
   background: var(--blue-soft);
   color: var(--blue-dark);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 650;
 }
 .solicitud-status.pendiente { background: #fff6e8; color: #815615; }
@@ -73,7 +73,7 @@
 }
 .solicitud-reject-dialog::backdrop { background: rgb(0 0 0 / 45%); }
 .solicitud-reject-dialog .solicitud-card-actions { justify-content: flex-end; }
-.nurse-requests-link { min-height: 40px; gap: 7px; white-space: nowrap; }
+.nurse-requests-link { min-height: 44px; gap: 7px; white-space: nowrap; }
 .solicitudes-section-title { margin: 28px 0 14px; font-size: 20px; }
 .solicitudes-section-empty { color: var(--muted); }
 .solicitud-card h3 { margin: 6px 0 0; }
@@ -105,7 +105,7 @@
 .chat-mensaje.propio { align-self: flex-end; background: var(--blue-soft); border-color: #cfe6f5; }
 .chat-mensaje.recibido { align-self: flex-start; }
 .chat-mensaje p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink); }
-.chat-mensaje time { display: block; margin-top: 4px; color: var(--muted); font-size: 12px; text-align: right; }
+.chat-mensaje time { display: block; margin-top: 4px; color: var(--muted); font-size: 14px; text-align: right; }
 .chat-vacio { margin: auto; color: var(--muted); text-align: center; }
 .chat-formulario { display: grid; gap: 8px; }
 .chat-formulario .button { justify-self: end; }
@@ -114,6 +114,61 @@
   .solicitud-summary dd { margin-bottom: 12px; }
 }
 @media (max-width: 800px) {
-  .nurse-requests-link { min-width: 42px; padding: 8px; justify-content: center; }
+  .nurse-requests-link { min-width: 44px; padding: 8px; justify-content: center; }
   .nurse-requests-label { display: none; }
 }
+/* F2: estados Vencida y Cancelada, avisos en la tarjeta, diálogos y horarios del turno. */
+.solicitud-status.vencida { background: #fdf0ef; color: #8a3b32; }
+.solicitud-motivo {
+  margin: 8px 0 0;
+  padding: 10px 14px;
+  border-left: 4px solid var(--field-border);
+  border-radius: 6px;
+  background: #f6f9fb;
+  overflow-wrap: anywhere;
+}
+.solicitud-aviso { margin: 16px 0 0; }
+.solicitud-aviso:focus { outline: 2px solid #1b84ba; outline-offset: 2px; }
+.solicitud-calificacion { margin: 16px 0 0; }
+.solicitud-reprogramar { margin: 12px 0 0; }
+.solicitud-reprogramar > .solicitud-aviso { margin-bottom: 12px; }
+.solicitud-dialogo {
+  width: min(480px, calc(100% - 32px));
+  max-height: calc(100svh - 32px);
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+.solicitud-dialogo::backdrop { background: rgb(0 0 0 / 45%); }
+.solicitud-dialogo h2 { margin: 0 0 8px; }
+.solicitud-dialogo p { margin: 0 0 8px; }
+.solicitud-dialogo .field-hint { color: var(--muted); font-size: 14px; font-weight: 400; }
+.solicitud-dialogo .solicitud-card-actions { justify-content: flex-end; margin-top: 0; }
+.solicitud-horarios { margin: 0; padding: 0; border: 0; min-width: 0; }
+.solicitud-horarios legend { padding: 0; margin-bottom: 8px; }
+.solicitud-horarios p { margin: 0; font-weight: 400; }
+.solicitud-horarios .notice { margin: 0; }
+.solicitud-horarios-opciones {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 10px;
+  margin-top: 4px;
+}
+.solicitud-horario {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  border: 1px solid var(--field-border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+/* El radio queda accesible para el teclado y el lector de pantalla; se ve la tarjeta entera. */
+.solicitud-horario input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.solicitud-horario:has(input:checked) { background: var(--blue-dark); border-color: var(--blue-dark); color: #fff; }
+.solicitud-horario:has(input:focus-visible) { outline: 2px solid #1b84ba; outline-offset: 2px; }
+.solicitud-horarios:disabled .solicitud-horario { opacity: 0.6; cursor: not-allowed; }

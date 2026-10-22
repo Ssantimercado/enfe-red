@@ -2,7 +2,26 @@ import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import AuthLayout from './AuthLayout';
 import Icon from './ui/Icon';
-import { API_URL, cerrarSesion } from '../api';
+import { guardarSesion, requestApi, rutaInterna } from '../api';
+
+const SOPORTE = import.meta.env?.VITE_SOPORTE_EMAIL;
+
+function AvisoMotivo({ motivo }) {
+  if (motivo === 'suspendida')
+    return (
+      <div className="notice notice-error" role="alert">
+        Tu cuenta no está activa, así que cerramos la sesión. Si creés que es un error, escribinos a{' '}
+        {SOPORTE ? <a href={`mailto:${SOPORTE}`}>{SOPORTE}</a> : 'soporte de Enfered'}.
+      </div>
+    );
+  if (motivo === 'expirada')
+    return (
+      <div className="notice notice-info" role="status">
+        Tu sesión terminó. Volvé a iniciar sesión y te llevamos a donde estabas.
+      </div>
+    );
+  return null;
+}
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -12,43 +31,29 @@ export default function Login() {
   const [error, setError] = useState('');
   const navigate = useNavigate();
   const location = useLocation();
+  const parametros = new URLSearchParams(location.search);
+  // "sesion=expirada" es el formato anterior del aviso; se sigue aceptando.
+  const motivo = parametros.get('motivo') || (parametros.get('sesion') === 'expirada' ? 'expirada' : null);
   async function handleSubmit(event) {
     event.preventDefault();
     if (loading) return;
     setLoading(true);
     setError('');
     try {
-      const response = await fetch(`${API_URL}/api/login`, {
+      const data = await requestApi('/login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim(), password }),
+        body: { email: email.trim(), password },
+        sesion: false,
       });
-      const data = await response.json();
-      if (!response.ok || !data.token)
-        throw new Error(
-          data.error || 'No pudimos iniciar tu sesión. Revisá tus datos.',
-        );
-      cerrarSesion();
-      localStorage.setItem('token', data.token);
-      localStorage.setItem('rol', data.rol || 'paciente');
-      if (data.usuario)
-        localStorage.setItem('usuario', JSON.stringify(data.usuario));
-      else localStorage.removeItem('usuario');
-      const destination = location.state?.from;
+      if (!data.token) throw new Error('No pudimos iniciar tu sesión. Revisá tus datos.');
+      guardarSesion(data);
       navigate(
-        destination?.startsWith('/') && !destination.startsWith('//')
-          ? destination
-          : data.rol === 'administrador'
-            ? '/admin'
-            : '/home',
+        rutaInterna(parametros.get('volver')) || rutaInterna(location.state?.from)
+          || (data.rol === 'administrador' ? '/admin' : '/home'),
         { replace: true },
       );
     } catch (err) {
-      setError(
-        err instanceof TypeError
-          ? 'No podemos conectar con el servidor. Intentá nuevamente.'
-          : err.message,
-      );
+      setError(err.message);
     } finally {
       setLoading(false);
     }
@@ -60,11 +65,7 @@ export default function Login() {
       <p className="auth-subtitle">
         Ingresá a tu cuenta para seguir conectando.
       </p>
-      {new URLSearchParams(location.search).get('sesion') === 'expirada' && (
-        <div className="notice notice-info" role="status">
-          Tu sesión terminó. Volvé a iniciar sesión.
-        </div>
-      )}
+      {!error && <AvisoMotivo motivo={motivo} />}
       {error && (
         <div className="notice notice-error" role="alert">
           {error}

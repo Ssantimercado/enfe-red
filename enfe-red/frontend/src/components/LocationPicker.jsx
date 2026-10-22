@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import { CircleMarker, MapContainer, TileLayer, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
+import { MAPA_ATRIBUCION, MAPA_TILES_URL } from './mapaConfig';
 
 function SelectOnMap({ onChange }) {
   useMapEvents({ click: ({ latlng }) => onChange(latlng.lat, latlng.lng) });
@@ -11,7 +12,7 @@ export default function LocationPicker({
   latitude,
   longitude,
   onChange,
-  helpText = 'Marcá tu zona de atención haciendo clic en el mapa. También podés moverlo con las flechas y elegir el centro. Este punto se publica en tu perfil.',
+  helpText = 'Marcá tu zona de atención tocando el mapa. También podés moverlo con las flechas y elegir el centro. Este punto se publica en tu perfil.',
 }) {
   const map = useRef(null);
   const selected = latitude != null && longitude != null;
@@ -27,8 +28,8 @@ export default function LocationPicker({
         scrollWheelZoom={false}
       >
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution={MAPA_ATRIBUCION}
+          url={MAPA_TILES_URL}
         />
         <SelectOnMap onChange={onChange} />
         {selected && (

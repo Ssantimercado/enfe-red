@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import {
   Link,
   NavLink,
@@ -9,6 +10,7 @@ import { cerrarSesion, sesionActual } from '../api';
 import Brand from './ui/Brand';
 import Icon from './ui/Icon';
 import Notificaciones from './Notificaciones';
+import CargaPantalla from './ui/CargaPantalla';
 import './Legal.css';
 export default function AppShell() {
   const navigate = useNavigate();
@@ -39,6 +41,14 @@ export default function AppShell() {
                 <NavLink to="/admin/usuarios">
                   <Icon name="user" size={18} />
                   Usuarios
+                </NavLink>
+                <NavLink to="/admin/resenas">
+                  <Icon name="star" size={18} />
+                  Reseñas
+                </NavLink>
+                <NavLink to="/admin/auditoria">
+                  <Icon name="clock" size={18} />
+                  Auditoría
                 </NavLink>
               </>
             ) : (
@@ -84,25 +94,23 @@ export default function AppShell() {
                 <Notificaciones userId={Number(session?.sub)} />
               </>
             )}
-            <Link className="account-link" to={admin ? '/admin' : profile}>
-              <span className="account-avatar">
-                <Icon name="user" size={18} />
-              </span>
-              <span>{admin ? 'Administración' : nurse ? 'Profesional' : 'Mi cuenta'}</span>
-            </Link>
+            {/* El perfil se abre desde "Mi perfil" en la navegación; acá solo queda salir, con texto visible. */}
             <button
-              className="icon-button logout-button"
+              className="button button-secondary logout-button"
+              type="button"
               onClick={logout}
               title="Cerrar sesión"
-              aria-label="Cerrar sesión"
             >
-              <Icon name="logout" size={19} />
+              <Icon name="logout" size={18} />
+              Salir
             </button>
           </div>
         </div>
       </header>
       <main id="contenido" className="site-main">
-        <Outlet />
+        <Suspense fallback={<CargaPantalla />}>
+          <Outlet />
+        </Suspense>
       </main>
       <footer className="site-footer">
         <Brand />
