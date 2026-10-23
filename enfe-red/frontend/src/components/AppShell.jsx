@@ -34,7 +34,7 @@ export default function AppShell() {
           <nav className="main-nav" aria-label="Navegación principal">
             {admin ? (
               <>
-                <NavLink to="/admin">
+                <NavLink to="/admin" end>
                   <Icon name="home" size={18} />
                   Panel
                 </NavLink>
