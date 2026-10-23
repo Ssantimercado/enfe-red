@@ -105,7 +105,8 @@ class SolicitudesTest(unittest.TestCase):
         response = self.client.get('/api/servicios', headers=self.headers())
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json, [{'idServicio': 301, 'tipoServicio': 'Curaciones', 'descripcion': None,
-                                          'precioEstimado': '8500.50', 'duracionMinutos': 60}])
+                                          'precioEstimado': '8500.50', 'duracionMinutos': 60,
+                                          'activo': True}])
         self.assertEqual(self.client.get('/api/servicios').status_code, 401)
         self.assertEqual(self.client.get('/api/servicios', headers=self.headers(999)).status_code, 401)
         creado = self.crear(idServicio=response.json[0]['idServicio'])
@@ -120,6 +121,8 @@ class SolicitudesTest(unittest.TestCase):
         self.assertEqual(self.client.get('/api/servicios', headers=self.headers()).json, [])
 
     def test_catalogo_inicial_con_precios_de_referencia_es_idempotente_y_se_puede_solicitar(self):
+        Servicio.query.delete()
+        db.session.commit()
         inicializar_catalogo_servicios()
         inicializar_catalogo_servicios()
         servicios = self.client.get('/api/servicios', headers=self.headers()).json
@@ -134,21 +137,30 @@ class SolicitudesTest(unittest.TestCase):
                 'Inyecciones',
             ],
         )
-        curaciones = next(
-            servicio for servicio in servicios
-            if servicio['tipoServicio'] == 'Curaciones'
-        )
         inyecciones = next(
             servicio for servicio in servicios
             if servicio['tipoServicio'] == 'Inyecciones'
         )
-        # Un precio cargado se conserva; uno vacío recibe el de referencia.
-        self.assertEqual(curaciones['precioEstimado'], '8500.50')
         self.assertEqual(inyecciones['precioEstimado'], '6000.00')
         solicitud = self.crear(idServicio=inyecciones['idServicio'])
         self.assertEqual(solicitud.status_code, 201)
         self.assertEqual(solicitud.json['solicitud']['servicio']['precioEstimado'], '6000.00')
         self.assertEqual(Servicio.query.count(), 6)
+
+    def test_catalogo_existente_solo_se_completa_y_no_duplica_renombrados(self):
+        # SCRUM-30/50: con servicios cargados no se agregan los iniciales que falten, porque el
+        # administrador pudo haberlos renombrado; solo se completan precio y descripción vacíos.
+        inicializar_catalogo_servicios()
+        curaciones = db.session.get(Servicio, 301)
+        self.assertEqual(Servicio.query.count(), 1)
+        self.assertEqual(curaciones.precioEstimado, Decimal('8500.50'))  # Un precio cargado se conserva.
+        self.assertTrue(curaciones.descripcion)
+        curaciones.tipoServicio = 'Curaciones y vendajes'
+        curaciones.descripcion = ''
+        db.session.commit()
+        inicializar_catalogo_servicios()
+        self.assertEqual([s.tipoServicio for s in Servicio.query.all()], ['Curaciones y vendajes'])
+        self.assertEqual(db.session.get(Servicio, 301).descripcion, '')  # Borrada a propósito: no vuelve.
 
     def test_crear_y_consultar_comprobante_sin_cambiar_estado(self):
         response = self.crear()

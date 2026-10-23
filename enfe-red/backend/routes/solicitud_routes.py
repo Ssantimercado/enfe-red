@@ -337,11 +337,16 @@ def _cambiar_estado_solicitud(id_solicitud, *, rol, origen, destino, accion, men
 @solicitud_bp.route('/servicios', methods=['GET'])
 @jwt_required()
 def listarServicios():
-    """Catálogo global que utiliza crearSolicitud; no es una oferta por enfermero."""
+    """Catálogo vigente: lo usan crearSolicitud, el filtro de la cartilla y el perfil del enfermero.
+
+    Lo que ofrece cada enfermero viene en su perfil (campo servicios). El administrador ve también
+    los dados de baja en /api/admin/servicios.
+    """
     usuario = _usuario_actual()
     if not usuario:
         return jsonify({'error': 'La sesión no corresponde a un usuario existente'}), 401
-    servicios = Servicio.query.order_by(Servicio.tipoServicio, Servicio.idServicio).all()
+    servicios = Servicio.query.filter(Servicio.activo.is_(True)).order_by(
+        Servicio.tipoServicio, Servicio.idServicio).all()
     return jsonify([servicio.to_dict() for servicio in servicios]), 200
 
 
@@ -379,6 +384,10 @@ def crearSolicitud():
     servicio = db.session.get(Servicio, datos['idServicio'])
     if not servicio:
         return jsonify({'error': 'Servicio no encontrado'}), 404
+    if servicio.activo is False:
+        return jsonify({'error': 'Ese servicio ya no se ofrece. Elegí otro del listado.'}), 409
+    if not enfermero.ofrece_servicio(servicio):
+        return jsonify({'error': 'Este profesional no ofrece ese servicio. Elegí uno de los que ofrece.'}), 409
     if _pendientes_del_paciente(paciente.id) >= MAX_PENDIENTES_POR_PACIENTE:
         return jsonify({'error': MENSAJE_LIMITE_PENDIENTES}), 409
 

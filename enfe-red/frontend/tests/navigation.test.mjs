@@ -3152,3 +3152,156 @@ test('si el backend no deja suspender a otro administrador se muestra su mensaje
     globalThis.fetch = original;
   }
 });
+
+// SCRUM-14/53 y SCRUM-30/50: servicios que ofrece cada profesional y catálogo del administrador.
+const CATALOGO = [
+  { idServicio: 301, tipoServicio: 'Curaciones', descripcion: 'Heridas', precioEstimado: '8500.00', duracionMinutos: 60, activo: true },
+  { idServicio: 302, tipoServicio: 'Inyecciones', descripcion: null, precioEstimado: '6000.00', duracionMinutos: 30, activo: true },
+];
+
+test('la cartilla filtra por tipo de servicio y muestra qué ofrece cada profesional', async () => {
+  session('paciente');
+  const original = globalThis.fetch;
+  const busquedas = [];
+  globalThis.fetch = async (url, options = {}) => {
+    const ruta = String(url);
+    if (ruta.endsWith('/api/servicios')) return response(CATALOGO);
+    if (ruta.includes('/enfermeros/buscar')) {
+      busquedas.push(new URL(ruta).searchParams);
+      return response({
+        enfermeros: [{ id: 5, usuario_id: 5, nombre: 'Laura', disponible: true,
+          servicios: [{ idServicio: 301, tipoServicio: 'Curaciones' }, { idServicio: 302, tipoServicio: 'Inyecciones' }] }],
+        total_resultados: 1, total_paginas: 1,
+      });
+    }
+    return original(url, options);
+  };
+  try {
+    await mount('/cartilla');
+    await esperar(300);
+    const filtro = document.querySelector('#desktop-servicio');
+    assert.ok(filtro, 'Falta el filtro por servicio');
+    assert.deepEqual([...filtro.options].map((opcion) => opcion.textContent), ['Todos los servicios', 'Curaciones', 'Inyecciones']);
+    assert.match(document.querySelector('.card-services').textContent, /Ofrece: Curaciones, Inyecciones/);
+    await elegir(filtro, '302');
+    await esperar(300);
+    assert.equal(busquedas.at(-1).get('servicio'), '302');
+    assert.ok(button('Quitar filtro Inyecciones'));
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test('el enfermero elige en su perfil los servicios que ofrece', async () => {
+  session('enfermero');
+  const original = globalThis.fetch;
+  let enviado;
+  globalThis.fetch = async (url, options = {}) => {
+    const ruta = String(url);
+    if (ruta.endsWith('/api/servicios')) return response(CATALOGO);
+    if (ruta.endsWith('/perfil/enfermero')) {
+      if (options.method === 'PUT') {
+        enviado = JSON.parse(options.body);
+        return response({ ...profile, rol: 'enfermero', servicios: CATALOGO.filter((s) => enviado.servicios.includes(s.idServicio)) });
+      }
+      return response({ ...profile, rol: 'enfermero', telefono: '', servicios: [{ idServicio: 301, tipoServicio: 'Curaciones' }] });
+    }
+    return original(url, options);
+  };
+  try {
+    await mount('/perfil-enfermero');
+    await esperar(50);
+    assert.match(document.body.textContent, /Servicios que ofrecésCuraciones/);
+    await click(button('Editar'));
+    const opciones = [...document.querySelectorAll('.services-offered input[type="checkbox"]')];
+    assert.deepEqual(opciones.map((opcion) => opcion.checked), [true, false]);
+    await click(opciones[1]);
+    await click(button('Guardar'));
+    await esperar(20);
+    assert.deepEqual(enviado.servicios, [301, 302]);
+    assert.match(document.body.textContent, /Servicios que ofrecésCuraciones, Inyecciones/);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test('el administrador agrega servicios, los edita y los da de baja', async () => {
+  session('administrador');
+  const original = globalThis.fetch;
+  const pedidos = [];
+  const conUso = (servicio) => ({ enfermerosQueLoOfrecen: 0, solicitudes: 0, ...servicio });
+  globalThis.fetch = async (url, options = {}) => {
+    const ruta = String(url);
+    if (!ruta.includes('/admin/servicios')) return original(url, options);
+    if (!options.method || options.method === 'GET') {
+      return response({ servicios: CATALOGO.map((servicio) => conUso({ ...servicio, enfermerosQueLoOfrecen: 2 })) });
+    }
+    const body = JSON.parse(options.body);
+    pedidos.push({ ruta, metodo: options.method, body });
+    if (options.method === 'POST') {
+      return response({ mensaje: 'Servicio creado', servicio: conUso({ idServicio: 303, activo: true, ...body }) }, 201);
+    }
+    const actual = CATALOGO.find((servicio) => ruta.endsWith(`/${servicio.idServicio}`));
+    return response({
+      mensaje: body.activo === false ? 'Servicio dado de baja' : 'Servicio actualizado',
+      servicio: conUso({ ...actual, ...body }),
+    });
+  };
+  try {
+    await mount('/admin/servicios');
+    await esperar(50);
+    assert.equal(document.title, 'Servicios · Enfered');
+    assert.ok(document.querySelector('a[href="/admin/servicios"]'), 'Falta el acceso en el menú');
+    assert.match(document.querySelector('.admin-service').textContent, /Profesionales que lo ofrecen2/);
+
+    await click(button('Agregar servicio'));
+    await type(document.querySelector('input[name="tipoServicio"]'), 'Nebulizaciones');
+    await type(document.querySelector('input[name="precioEstimado"]'), '4500');
+    await type(document.querySelector('input[name="duracionMinutos"]'), '30');
+    await enviarFormulario(document.querySelector('.admin-service-form'));
+    await esperar(20);
+    assert.deepEqual(pedidos[0], { ruta: pedidos[0].ruta, metodo: 'POST',
+      body: { tipoServicio: 'Nebulizaciones', descripcion: '', precioEstimado: '4500', duracionMinutos: 30 } });
+    assert.match(document.querySelector('.notice-success').textContent, /Servicio creado: Nebulizaciones/);
+
+    await click(document.querySelectorAll('.admin-service')[0].querySelector('button'));
+    await type(document.querySelector('input[name="precioEstimado"]'), '');
+    await enviarFormulario(document.querySelector('.admin-service-form'));
+    await esperar(20);
+    assert.equal(pedidos[1].metodo, 'PUT');
+    assert.equal(pedidos[1].body.precioEstimado, null, 'Precio vacío = "A consultar"');
+
+    await click(button('Dar de baja'));
+    const dialogo = document.querySelector('dialog');
+    assert.equal(dialogo.open, true);
+    assert.match(dialogo.textContent, /Los pacientes ya no lo van a poder pedir/);
+    await enviarFormulario(dialogo.querySelector('form'));
+    await esperar(20);
+    assert.deepEqual(pedidos[2].body, { activo: false });
+    assert.match(document.body.textContent, /Dado de baja/);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test('al pedir un turno solo se ofrecen los servicios que hace ese profesional', async () => {
+  session('paciente');
+  const servicios = (seleccion) => [...document.querySelectorAll('select[name="idServicio"] option')]
+    .map((opcion) => opcion.textContent.split(' · ')[0]).slice(1, seleccion);
+  for (const [ofrecidos, esperado] of [
+    [[{ idServicio: 302, tipoServicio: 'Inyecciones' }], ['Inyecciones']],
+    [[], ['Curaciones', 'Inyecciones']],  // Sin servicios declarados: todo el catálogo.
+  ]) {
+    solicitudHandler = async (config) => {
+      if (config.url === '/usuarios/21') return { data: { id: 21, enfermero_id: 201, nombre: 'Laura', rol: 'enfermero',
+        verificado: true, disponible: true, servicios: ofrecidos } };
+      if (config.url === '/servicios') return { data: CATALOGO };
+      throw new Error(`Petición inesperada: ${config.method} ${config.url}`);
+    };
+    await mount('/perfil/21/solicitar');
+    await esperar(50);
+    assert.deepEqual(servicios(), esperado);
+    await act(async () => root.unmount());
+    root = null;
+  }
+});

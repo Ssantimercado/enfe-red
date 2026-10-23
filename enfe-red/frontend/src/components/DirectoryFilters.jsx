@@ -4,6 +4,7 @@ export default function DirectoryFilters({
   values,
   specialties,
   zonas = [],
+  servicios = [],
   onChange,
   prefix,
 }) {
@@ -20,6 +21,22 @@ export default function DirectoryFilters({
 
   return (
     <div className="filters-fields">
+      {/* SCRUM-14/53: solo profesionales que declararon ofrecer ese servicio. */}
+      <div className="field">
+        <label htmlFor={`${prefix}-servicio`}>Servicio</label>
+        <select
+          id={`${prefix}-servicio`}
+          value={values.servicio}
+          onChange={(e) => onChange('servicio', e.target.value)}
+        >
+          <option value="">Todos los servicios</option>
+          {servicios.map((servicio) => (
+            <option key={servicio.idServicio} value={String(servicio.idServicio)}>
+              {servicio.tipoServicio}
+            </option>
+          ))}
+        </select>
+      </div>
       <div className="field">
         <label htmlFor={`${prefix}-especialidad`}>Especialidad</label>
         <select

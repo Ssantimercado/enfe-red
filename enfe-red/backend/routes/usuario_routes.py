@@ -11,6 +11,7 @@ import unicodedata
 from database import db
 from extensions import bcrypt
 from models.usuario_models import DECIMALES_UBICACION_PUBLICA, Usuario, Paciente, Enfermero, Disponibilidad
+from models.servicio_models import Servicio
 from models.solicitud_models import ESTADOS_ACTIVOS, SolicitudServicio
 from routes.auth_routes import (
     buscar_usuario_por_email, clave_de_cuenta, error_password, normalizar_email, verificar_password,
@@ -58,6 +59,17 @@ def normalizar_telefono(telefono):
 def _identidad(texto):
     # Corregir mayúsculas o espacios no cambia a la persona: no hace falta volver a verificarla.
     return ' '.join((texto or '').split()).casefold()
+
+
+def _servicios_del_catalogo(ids):
+    """SCRUM-14/53: (servicios activos con esos ids, None) o (None, mensaje de error)."""
+    if not isinstance(ids, list) or any(isinstance(i, bool) or not isinstance(i, int) for i in ids):
+        return None, 'Los servicios tienen que ser una lista de números de servicio'
+    ids = set(ids)
+    servicios = Servicio.query.filter(Servicio.idServicio.in_(ids), Servicio.activo.is_(True)).all() if ids else []
+    if len(servicios) != len(ids):
+        return None, 'Alguno de los servicios elegidos no existe o ya no se ofrece'
+    return servicios, None
 
 
 def _validar_telefono(data):
@@ -363,6 +375,11 @@ def perfil_enfermero():
                 data[campo] = int(numero) if campo == 'experiencia_anios' else numero
             except (TypeError, ValueError):
                 return jsonify({'error': f'El campo {campo} no es válido'}), 400
+        servicios_ofrecidos = None
+        if 'servicios' in data:
+            servicios_ofrecidos, mensaje_servicios = _servicios_del_catalogo(data['servicios'])
+            if mensaje_servicios:
+                return jsonify({'error': mensaje_servicios}), 400
         coordenadas = ('latitud', 'longitud')
         if any(campo in data for campo in coordenadas):
             if not all(campo in data for campo in coordenadas):
@@ -405,6 +422,10 @@ def perfil_enfermero():
             enfermero.disponible = data.get('disponible', enfermero.disponible)
             enfermero.latitud = data.get('latitud', enfermero.latitud)
             enfermero.longitud = data.get('longitud', enfermero.longitud)
+            if servicios_ofrecidos is not None:
+                # Los dados de baja por el administrador se conservan: si vuelven al catálogo, reaparecen.
+                inactivos = [servicio for servicio in enfermero.servicios if servicio.activo is False]
+                enfermero.servicios = inactivos + servicios_ofrecidos
             try:
                 db.session.commit()
             except IntegrityError:
@@ -548,7 +569,7 @@ def eliminar_horario(horario_id):
 def obtener_enfermeros():
     # Solo los que la cartilla puede mostrar (disponibles, verificados y no suspendidos).
     enfermeros_db = consulta_enfermeros_visibles().options(
-        joinedload(Enfermero.usuario), selectinload(Enfermero.disponibilidades),
+        joinedload(Enfermero.usuario), selectinload(Enfermero.disponibilidades), selectinload(Enfermero.servicios),
     ).all()
     lista_enfermeros = []
     for enfermero in enfermeros_db:
@@ -726,6 +747,10 @@ def buscar_enfermeros():
     texto = request.args.get('q', '').strip()
     especialidad = request.args.get('especialidad', '').strip()
     ciudad = request.args.get('ciudad', '').strip()
+    # SCRUM-14/53: id de un servicio del catálogo; solo quienes declararon ofrecerlo.
+    servicio_id = request.args.get('servicio', type=int)
+    if 'servicio' in request.args and (servicio_id is None or servicio_id < 1):
+        return jsonify({'error': 'El servicio no es válido'}), 400
     precio_max = request.args.get('precio_max', type=float)
     precio_min = request.args.get('precio_min', type=float)
     dia_semana = request.args.get('dia_semana', '').strip()
@@ -790,6 +815,11 @@ def buscar_enfermeros():
     if ciudad:
         query = query.filter(Enfermero.ciudad.ilike(f"%{ciudad}%"))
 
+    if servicio_id is not None:
+        query = query.filter(Enfermero.servicios.any(and_(
+            Servicio.idServicio == servicio_id, Servicio.activo.is_(True),
+        )))
+
     if precio_max is not None:
         query = query.filter(Enfermero.tarifa_hora <= precio_max)
     if precio_min is not None:
@@ -810,7 +840,9 @@ def buscar_enfermeros():
             Enfermero.disponibilidades.any(and_(*filtros_horario))
         )
 
-    query = query.distinct()
+    query = query.distinct().options(
+        selectinload(Enfermero.disponibilidades), selectinload(Enfermero.servicios),
+    )
 
     def serializar(enf, distancia=None):
         datos_enf = enf.to_dict_publico()

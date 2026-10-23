@@ -2989,10 +2989,32 @@ button.notification-item:hover {
 .admin-audit-top time { color: var(--muted); font-size: 14px; }
 .admin-audit-detail { margin: 8px 0 0; color: var(--ink); font-size: 15px; overflow-wrap: anywhere; }
 @media (max-width: 800px) {
-  /* Cuatro accesos en la barra inferior del administrador. */
-  .admin-shell .main-nav { grid-template-columns: repeat(4, 1fr); gap: 4px; padding-inline: 8px; }
+  /* Cinco accesos en la barra inferior del administrador. */
+  .admin-shell .main-nav { grid-template-columns: repeat(5, 1fr); gap: 4px; padding-inline: 8px; }
   .admin-shell .main-nav a { padding: 7px 2px; font-size: 13px; }
   .admin-states-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .admin-alert-panel { flex-direction: column; align-items: stretch; }
   .admin-review-actions .button { flex: 1 1 auto; }
 }
+
+/* SCRUM-14/53: servicios que ofrece cada profesional (tarjeta de la cartilla y perfil). */
+.card-services { margin: 10px 0 0; color: var(--muted); font-size: 15px; line-height: 1.45; }
+.card-services strong { color: var(--ink); font-weight: 650; }
+.services-offered { margin: 0; padding: 16px; border: 1px solid var(--border); border-radius: 12px; }
+.services-offered legend { padding: 0 6px; color: var(--ink); font-weight: 650; }
+.services-offered .field-hint { margin: 0 0 12px; }
+.services-offered-options { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px 16px; }
+
+/* SCRUM-30/50: catálogo de servicios del administrador. */
+.admin-service-list { display: grid; gap: 14px; margin: 0; padding: 0; list-style: none; }
+.admin-service { margin: 0; }
+.admin-service.inactive { background: #f7f9fa; }
+.admin-service h2 { margin: 0; font-size: 19px; }
+.admin-service-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.admin-service-badge { padding: 4px 12px; border-radius: 999px; background: var(--mint); color: var(--teal); font-size: 14px; font-weight: 650; }
+.admin-service-badge.inactive { background: #fff2f3; color: #a52e3b; }
+.admin-service-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px 18px; margin: 14px 0 0; }
+.admin-service-facts dt { color: var(--muted); font-size: 14px; }
+.admin-service-facts dd { margin: 2px 0 0; color: var(--ink); font-size: 16px; font-weight: 650; }
+.admin-service-form { display: grid; gap: 14px; margin-top: 12px; }
+.admin-service-form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }

@@ -7,6 +7,8 @@ MAX_DETALLE = 255
 ACCIONES_AUDITORIA = (
     'suspender_usuario', 'reactivar_usuario', 'aprobar_matricula', 'rechazar_matricula',
     'ocultar_resena', 'mostrar_resena',
+    # SCRUM-30/50: catálogo de servicios.
+    'crear_servicio', 'editar_servicio', 'baja_servicio', 'alta_servicio',
 )
 
 
@@ -23,7 +25,7 @@ class AuditoriaAdmin(db.Model):
     idAuditoria = db.Column(db.Integer, primary_key=True)
     idAdmin = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
     accion = db.Column(db.String(30), nullable=False)
-    # 'usuario', 'enfermero' o 'resena', con el id correspondiente.
+    # 'usuario', 'enfermero', 'resena' o 'servicio', con el id correspondiente.
     tipoObjetivo = db.Column(db.String(20), nullable=False)
     idObjetivo = db.Column(db.Integer, nullable=False)
     # Texto corto para entender la acción; nunca lleva datos de salud ni el texto de una reseña.

@@ -1,4 +1,5 @@
 """SCRUM-68 a SCRUM-70: funciones de administración con autorización JWT."""
+from decimal import Decimal, InvalidOperation
 from functools import wraps
 import math
 
@@ -12,7 +13,7 @@ from models.acceso_models import ahora_utc
 from models.auditoria_models import ACCIONES_AUDITORIA, AuditoriaAdmin, registrar_auditoria
 from models.calificacion_models import MAX_MOTIVO_MODERACION, Calificacion, recalcular_promedio
 from models.notificacion_models import MAX_MENSAJE, notificar
-from models.servicio_models import Servicio
+from models.servicio_models import MAX_DESCRIPCION_SERVICIO, MAX_TIPO_SERVICIO, Servicio, enfermero_servicios
 from models.solicitud_models import ESTADOS_SOLICITUD, SolicitudServicio
 from models.usuario_models import (
     MAX_MOTIVO_RECHAZO, PREFIJO_MATRICULA_TEMPORAL, Enfermero, Paciente, Usuario,
@@ -333,7 +334,7 @@ def resumenAdmin():
         'total_solicitudes': SolicitudServicio.query.count(),
         'servicios_realizados': realizados,
         'serviciosRealizados': realizados,
-        'servicios_catalogo': Servicio.query.count(),
+        'servicios_catalogo': Servicio.query.filter(Servicio.activo.is_(True)).count(),
         'solicitudes_por_estado': {estado: conteo_estados.get(estado, 0) for estado in ESTADOS_SOLICITUD},
         'resenas_denunciadas': denunciadas,
         'resenasDenunciadas': denunciadas,
@@ -456,3 +457,131 @@ def listarAuditoria():
         'total_resultados': total,
         'total_paginas': _total_paginas(total, por_pagina),
     }), 200
+
+
+# SCRUM-30/50: gestión del catálogo de servicios (Servicio.actualizarPrecio / modificarDescripcion).
+MIN_TIPO_SERVICIO = 3
+DURACION_MINIMA, DURACION_MAXIMA = 15, 480
+PRECIO_MAXIMO = Decimal('99999999.99')
+
+
+def _datos_servicio(data, servicio=None):
+    """Valida el cuerpo de alta o edición. Devuelve (campos, None) o (None, mensaje de error)."""
+    if not isinstance(data, dict):
+        return None, 'Datos inválidos'
+    campos = {}
+    if 'tipoServicio' in data or servicio is None:
+        tipo = data.get('tipoServicio')
+        tipo = ' '.join(tipo.split()) if isinstance(tipo, str) else ''
+        if not MIN_TIPO_SERVICIO <= len(tipo) <= MAX_TIPO_SERVICIO:
+            return None, f'El nombre del servicio tiene que tener entre {MIN_TIPO_SERVICIO} y {MAX_TIPO_SERVICIO} caracteres.'
+        repetido = Servicio.query.filter(func.lower(Servicio.tipoServicio) == tipo.lower())
+        if servicio is not None:
+            repetido = repetido.filter(Servicio.idServicio != servicio.idServicio)
+        if repetido.first():
+            return None, 'Ya existe un servicio con ese nombre.'
+        campos['tipoServicio'] = tipo
+    if 'descripcion' in data:
+        descripcion = data['descripcion']
+        if descripcion is not None and not isinstance(descripcion, str):
+            return None, 'La descripción tiene que ser texto.'
+        descripcion = (descripcion or '').strip()
+        if len(descripcion) > MAX_DESCRIPCION_SERVICIO:
+            return None, f'La descripción puede tener hasta {MAX_DESCRIPCION_SERVICIO} caracteres.'
+        campos['descripcion'] = descripcion
+    if 'precioEstimado' in data:
+        precio = data['precioEstimado']
+        if precio is None or precio == '':
+            # Sin precio de referencia el paciente ve "A consultar".
+            campos['precioEstimado'] = None
+        else:
+            try:
+                if isinstance(precio, bool):
+                    raise InvalidOperation()
+                precio = Decimal(str(precio)).quantize(Decimal('0.01'))
+                if not precio.is_finite() or not 0 <= precio <= PRECIO_MAXIMO:
+                    raise InvalidOperation()
+            except (InvalidOperation, ValueError):
+                return None, 'El precio tiene que ser un número mayor o igual a cero.'
+            campos['precioEstimado'] = precio
+    if 'duracionMinutos' in data:
+        duracion = data['duracionMinutos']
+        if isinstance(duracion, bool) or not isinstance(duracion, int) or not DURACION_MINIMA <= duracion <= DURACION_MAXIMA:
+            return None, f'La duración tiene que ser de {DURACION_MINIMA} a {DURACION_MAXIMA} minutos.'
+        campos['duracionMinutos'] = duracion
+    if 'activo' in data:
+        if not isinstance(data['activo'], bool):
+            return None, 'El campo activo debe ser verdadero o falso.'
+        campos['activo'] = data['activo']
+    return campos, None
+
+
+def _servicio_admin(servicio):
+    datos = servicio.to_dict()
+    datos['enfermerosQueLoOfrecen'] = db.session.query(func.count()).select_from(enfermero_servicios).filter(
+        enfermero_servicios.c.idServicio == servicio.idServicio).scalar()
+    datos['solicitudes'] = SolicitudServicio.query.filter_by(idServicio=servicio.idServicio).count()
+    return datos
+
+
+@admin_bp.get('/admin/servicios')
+@admin_required
+def listarServiciosAdmin():
+    # Los activos primero; los dados de baja quedan visibles para poder reactivarlos.
+    servicios = Servicio.query.order_by(Servicio.activo.desc(), Servicio.tipoServicio, Servicio.idServicio).all()
+    return jsonify({'servicios': [_servicio_admin(servicio) for servicio in servicios]}), 200
+
+
+@admin_bp.post('/admin/servicios')
+@admin_required
+def crearServicio():
+    campos, error = _datos_servicio(request.get_json(silent=True))
+    if error:
+        return jsonify(error=error), 400
+    servicio = Servicio(activo=True, **campos)
+    try:
+        db.session.add(servicio)
+        db.session.flush()
+        registrar_auditoria(_admin_actual().id, 'crear_servicio', 'servicio', servicio.idServicio,
+                            f'Servicio "{servicio.tipoServicio}"')
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.exception('No se pudo crear el servicio')
+        return jsonify(error='No se pudo crear el servicio. Intentá nuevamente.'), 500
+    return jsonify({'mensaje': 'Servicio creado', 'servicio': _servicio_admin(servicio)}), 201
+
+
+@admin_bp.put('/admin/servicios/<int:idServicio>')
+@admin_required
+def editarServicio(idServicio):
+    servicio = db.session.get(Servicio, idServicio)
+    if not servicio:
+        return jsonify(error='Servicio no encontrado'), 404
+    campos, error = _datos_servicio(request.get_json(silent=True), servicio)
+    if error:
+        return jsonify(error=error), 400
+    if not campos:
+        return jsonify(error='No hay cambios para guardar'), 400
+    cambio_estado = 'activo' in campos and campos['activo'] != (servicio.activo is not False)
+    if 'precioEstimado' in campos:
+        servicio.actualizarPrecio(campos.pop('precioEstimado'))
+    if 'descripcion' in campos:
+        servicio.modificarDescripcion(campos.pop('descripcion'))
+    for campo, valor in campos.items():
+        setattr(servicio, campo, valor)
+    if cambio_estado:
+        accion = 'alta_servicio' if servicio.activo else 'baja_servicio'
+    else:
+        accion = 'editar_servicio'
+    try:
+        registrar_auditoria(_admin_actual().id, accion, 'servicio', servicio.idServicio,
+                            f'Servicio "{servicio.tipoServicio}"')
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.exception('No se pudo actualizar el servicio')
+        return jsonify(error='No se pudo guardar el servicio. Intentá nuevamente.'), 500
+    mensaje = {'alta_servicio': 'Servicio disponible de nuevo', 'baja_servicio': 'Servicio dado de baja'}
+    return jsonify({'mensaje': mensaje.get(accion, 'Servicio actualizado'),
+                    'servicio': _servicio_admin(servicio)}), 200

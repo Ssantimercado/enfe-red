@@ -42,6 +42,8 @@ export default function ProfileEditor({ role }) {
   const [success, setSuccess] = useState('');
   const [retry, setRetry] = useState(0);
   const [locationOpen, setLocationOpen] = useState(false);
+  // SCRUM-14/53: catálogo para elegir qué servicios ofrece el enfermero.
+  const [catalogo, setCatalogo] = useState([]);
   const fields = [...COMMON, ...(nurse ? PROFESSIONAL : PATIENT)];
 
   useEffect(() => {
@@ -57,6 +59,23 @@ export default function ProfileEditor({ role }) {
       });
     return () => controller.abort();
   }, [role, retry]);
+
+  useEffect(() => {
+    if (!nurse) return undefined;
+    const controller = new AbortController();
+    api('/servicios', { signal: controller.signal })
+      .then((lista) => setCatalogo(Array.isArray(lista) ? lista : []))
+      .catch(() => {});
+    return () => controller.abort();
+  }, [nurse]);
+
+  const idsOfrecidos = (form.servicios || []).map((servicio) => servicio.idServicio);
+  function alternarServicio(servicio, elegido) {
+    setForm((current) => {
+      const resto = (current.servicios || []).filter((item) => item.idServicio !== servicio.idServicio);
+      return { ...current, servicios: elegido ? [...resto, servicio] : resto };
+    });
+  }
 
   async function save(e) {
     e.preventDefault();
@@ -79,6 +98,7 @@ export default function ProfileEditor({ role }) {
     if (nurse) {
       payload.descripcion = form.descripcion || '';
       payload.disponible = Boolean(form.disponible);
+      payload.servicios = idsOfrecidos;
       payload.latitud = form.latitud ?? null;
       payload.longitud = form.longitud ?? null;
     } else payload.historial_medico = form.historial_medico || '';
@@ -330,6 +350,27 @@ export default function ProfileEditor({ role }) {
                         Estoy disponible para recibir consultas
                       </label>
                     )}
+                    {nurse && catalogo.length > 0 && (
+                      <fieldset className="services-offered full-width" disabled={saving}>
+                        <legend>Servicios que ofrecés</legend>
+                        <p className="field-hint">
+                          Los pacientes que buscan un servicio te van a encontrar si lo marcás. Si no marcás
+                          ninguno, podés recibir pedidos de cualquier servicio, pero no aparecés al filtrar.
+                        </p>
+                        <div className="services-offered-options">
+                          {catalogo.map((servicio) => (
+                            <label key={servicio.idServicio} className="checkbox-field">
+                              <input
+                                type="checkbox"
+                                checked={idsOfrecidos.includes(servicio.idServicio)}
+                                onChange={(e) => alternarServicio(servicio, e.target.checked)}
+                              />
+                              {servicio.tipoServicio}
+                            </label>
+                          ))}
+                        </div>
+                      </fieldset>
+                    )}
                   </div>
                   <div className="form-actions">
                     <button className="button button-primary" disabled={saving}>
@@ -378,6 +419,16 @@ export default function ProfileEditor({ role }) {
                       <dt>Disponibilidad</dt>
                       <dd>
                         {profile.disponible ? 'Disponible' : 'No disponible'}
+                      </dd>
+                    </div>
+                  )}
+                  {nurse && (
+                    <div className="full-width">
+                      <dt>Servicios que ofrecés</dt>
+                      <dd>
+                        {profile.servicios?.length
+                          ? profile.servicios.map((servicio) => servicio.tipoServicio).join(', ')
+                          : 'Sin elegir: recibís pedidos de cualquier servicio, pero no aparecés al filtrar por servicio'}
                       </dd>
                     </div>
                   )}

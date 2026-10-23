@@ -10,11 +10,16 @@ const ACCIONES = {
   rechazar_matricula: 'Rechazó una matrícula',
   ocultar_resena: 'Ocultó una reseña',
   mostrar_resena: 'Dejó visible una reseña',
+  crear_servicio: 'Agregó un servicio',
+  editar_servicio: 'Editó un servicio',
+  baja_servicio: 'Dio de baja un servicio',
+  alta_servicio: 'Volvió a ofrecer un servicio',
 };
 const OBJETIVOS = {
   usuario: 'Usuario',
   enfermero: 'Profesional',
   resena: 'Reseña',
+  servicio: 'Servicio',
 };
 
 function respuestaValida(data) {
@@ -64,7 +69,7 @@ export default function AdminAuditoria() {
         <div>
           <span className="eyebrow">ADMINISTRACIÓN</span>
           <h1>Auditoría</h1>
-          <p>Qué hizo cada administrador: suspensiones, matrículas y reseñas.</p>
+          <p>Qué hizo cada administrador: suspensiones, matrículas, reseñas y servicios.</p>
         </div>
       </header>
 

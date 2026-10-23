@@ -149,7 +149,18 @@ class Enfermero(db.Model):
     cantidadResenas = db.Column(db.Integer, nullable=False, default=0, server_default='0')
 
     disponibilidades = db.relationship('Disponibilidad', backref='enfermero', cascade="all, delete-orphan")
-    
+    # SCRUM-14/53: servicios del catálogo que el enfermero declara ofrecer (tabla enfermero_servicios).
+    # Carga diferida: las listas (cartilla) la piden junta con selectinload para no hacer una consulta por enfermero.
+    servicios = db.relationship('Servicio', secondary='enfermero_servicios', order_by='Servicio.tipoServicio')
+
+    def servicios_activos(self):
+        return [servicio for servicio in self.servicios if servicio.activo is not False]
+
+    def ofrece_servicio(self, servicio):
+        """Sin servicios declarados acepta cualquiera del catálogo (igual que pasa sin horarios)."""
+        activos = self.servicios_activos()
+        return not activos or any(propio.idServicio == servicio.idServicio for propio in activos)
+
     def to_dict(self):
         return {
             "id": self.usuario_id,          # Para VerPerfiles.jsx
@@ -175,6 +186,7 @@ class Enfermero(db.Model):
             "cantidadResenas": self.cantidadResenas or 0,
             # ListaEnfermeros.jsx muestra la estrella con este campo (HU3).
             "puntuacion": self.calificacionPromedio,
+            "servicios": [servicio.to_dict_resumen() for servicio in self.servicios_activos()],
         }
 
     @property

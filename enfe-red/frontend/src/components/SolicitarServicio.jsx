@@ -90,7 +90,9 @@ export default function SolicitarServicio() {
       if (!Array.isArray(catalogo)) throw new Error('Catálogo inválido');
       if (controller.signal.aborted) return;
       setPerfil(profesional);
-      setServicios(catalogo);
+      // SCRUM-14/53: si el profesional declaró qué servicios hace, solo esos; si no, todo el catálogo.
+      const ofrecidos = new Set((profesional?.servicios || []).map(s => s.idServicio));
+      setServicios(ofrecidos.size ? catalogo.filter(s => ofrecidos.has(s.idServicio)) : catalogo);
       setPaciente(propio);
       const direccion = direccionDelPerfil(propio?.direccion);
       if (direccion) setDatos(actual => (actual.direccionAtencion ? actual : { ...actual, direccionAtencion: direccion }));

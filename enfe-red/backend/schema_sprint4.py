@@ -103,22 +103,21 @@ def inicializar_bd_sprint4():
 
 
 def inicializar_catalogo_servicios():
-    """Agregar los servicios si faltan y completar el precio de referencia solo donde está vacío."""
-    existentes = {
-        servicio.tipoServicio: servicio
-        for servicio in Servicio.query.filter(
-            Servicio.tipoServicio.in_(SERVICIOS_INICIALES)
-        ).all()
-    }
-    for tipo, precio in PRECIOS_REFERENCIA.items():
-        servicio = existentes.get(tipo)
-        if not servicio:
+    """Cargar el catálogo inicial en una base vacía y completar precios o descripciones que nunca se cargaron.
+
+    Con servicios ya cargados no agrega los que falten: el administrador puede haberlos renombrado
+    desde el panel (SCRUM-30/50) y volver a crearlos los duplicaría.
+    """
+    if Servicio.query.count() == 0:
+        for tipo, precio in PRECIOS_REFERENCIA.items():
             db.session.add(Servicio(tipoServicio=tipo, precioEstimado=precio,
                                     descripcion=DESCRIPCIONES_SERVICIO[tipo]))
-            continue
-        # Nunca pisa un precio o una descripción que alguien ya cargó.
+        db.session.commit()
+        return
+    for servicio in Servicio.query.filter(Servicio.tipoServicio.in_(SERVICIOS_INICIALES)).all():
+        # Nunca pisa un precio o una descripción que alguien ya cargó (ni una descripción borrada a propósito).
         if servicio.precioEstimado is None:
-            servicio.precioEstimado = precio
-        if not servicio.descripcion:
-            servicio.descripcion = DESCRIPCIONES_SERVICIO[tipo]
+            servicio.precioEstimado = PRECIOS_REFERENCIA[servicio.tipoServicio]
+        if servicio.descripcion is None:
+            servicio.descripcion = DESCRIPCIONES_SERVICIO[servicio.tipoServicio]
     db.session.commit()

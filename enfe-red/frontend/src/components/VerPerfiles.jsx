@@ -135,6 +135,16 @@ export default function VerPerfiles() {
                         : 'Pendiente de verificación'}
                     </dd>
                   </div>
+                  {profile.rol === 'enfermero' && (
+                    <div>
+                      <dt>Servicios que ofrece</dt>
+                      <dd>
+                        {profile.servicios?.length
+                          ? profile.servicios.map((servicio) => servicio.tipoServicio).join(', ')
+                          : 'Todos los del catálogo'}
+                      </dd>
+                    </div>
+                  )}
                 </dl>
               </section>
               <section className="content-panel">

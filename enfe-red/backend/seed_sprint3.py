@@ -2,6 +2,7 @@ import logging
 
 from sqlalchemy import inspect, text
 from database import db
+from models.servicio_models import Servicio
 from models.usuario_models import Usuario, Enfermero, Disponibilidad
 from extensions import bcrypt
 from datetime import time
@@ -57,7 +58,8 @@ def cargar_datos_demo():
             "experiencia_anios": 6, "descripcion": "Especialista en terapia intensiva y atención domiciliaria.",
             "direccion": "San Martín 1250", "ciudad": "Godoy Cruz", "tarifa_hora": 8500.0,
             "disponible": True, "latitud": -32.9253, "longitud": -68.8444,
-            "horarios": [("Lunes", time(8, 0), time(14, 0)), ("Miércoles", time(14, 0), time(20, 0))]
+            "horarios": [("Lunes", time(8, 0), time(14, 0)), ("Miércoles", time(14, 0), time(20, 0))],
+            "servicios": ['Cuidados Intensivos', 'Control de signos vitales', 'Inyecciones']
         },
         {
             "email": "carlos.ruiz@test.com", "nombre": "Carlos", "apellido": "Ruiz",
@@ -65,7 +67,8 @@ def cargar_datos_demo():
             "experiencia_anios": 10, "descripcion": "Cuidado integral de adultos mayores y control de signos vitales.",
             "direccion": "Av. Colón 450", "ciudad": "Mendoza Capital", "tarifa_hora": 6000.0,
             "disponible": True, "latitud": -32.8908, "longitud": -68.8440,
-            "horarios": [("Lunes", time(9, 0), time(18, 0))]
+            "horarios": [("Lunes", time(9, 0), time(18, 0))],
+            "servicios": ['Control de signos vitales', 'Higiene y confort', 'Acompañamiento de adultos mayores']
         },
         {
             "email": "sofia.mendez@test.com", "nombre": "Sofía", "apellido": "Méndez",
@@ -73,7 +76,8 @@ def cargar_datos_demo():
             "experiencia_anios": 4, "descripcion": "Enfermera pediátrica y neonatal. Vacunas y nebulizaciones.",
             "direccion": "Libertad 820", "ciudad": "Guaymallén", "tarifa_hora": 7500.0,
             "disponible": True, "latitud": -32.8995, "longitud": -68.7950,
-            "horarios": [("Viernes", time(10, 0), time(16, 0))]
+            "horarios": [("Viernes", time(10, 0), time(16, 0))],
+            "servicios": ['Inyecciones', 'Control de signos vitales', 'Curaciones']
         },
         {
             "email": "martin.castro@test.com", "nombre": "Martín", "apellido": "Castro",
@@ -81,7 +85,8 @@ def cargar_datos_demo():
             "experiencia_anios": 2, "descripcion": "Curaciones planas, inyecciones intramusculares y sueroterapia.",
             "direccion": "Sáenz Peña 1100", "ciudad": "Luján de Cuyo", "tarifa_hora": 5000.0,
             "disponible": False, "latitud": -33.0350, "longitud": -68.8780,
-            "horarios": []
+            "horarios": [],
+            "servicios": ['Curaciones', 'Inyecciones']
         }
     ]
 
@@ -112,6 +117,11 @@ def cargar_datos_demo():
                     enfermero_id=nuevo_enf.id, dia_semana=dia,
                     hora_inicio=h_ini, hora_fin=h_fin, estado="Disponible"
                 ))
+
+        # SCRUM-14/53: servicios que ofrece cada cuenta demo (también a las ya creadas que no tengan).
+        enfermero = Enfermero.query.filter_by(matricula=item["matricula"]).first()
+        if enfermero and not enfermero.servicios:
+            enfermero.servicios = Servicio.query.filter(Servicio.tipoServicio.in_(item["servicios"])).all()
 
     db.session.commit()
     return creadas

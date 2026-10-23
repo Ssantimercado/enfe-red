@@ -42,6 +42,10 @@ export default function AppShell() {
                   <Icon name="user" size={18} />
                   Usuarios
                 </NavLink>
+                <NavLink to="/admin/servicios">
+                  <Icon name="briefcase" size={18} />
+                  Servicios
+                </NavLink>
                 <NavLink to="/admin/resenas">
                   <Icon name="star" size={18} />
                   Reseñas

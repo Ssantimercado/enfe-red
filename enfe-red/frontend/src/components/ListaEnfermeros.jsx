@@ -9,6 +9,7 @@ import { requestApi as api, formatPrice, sesionActual } from '../api';
 const MapaEnfermeros = lazy(() => import('./MapaEnfermeros'));
 
 const FILTERS = [
+  'servicio',
   'especialidad',
   'ciudad',
   'precio_min',
@@ -56,6 +57,7 @@ export default function ListaEnfermeros() {
   });
   const [specialties, setSpecialties] = useState([]);
   const [zonas, setZonas] = useState([]);
+  const [servicios, setServicios] = useState([]);
   const [mapa, setMapa] = useState({ clave: null, personas: null });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -119,6 +121,9 @@ export default function ListaEnfermeros() {
       .catch(() => {});
     api('/enfermeros/ciudades', { signal: controller.signal })
       .then((lista) => setZonas(Array.isArray(lista) ? lista : []))
+      .catch(() => {});
+    api('/servicios', { signal: controller.signal })
+      .then((lista) => setServicios(Array.isArray(lista) ? lista : []))
       .catch(() => {});
     return () => controller.abort();
   }, [nurse]);
@@ -289,6 +294,9 @@ export default function ListaEnfermeros() {
   const active = nurse ? [] : FILTERS.filter((key) => filterValues[key]);
   const hasFilters = Boolean(query || active.length || cercania);
   const labels = {
+    servicio:
+      servicios.find((item) => String(item.idServicio) === filterValues.servicio)?.tipoServicio ||
+      'Servicio elegido',
     especialidad: filterValues.especialidad,
     ciudad: filterValues.ciudad,
     precio_min: `Desde $${Number(filterValues.precio_min).toLocaleString('es-AR')}`,
@@ -406,6 +414,7 @@ export default function ListaEnfermeros() {
             values={filterValues}
             specialties={specialties}
             zonas={zonas}
+            servicios={servicios}
             onChange={update}
             prefix="desktop"
           />
@@ -661,6 +670,13 @@ export default function ListaEnfermeros() {
                           {person.disponible ? 'Disponible' : 'No disponible'}
                         </span>
                       </div>
+                      {person.servicios?.length > 0 && (
+                        <p className="card-services">
+                          <strong>Ofrece:</strong>{' '}
+                          {person.servicios.slice(0, 3).map((servicio) => servicio.tipoServicio).join(', ')}
+                          {person.servicios.length > 3 && ` y ${person.servicios.length - 3} más`}
+                        </p>
+                      )}
                       <p className="card-description">
                         {person.descripcion ||
                           'Conocé sus datos y horarios de atención en el perfil.'}
@@ -801,6 +817,7 @@ export default function ListaEnfermeros() {
               values={draftFilters}
               specialties={specialties}
               zonas={zonas}
+              servicios={servicios}
               onChange={(key, value) =>
                 setDraftFilters((current) => ({ ...current, [key]: value }))
               }

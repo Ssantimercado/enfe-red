@@ -37,6 +37,7 @@ const SolicitudesEnfermero = lazy(() => import('./components/SolicitudesEnfermer
 const EstadoSolicitudes = lazy(() => import('./components/EstadoSolicitudes'));
 const AdminUsuarios = lazy(() => import('./components/AdminUsuarios'));
 const PanelAdmin = lazy(() => import('./components/PanelAdmin'));
+const AdminServicios = lazy(() => import('./components/AdminServicios'));
 const AdminResenas = lazy(() => import('./components/AdminResenas'));
 const AdminAuditoria = lazy(() => import('./components/AdminAuditoria'));
 const Privacidad = lazy(() => import('./components/Legal').then((m) => ({ default: m.Privacidad })));
@@ -62,6 +63,7 @@ const TITULOS = [
   [/^\/admin\/usuarios$/, 'Usuarios'],
   [/^\/admin\/resenas$/, 'Moderación de reseñas'],
   [/^\/admin\/auditoria$/, 'Auditoría'],
+  [/^\/admin\/servicios$/, 'Servicios'],
 ];
 
 function EntryRoute() {
@@ -280,6 +282,7 @@ export default function App() {
             <Route path="/admin/usuarios" element={<AdminUsuarios />} />
             <Route path="/admin/resenas" element={<AdminResenas />} />
             <Route path="/admin/auditoria" element={<AdminAuditoria />} />
+            <Route path="/admin/servicios" element={<AdminServicios />} />
           </Route>
           <Route path="*" element={<EntryRoute />} />
         </Routes>
