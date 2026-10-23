@@ -10,7 +10,7 @@ TIPOS_NOTIFICACION = (
     'aceptada', 'rechazada', 'mensaje', 'cancelada',
     'nueva', 'reprogramada', 'realizada', 'vencida', 'matricula',
 )
-# schema_sprint7.py recrea la restricción en bases existentes con este mismo texto.
+# schema_mejoras.py recrea la restricción en bases existentes con este mismo texto.
 CHECK_TIPO_NOTIFICACION = 'tipo IN (' + ', '.join(f"'{tipo}'" for tipo in TIPOS_NOTIFICACION) + ')'
 MAX_MENSAJE = 255
 

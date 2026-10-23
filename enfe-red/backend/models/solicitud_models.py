@@ -8,7 +8,7 @@ from models.usuario_models import Enfermero, Paciente
 ESTADOS_ACTIVOS = ('Pendiente', 'Aceptada')
 # 'Vencida': quedó Pendiente y llegó la hora del turno sin respuesta del enfermero.
 ESTADOS_SOLICITUD = (*ESTADOS_ACTIVOS, 'Rechazada', 'Cancelada', 'Realizada', 'Vencida')
-# schema_sprint7.py recrea la restricción en bases existentes con este mismo texto.
+# schema_mejoras.py recrea la restricción en bases existentes con este mismo texto.
 CHECK_ESTADO_SOLICITUD = 'estado IN (' + ', '.join(f"'{estado}'" for estado in ESTADOS_SOLICITUD) + ')'
 MAX_MOTIVO_CANCELACION = 200
 

@@ -1,4 +1,4 @@
-"""Sprint 7: sesión con renovación, límites de intentos en la base, recuperación y correo."""
+"""Mejoras posteriores al Sprint 6: sesión con renovación, límites de intentos en la base, recuperación y correo."""
 import os
 import unittest
 from unittest.mock import MagicMock, patch
@@ -14,7 +14,7 @@ from models.acceso_models import CodigoRecuperacion, IntentoAcceso
 from models.usuario_models import Usuario
 from routes.auth_routes import auth_bp
 from routes.usuario_routes import usuario_bp
-from schema_sprint7 import inicializar_bd_sprint7
+from schema_mejoras import inicializar_bd_mejoras
 from seguridad import configurar_sesiones
 from services import correo
 
@@ -373,7 +373,7 @@ class MigracionYDemoTest(unittest.TestCase):
         db.engine.dispose()
         self.context.pop()
 
-    def test_sprint7_agrega_version_y_tablas_sin_tocar_datos(self):
+    def test_mejoras_agrega_version_y_tablas_sin_tocar_datos(self):
         with db.engine.begin() as connection:
             connection.execute(text(
                 'CREATE TABLE usuarios (id INTEGER PRIMARY KEY, email VARCHAR(120) NOT NULL UNIQUE, '
@@ -384,8 +384,8 @@ class MigracionYDemoTest(unittest.TestCase):
             connection.execute(text(
                 "INSERT INTO usuarios (id, email, password_hash, rol) VALUES (1, 'previo@test.local', 'conservar', 'paciente')"
             ))
-        inicializar_bd_sprint7()
-        inicializar_bd_sprint7()  # Idempotente.
+        inicializar_bd_mejoras()
+        inicializar_bd_mejoras()  # Idempotente.
         inspector = inspect(db.engine)
         self.assertIn('versionToken', {c['name'] for c in inspector.get_columns('usuarios')})
         self.assertTrue(inspector.has_table('intentos_acceso'))

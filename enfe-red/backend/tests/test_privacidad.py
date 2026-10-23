@@ -22,7 +22,7 @@ from routes.auth_routes import auth_bp
 from routes.cuenta_routes import cuenta_bp
 from routes.solicitud_routes import solicitud_bp
 from routes.usuario_routes import normalizar_telefono, usuario_bp
-from schema_sprint7 import inicializar_bd_sprint7, recifrar_historiales
+from schema_mejoras import inicializar_bd_mejoras, recifrar_historiales
 from seguridad import configurar_sesiones
 from services import cifrado
 
@@ -393,10 +393,10 @@ class CifradoHistorialTest(BasePrivacidadTest):
         with db.engine.begin() as connection:
             connection.execute(text("UPDATE pacientes SET historial_medico = 'Asma leve' WHERE id = 101"))
             connection.execute(text("UPDATE pacientes SET historial_medico = '' WHERE id = 102"))
-        inicializar_bd_sprint7()
+        inicializar_bd_mejoras()
         primero = self.valor_guardado()
         self.assertTrue(cifrado.parece_cifrado(primero))
-        inicializar_bd_sprint7()  # Idempotente: no vuelve a cifrar lo ya cifrado.
+        inicializar_bd_mejoras()  # Idempotente: no vuelve a cifrar lo ya cifrado.
         self.assertEqual(self.valor_guardado(), primero)
         self.assertEqual(self.valor_guardado(102), '')
         db.session.expire_all()
@@ -507,7 +507,7 @@ class DesarrolloSinClaveTest(unittest.TestCase):
         with db.engine.begin() as connection:
             connection.execute(text("INSERT INTO pacientes (id, usuario_id, historial_medico, ubicacion_compartida) "
                                     "VALUES (102, 12, 'Asma', 0)"))
-        inicializar_bd_sprint7()
+        inicializar_bd_mejoras()
         with db.engine.connect() as connection:
             valores = connection.execute(text('SELECT historial_medico FROM pacientes ORDER BY id')).scalars().all()
         self.assertEqual(valores, ['Diabetes', 'Asma'])
@@ -586,8 +586,8 @@ class MigracionPrivacidadTest(unittest.TestCase):
             connection.execute(text(
                 "INSERT INTO pacientes (id, usuario_id, nombre, historial_medico) VALUES (1, 1, 'Previo', 'Celíaca')"
             ))
-        inicializar_bd_sprint7()
-        inicializar_bd_sprint7()
+        inicializar_bd_mejoras()
+        inicializar_bd_mejoras()
         self.assertIn('eliminado', {c['name'] for c in inspect(db.engine).get_columns('usuarios')})
         with db.engine.connect() as connection:
             fila = connection.execute(text('SELECT u.eliminado, p.historial_medico FROM usuarios u '

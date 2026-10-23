@@ -1,4 +1,4 @@
-"""Sprint 7: sesión, límites, recuperación, privacidad, turnos y moderación en bases existentes, sin recrear datos."""
+"""Mejoras posteriores al Sprint 6: sesión, límites, recuperación, privacidad, turnos y moderación en bases existentes, sin recrear datos."""
 from flask import current_app
 from sqlalchemy import inspect, text
 from sqlalchemy.types import Text
@@ -14,7 +14,7 @@ from models.usuario_models import MAX_MOTIVO_RECHAZO
 from services.cifrado import ErrorCifrado, cifrado_activo, recifrar
 
 
-def inicializar_bd_sprint7():
+def inicializar_bd_mejoras():
     inspector = inspect(db.engine)
     columnas = {columna['name'] for columna in inspector.get_columns('usuarios')}
     with db.engine.begin() as connection:

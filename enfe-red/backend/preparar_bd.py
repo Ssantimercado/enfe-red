@@ -16,9 +16,9 @@ from sqlalchemy.exc import OperationalError
 from database import db
 from schema_catalogo import inicializar_bd_catalogo
 from schema_legal import inicializar_bd_legal
+from schema_mejoras import inicializar_bd_mejoras
 from schema_sprint4 import inicializar_bd_sprint4, inicializar_catalogo_servicios
 from schema_sprint6 import inicializar_bd_sprint6
-from schema_sprint7 import inicializar_bd_sprint7
 from seed_sprint3 import cargar_datos_demo, inicializar_bd_sprint3
 
 
@@ -78,7 +78,7 @@ def preparar_base():
     inicializar_bd_sprint4()
     inicializar_bd_sprint6()
     inicializar_bd_legal()
-    inicializar_bd_sprint7()
+    inicializar_bd_mejoras()
     inicializar_bd_catalogo()
     inicializar_bd_sprint3()
     inicializar_catalogo_servicios()

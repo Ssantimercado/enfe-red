@@ -18,7 +18,7 @@ from routes.usuario_routes import usuario_bp
 from schema_sprint4 import inicializar_bd_sprint4, inicializar_catalogo_servicios
 from schema_sprint6 import inicializar_bd_sprint6
 from schema_legal import inicializar_bd_legal
-from schema_sprint7 import inicializar_bd_sprint7
+from schema_mejoras import inicializar_bd_mejoras
 from seed_sprint3 import inicializar_bd_sprint3
 
 
@@ -674,7 +674,7 @@ class MigracionSprint4Test(unittest.TestCase):
         inicializar_bd_sprint4()
         inicializar_bd_sprint6()
         inicializar_bd_legal()
-        inicializar_bd_sprint7()
+        inicializar_bd_mejoras()
         inicializar_bd_sprint3()
         enfermero = db.session.get(Enfermero, 1)
         self.assertFalse(enfermero.verificado)

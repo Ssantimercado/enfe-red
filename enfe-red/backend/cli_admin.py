@@ -17,7 +17,7 @@ from flask.cli import with_appcontext
 from database import db
 from models.usuario_models import Enfermero, Usuario
 from preparar_bd import preparar_base
-from schema_sprint7 import recifrar_historiales
+from schema_mejoras import recifrar_historiales
 from seed_sprint3 import cargar_datos_demo
 from services.turnos import ahora_local, vencer_solicitudes
 

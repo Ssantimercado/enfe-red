@@ -22,7 +22,7 @@ from routes.comunicacion_routes import comunicacion_bp
 from routes.notificacion_routes import notificacion_bp
 from routes.solicitud_routes import solicitud_bp
 from routes.usuario_routes import usuario_bp
-from schema_sprint7 import inicializar_bd_sprint7
+from schema_mejoras import inicializar_bd_mejoras
 from services.turnos import fecha_maxima
 
 
@@ -512,8 +512,8 @@ class MigracionTurnosTest(unittest.TestCase):
                 'INSERT INTO solicitudes_servicio (idSolicitud, idPaciente, idEnfermero, idServicio, fecha, hora, '
                 "estado, direccionAtencion) VALUES (1, 1, 1, 1, '2030-01-11', '14:30:00.000000', 'Cancelada', 'Calle 1')"
             ))
-        inicializar_bd_sprint7()
-        inicializar_bd_sprint7()  # Idempotente.
+        inicializar_bd_mejoras()
+        inicializar_bd_mejoras()  # Idempotente.
         inspector = inspect(db.engine)
         self.assertIn('duracionMinutos', {c['name'] for c in inspector.get_columns('servicios')})
         self.assertTrue({'canceladaPor', 'motivoCancelacion'} <= {

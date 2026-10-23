@@ -18,7 +18,7 @@ from models.usuario_models import Enfermero, Paciente, Usuario
 from routes.admin_routes import admin_bp
 from routes.resena_routes import resena_bp
 from routes.usuario_routes import usuario_bp
-from schema_sprint7 import inicializar_bd_sprint7
+from schema_mejoras import inicializar_bd_mejoras
 from seguridad import configurar_sesiones
 
 
@@ -405,8 +405,8 @@ class MigracionModeracionTest(unittest.TestCase):
             connection.execute(text("INSERT INTO enfermeros (id, usuario_id, nombre, matricula) "
                                     "VALUES (1, 21, 'Laura', 'MAT-1')"))
             connection.execute(text("INSERT INTO calificaciones_servicio VALUES (1, 1, 11, 21, 4, 'Muy bien')"))
-        inicializar_bd_sprint7()
-        inicializar_bd_sprint7()  # Idempotente.
+        inicializar_bd_mejoras()
+        inicializar_bd_mejoras()  # Idempotente.
         inspector = inspect(db.engine)
         self.assertTrue({'verificadoPor', 'verificadoEn', 'motivoRechazo'} <= {
             c['name'] for c in inspector.get_columns('enfermeros')})
