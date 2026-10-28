@@ -4,6 +4,10 @@ import { requestApi as api, sesionActual } from '../api';
 // SCRUM-63 (Santiago): chat asociado a una solicitud. Contrato en backend/SPRINT5-INTEGRACION.md.
 export const INTERVALO_CHAT_MS = 3000;
 const MAX_CONTENIDO = 2000;
+// Se puede escribir desde que el paciente pide el turno hasta que el servicio se cierra.
+export const CHAT_ABIERTO = ['Pendiente', 'Aceptada'];
+// Cerrada la conversación, queda como registro de lectura.
+export const CHAT_VISIBLE = [...CHAT_ABIERTO, 'Realizada', 'Cancelada', 'Rechazada', 'Vencida'];
 // Sin permiso o sin solicitud no tiene sentido seguir consultando.
 const ERRORES_PERMANENTES = [403, 404];
 
@@ -28,10 +32,15 @@ function unirMensajes(actuales, nuevos) {
 // En pantallas táctiles Enter agrega una línea; se envía con el botón.
 const pantallaTactil = () => window.matchMedia?.('(pointer: coarse)').matches ?? false;
 
-export default function ChatServicio({ solicitud, contraparte, onEstadoCambiado }) {
+// whatsapp: enlace para seguir la charla por fuera; notaWhatsapp: qué decir cuando todavía no hay enlace.
+// nivelTitulo: 2 en el comprobante; 4 dentro de una tarjeta que ya tiene su h3.
+export default function ChatServicio({
+  solicitud, contraparte, onEstadoCambiado, whatsapp = null, notaWhatsapp = '', nivelTitulo = 2,
+}) {
+  const Titulo = `h${nivelTitulo}`;
   const { idSolicitud } = solicitud;
   const [estado, setEstado] = useState(solicitud.estado);
-  const habilitado = estado === 'Aceptada';
+  const habilitado = CHAT_ABIERTO.includes(estado);
   const userId = Number(sesionActual()?.sub);
   const [mensajes, setMensajes] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -41,6 +50,7 @@ export default function ChatServicio({ solicitud, contraparte, onEstadoCambiado 
   const [enviando, setEnviando] = useState(false);
   const [errorEnvio, setErrorEnvio] = useState('');
   const lista = useRef(null);
+  const avisoCierre = useRef(null);
   const campo = useRef(null);
   const ocupado = useRef(false);
   const tactil = pantallaTactil();
@@ -92,6 +102,11 @@ export default function ChatServicio({ solicitud, contraparte, onEstadoCambiado 
     };
   }, [idSolicitud, habilitado, bloqueado]);
 
+  // Si la conversación se cerró al enviar, el campo desaparece: el foco va al aviso que lo explica.
+  useEffect(() => {
+    if (!habilitado && errorEnvio) avisoCierre.current?.focus();
+  }, [habilitado, errorEnvio]);
+
   const ultimoId = mensajes.at(-1)?.idMensaje;
   useEffect(() => {
     // Desplaza solo el contenedor del chat, sin mover la página.
@@ -102,7 +117,7 @@ export default function ChatServicio({ solicitud, contraparte, onEstadoCambiado 
   async function revisarEstado() {
     try {
       const actual = await api(`/solicitudes/${idSolicitud}`);
-      if (actual?.estado && actual.estado !== 'Aceptada') {
+      if (actual?.estado && !CHAT_ABIERTO.includes(actual.estado)) {
         setEstado(actual.estado);
         onEstadoCambiado?.(actual);
         return actual.estado;
@@ -144,10 +159,10 @@ export default function ChatServicio({ solicitud, contraparte, onEstadoCambiado 
   const idAyuda = `chat-ayuda-${idSolicitud}`;
 
   return (
-    <section className="content-panel chat-servicio" aria-labelledby={`chat-titulo-${idSolicitud}`}>
+    <section id={`chat-${idSolicitud}`} className="content-panel chat-servicio" aria-labelledby={`chat-titulo-${idSolicitud}`}>
       <div className="panel-heading">
         <div>
-          <h2 id={`chat-titulo-${idSolicitud}`}>Mensajes del servicio</h2>
+          <Titulo id={`chat-titulo-${idSolicitud}`}>Mensajes del servicio</Titulo>
           <p>
             {habilitado
               ? `Coordiná los detalles de la atención${contraparte ? ` con ${contraparte}` : ''}.`
@@ -198,7 +213,9 @@ export default function ChatServicio({ solicitud, contraparte, onEstadoCambiado 
         )}
       </div>
 
-      {errorEnvio && !habilitado && <p className="notice notice-error" role="alert">{errorEnvio}</p>}
+      {errorEnvio && !habilitado && (
+        <p ref={avisoCierre} tabIndex={-1} className="notice notice-error" role="alert">{errorEnvio}</p>
+      )}
 
       {habilitado && !bloqueado && (
         <form className="chat-formulario" onSubmit={enviar}>
@@ -231,6 +248,15 @@ export default function ChatServicio({ solicitud, contraparte, onEstadoCambiado 
           </button>
         </form>
       )}
+
+      {habilitado && (whatsapp ? (
+        <p className="chat-whatsapp">
+          Si te resulta más cómodo, también podés escribirle por WhatsApp.{' '}
+          <a className="button button-secondary" href={whatsapp} target="_blank" rel="noopener noreferrer">
+            Seguir por WhatsApp<span className="sr-only"> (se abre en otra pestaña)</span>
+          </a>
+        </p>
+      ) : notaWhatsapp && <p className="filter-hint chat-whatsapp">{notaWhatsapp}</p>)}
     </section>
   );
 }

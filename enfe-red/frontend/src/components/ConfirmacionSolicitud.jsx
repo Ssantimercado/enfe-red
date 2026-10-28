@@ -1,15 +1,18 @@
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { sesionActual } from '../api';
+import { enlaceWhatsapp, sesionActual } from '../api';
 import { fechaLegible } from '../fechas';
 import { obtenerSolicitud, errorSolicitud } from '../services/solicitudes';
-import { AccionesPaciente, DetalleEstado, calificacionesDelHistorial } from './AccionesSolicitud';
+import {
+  AccionesPaciente, DetalleEstado, NOTA_WHATSAPP_PACIENTE, calificacionesDelHistorial, mensajeWhatsappEnfermero,
+  whatsappParaPaciente,
+} from './AccionesSolicitud';
 import CancelarSolicitud from './CancelarSolicitud';
-import ChatServicio from './ChatServicio';
+import ChatServicio, { CHAT_ABIERTO, CHAT_VISIBLE } from './ChatServicio';
+import useActualizacionPeriodica from './useActualizacionPeriodica';
 import './Solicitudes.css';
 
-// El chat se habilita al aceptar; después de cerrar queda como registro de lectura.
-const CHAT_VISIBLE = ['Aceptada', 'Realizada', 'Cancelada'];
+const UbicacionAtencion = lazy(() => import('./UbicacionAtencion'));
 
 export default function ConfirmacionSolicitud() {
   const { idSolicitud } = useParams();
@@ -46,6 +49,12 @@ export default function ConfirmacionSolicitud() {
     }).catch(err => { if (!controller.signal.aborted) setError(errorSolicitud(err)); });
     return () => controller.abort();
   }, [idSolicitud, intento]);
+  useActualizacionPeriodica(() => {
+    obtenerSolicitud(idSolicitud)
+      .then((data) => { if (String(data?.idSolicitud) === String(idSolicitud)) setSolicitud(data); })
+      // Si falla, queda lo que ya se mostraba y se reintenta en la próxima vuelta.
+      .catch(() => {});
+  }, CHAT_ABIERTO.includes(solicitud?.estado));
   useEffect(() => {
     if (!realizada) return undefined;
     const controller = new AbortController();
@@ -77,6 +86,15 @@ export default function ConfirmacionSolicitud() {
         <dt>Dirección</dt><dd>{solicitud.direccionAtencion}</dd>
         <dt>Precio estimado</dt><dd>{solicitud.servicio?.precioEstimado != null ? new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(solicitud.servicio.precioEstimado) : 'A consultar'}</dd>
       </dl>
+      {enfermero && CHAT_ABIERTO.includes(solicitud.estado) && (
+        <Suspense fallback={<p role="status">Cargando mapa…</p>}>
+          <UbicacionAtencion
+            ubicacion={solicitud.ubicacionAtencion}
+            direccion={solicitud.direccionAtencion}
+            paciente={nombreOtraParte(solicitud)}
+          />
+        </Suspense>
+      )}
       {!enfermero && <AccionesPaciente
         comprobante
         solicitud={solicitud}
@@ -95,7 +113,11 @@ export default function ConfirmacionSolicitud() {
         key={solicitud.idSolicitud}
         solicitud={solicitud}
         contraparte={nombreOtraParte(solicitud)}
-        onEstadoCambiado={(actual) => setSolicitud(previa => ({ ...previa, estado: actual.estado }))}
+        whatsapp={enfermero
+          ? enlaceWhatsapp(solicitud.paciente?.telefono, mensajeWhatsappEnfermero(solicitud))
+          : whatsappParaPaciente(solicitud)}
+        notaWhatsapp={enfermero ? '' : NOTA_WHATSAPP_PACIENTE}
+        onEstadoCambiado={(actual) => setSolicitud(previa => ({ ...previa, ...actual }))}
       />
     )}
   </div>;

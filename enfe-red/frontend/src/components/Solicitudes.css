@@ -173,3 +173,12 @@
 .solicitud-horario:has(input:checked) { background: var(--blue-dark); border-color: var(--blue-dark); color: #fff; }
 .solicitud-horario:has(input:focus-visible) { outline: 2px solid #1b84ba; outline-offset: 2px; }
 .solicitud-horarios:disabled .solicitud-horario { opacity: 0.6; cursor: not-allowed; }
+
+/* Lugar de atención: el paciente lo marca al pedir el turno y el enfermero lo ve para llegar. */
+.solicitud-ubicacion { border: 0; padding: 0; margin: 0; min-width: 0; }
+.solicitud-ubicacion legend { padding: 0; margin-bottom: 6px; font-weight: 600; }
+.ubicacion-atencion { display: grid; gap: 12px; margin-top: 14px; }
+.ubicacion-atencion-direccion { margin: 0; }
+.ubicacion-atencion-mapa { height: 280px; border-radius: 12px; border: 1px solid var(--border); }
+/* WhatsApp como alternativa dentro del chat. */
+.chat-whatsapp { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 14px 0 0; }

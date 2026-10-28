@@ -62,6 +62,10 @@ def _agregar_columnas_turnos():
                     f'ALTER TABLE solicitudes_servicio ADD COLUMN motivoCancelacion '
                     f'VARCHAR({MAX_MOTIVO_CANCELACION}) NULL'
                 ))
+            # Punto de atención del pedido: las solicitudes existentes quedan sin él.
+            for columna in ('latitudAtencion', 'longitudAtencion'):
+                if columna not in columnas:
+                    connection.execute(text(f'ALTER TABLE solicitudes_servicio ADD COLUMN {columna} FLOAT NULL'))
 
 
 def _agregar_columnas_moderacion():

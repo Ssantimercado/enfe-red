@@ -3,7 +3,10 @@ import { Link } from 'react-router-dom';
 import { requestApi as api } from '../api';
 import { fechaLegible } from '../fechas';
 import { errorSolicitud, obtenerSolicitudesPaciente } from '../services/solicitudes';
-import { AccionesPaciente, DetalleEstado, calificacionesDelHistorial } from './AccionesSolicitud';
+import {
+  AccionesPaciente, DetalleEstado, NOTA_WHATSAPP_PACIENTE, calificacionesDelHistorial, whatsappParaPaciente,
+} from './AccionesSolicitud';
+import ChatServicio, { CHAT_VISIBLE } from './ChatServicio';
 import CancelarSolicitud from './CancelarSolicitud';
 import useActualizacionPeriodica from './useActualizacionPeriodica';
 import './Solicitudes.css';
@@ -18,6 +21,8 @@ function mensajeError(error) {
 
 function TarjetaSolicitud({ solicitud, calificacion, onActualizada, onCalificada }) {
   const profesional = [solicitud.enfermero?.nombre, solicitud.enfermero?.apellido].filter(Boolean).join(' ');
+  // El chat se abre en la misma tarjeta: no hace falta entrar al comprobante para hablar con el profesional.
+  const [chatAbierto, setChatAbierto] = useState(false);
   return (
     <article className="content-panel solicitud-card">
       <div className="solicitud-card-heading">
@@ -41,7 +46,20 @@ function TarjetaSolicitud({ solicitud, calificacion, onActualizada, onCalificada
         calificacion={calificacion}
         onActualizada={onActualizada}
         onCalificada={onCalificada}
+        chatAbierto={chatAbierto}
+        onAlternarChat={() => setChatAbierto((abierto) => !abierto)}
       />
+      {chatAbierto && CHAT_VISIBLE.includes(solicitud.estado) && (
+        <ChatServicio
+          key={solicitud.idSolicitud}
+          solicitud={solicitud}
+          contraparte={profesional}
+          nivelTitulo={4}
+          whatsapp={whatsappParaPaciente(solicitud)}
+          notaWhatsapp={NOTA_WHATSAPP_PACIENTE}
+          onEstadoCambiado={(actual) => onActualizada({ ...solicitud, ...actual })}
+        />
+      )}
       <CancelarSolicitud
         solicitud={solicitud}
         onCancelada={(idSolicitud, actualizada) => onActualizada(
@@ -178,22 +196,21 @@ export default function EstadoSolicitudes() {
           <Link className="button button-primary" to="/cartilla">Buscar otro profesional</Link>
         </div>
       ) : (
-        <>
-          <section aria-labelledby="solicitudes-en-curso">
-            <h2 id="solicitudes-en-curso" className="solicitudes-section-title">En curso ({enCurso.length})</h2>
-            {enCurso.length ? (
-              <div className="solicitudes-grid">{enCurso.map(tarjeta)}</div>
-            ) : (
-              <p className="solicitudes-section-empty">No tenés solicitudes pendientes ni aceptadas.</p>
-            )}
-          </section>
-          {anteriores.length > 0 && (
-            <section aria-labelledby="solicitudes-anteriores">
-              <h2 id="solicitudes-anteriores" className="solicitudes-section-title">Anteriores ({anteriores.length})</h2>
-              <div className="solicitudes-grid">{anteriores.map(tarjeta)}</div>
-            </section>
-          )}
-        </>
+        // Un solo contenedor para las dos secciones (como la bandeja del enfermero): si un turno pasa a Anteriores
+        // con el chat abierto, React mueve la misma tarjeta y no se pierde lo escrito ni el aviso de cierre.
+        // Las claves solo valen dentro de una misma lista: títulos y tarjetas van todos en un único arreglo.
+        <div className="solicitudes-grid">
+          {[
+            <h2 key="titulo-en-curso" id="solicitudes-en-curso" className="solicitudes-section-title">En curso ({enCurso.length})</h2>,
+            ...(enCurso.length
+              ? enCurso.map(tarjeta)
+              : [<p key="vacio-en-curso" className="solicitudes-section-empty">No tenés solicitudes pendientes ni aceptadas.</p>]),
+            ...(anteriores.length
+              ? [<h2 key="titulo-anteriores" id="solicitudes-anteriores" className="solicitudes-section-title">Anteriores ({anteriores.length})</h2>,
+                ...anteriores.map(tarjeta)]
+              : []),
+          ]}
+        </div>
       )}
     </div>
   );

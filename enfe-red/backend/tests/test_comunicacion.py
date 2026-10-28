@@ -137,8 +137,23 @@ class ComunicacionTest(unittest.TestCase):
             self.assertEqual(self.client.post(ruta, headers=self.headers(usuario), json={'contenido': 'Hola'}).status_code, 403)
         self.assertEqual(Mensaje.query.count(), 0)
 
-    def test_estados_no_aceptados_bloquean_envio(self):
-        for estado in ('Pendiente', 'Rechazada', 'Cancelada', 'Realizada'):
+    def test_el_chat_se_abre_desde_el_pedido(self):
+        # El paciente puede escribir apenas pide el turno, y el enfermero responder antes de aceptarlo.
+        ruta = f'/api/solicitudes/{self.solicitud("Pendiente")}/mensajes'
+        for usuario in (11, 21):
+            self.assertEqual(self.client.post(ruta, headers=self.headers(usuario), json={'contenido': 'Hola'}).status_code, 201)
+        self.assertEqual(Mensaje.query.count(), 2)
+
+    def test_una_pendiente_vencida_no_recibe_mensajes(self):
+        id_solicitud = self.solicitud('Pendiente', fecha=date.today() - timedelta(days=1))
+        respuesta = self.client.post(f'/api/solicitudes/{id_solicitud}/mensajes', headers=self.headers(11),
+                                     json={'contenido': 'Hola'})
+        self.assertEqual(respuesta.status_code, 409)
+        self.assertEqual(db.session.get(SolicitudServicio, id_solicitud).estado, 'Vencida')
+        self.assertEqual(Mensaje.query.count(), 0)
+
+    def test_estados_cerrados_bloquean_envio(self):
+        for estado in ('Rechazada', 'Cancelada', 'Realizada', 'Vencida'):
             ruta = f'/api/solicitudes/{self.solicitud(estado)}/mensajes'
             for usuario in (11, 21):
                 self.assertEqual(self.client.post(ruta, headers=self.headers(usuario), json={'contenido': 'Hola'}).status_code, 409)

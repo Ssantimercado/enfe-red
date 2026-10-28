@@ -178,6 +178,7 @@ globalThis.fetch = async (url, options = {}) => {
   if (String(url).includes('/buscar'))
     return response({ enfermeros: [], total_resultados: 0, total_paginas: 0 });
   if (String(url).endsWith('/enfermeros')) return response([]);
+  if (String(url).endsWith('/mensajes')) return response([]);
   return response(profile);
 };
 
@@ -1134,6 +1135,13 @@ function solicitudesAPI({
     throw new Error(`Petición inesperada: ${config.method} ${config.url}`);
   };
 }
+// El mapa se carga aparte: se espera el botón y se elige el centro (Mendoza capital).
+async function marcarLugar() {
+  for (let i = 0; i < 100 && !document.querySelector('.location-picker button'); i += 1) await esperar(10);
+  await click(button('Elegir el centro del mapa'));
+}
+const LUGAR_CENTRO = { latitudAtencion: -32.8895, longitudAtencion: -68.8458 };
+
 async function completarSolicitud(direccion = 'San Martín 123') {
   const select = document.querySelector('select[name="idServicio"]');
   await act(async () => {
@@ -1143,6 +1151,7 @@ async function completarSolicitud(direccion = 'San Martín 123') {
   await type(document.querySelector('input[name="fecha"]'), '2099-12-10');
   await type(document.querySelector('input[name="hora"]'), '14:30');
   await type(document.querySelector('input[name="direccionAtencion"]'), direccion);
+  await marcarLugar();
   // El perfil de prueba no tiene teléfono: el formulario lo pide y lo guarda antes de enviar.
   const telefono = document.querySelector('input[name="telefono"]');
   if (telefono) await type(telefono, '261 555 1234');
@@ -1162,6 +1171,7 @@ test('la solicitud muestra confirmación verde y permite abrir el comprobante', 
   assert.equal(posts.length, 1);
   assert.deepEqual(JSON.parse(posts[0].data), {
     idServicio: 301, idEnfermero: 201, fecha: '2099-12-10', hora: '14:30', direccionAtencion: 'San Martín 123',
+    ...LUGAR_CENTRO,
   });
   // Al enviar va directo al comprobante y confirma arriba de todo que el pedido salió.
   assert.equal(window.location.pathname, '/solicitudes/15');
@@ -1613,13 +1623,16 @@ test('una solicitud realizada muestra el chat solo para leer y sin polling', asy
   }, { estado: 'Realizada' });
 });
 
-test('un pedido pendiente todavía no muestra el chat', async () => {
+test('un pedido pendiente ya tiene el chat abierto y avisa cuándo llega WhatsApp', async () => {
   session();
-  await conChat(() => [], async ({ chat }) => {
+  await conChat(() => [], async ({ intervalos }) => {
     await mount('/solicitudes/15');
     assert.match(document.body.textContent, /Comprobante de solicitud/);
-    assert.equal(document.querySelector('.chat-servicio'), null);
-    assert.equal(chat.length, 0);
+    assert.ok(document.querySelector('.chat-formulario textarea'));
+    assert.equal(intervalos.size, 1);
+    // El teléfono del profesional recién llega cuando acepta (HU13): antes solo se avisa.
+    assert.equal(document.querySelector('.chat-servicio a[href^="https://wa.me"]'), null);
+    assert.match(document.querySelector('.chat-servicio').textContent, /Cuando el profesional acepte el turno/);
   }, { estado: 'Pendiente' });
 });
 
@@ -1628,13 +1641,13 @@ test('el enfermero abre los mensajes de una solicitud aceptada y el polling se d
   await conChat(() => [mensajeChat(1, 1, '¿Tocás el timbre del 2B?')], async ({ chat, intervalos }) => {
     await mount('/solicitudes-enfermero');
     assert.equal(document.querySelector('.chat-servicio'), null);
-    await click(button('Ver mensajes'));
-    assert.equal(button('Ocultar mensajes').getAttribute('aria-expanded'), 'true');
+    await click(button('Escribirle al paciente'));
+    assert.equal(button('Ocultar chat').getAttribute('aria-expanded'), 'true');
     assert.match(document.body.textContent, /con Ana Prueba/);
     assert.match(document.querySelector('.chat-mensajes').textContent, /timbre del 2B/);
     assert.equal(chat.filter(llamada => llamada.method === 'GET').length, 1);
     assert.equal(intervalos.size, 1);
-    await click(button('Ocultar mensajes'));
+    await click(button('Ocultar chat'));
     assert.equal(document.querySelector('.chat-servicio'), null);
     assert.equal(intervalos.size, 0);
   });
@@ -1749,7 +1762,8 @@ test('Mis solicitudes muestra estados, enlaza al comprobante y permite cancelar 
     assert.match(document.body.textContent, /Anteriores \(2\)/);
     const estados = [...document.querySelectorAll('.solicitud-status')].map(e => e.textContent);
     assert.deepEqual(estados, ['Pendiente', 'Aceptada', 'Realizada', 'Rechazada']);
-    assert.ok(document.querySelector('a[href="/solicitudes/32"]').textContent.includes('mensajes'));
+    assert.equal(document.querySelector('a[href="/solicitudes/32"]').textContent, 'Ver comprobante');
+    assert.equal([...document.querySelectorAll('button')].filter(b => b.textContent === 'Escribirle al profesional').length, 2);
     assert.equal([...document.querySelectorAll('button')].filter(b => b.textContent === 'Cancelar solicitud').length, 2);
     await click(button('Cancelar solicitud'));
     await click(button('Sí, cancelar'));
@@ -2269,7 +2283,7 @@ test('pedir turno muestra los horarios del día, precarga la dirección y guarda
         perfilPuts.push(JSON.parse(options.body));
         return response({ idPaciente: 101, telefono: '2615551234', direccion: 'Belgrano 50, Godoy Cruz' });
       }
-      return response({ idPaciente: 101, direccion: 'Belgrano 50, Godoy Cruz', telefono: '' });
+      return response({ idPaciente: 101, direccion: 'Belgrano 50, Godoy Cruz', telefono: '', latitud: -32.927, longitud: -68.845 });
     }
     return original(url, options);
   };
@@ -2278,6 +2292,7 @@ test('pedir turno muestra los horarios del día, precarga la dirección y guarda
     assert.equal(document.querySelector('main main'), null);
     assert.doesNotMatch(document.body.textContent, /El servidor comprobará/);
     assert.equal(document.querySelector('input[name="direccionAtencion"]').value, 'Belgrano 50, Godoy Cruz');
+    assert.match(document.body.textContent, /Marcamos el punto de tu perfil/);
     assert.match(document.body.textContent, /Laura Gómez atiende: Jueves de 08:00 a 10:00\./);
     const select = document.querySelector('select[name="idServicio"]');
     await act(async () => {
@@ -2313,6 +2328,7 @@ test('pedir turno muestra los horarios del día, precarga la dirección y guarda
     const post = solicitudRequests.filter((r) => r.method === 'post').at(-1);
     assert.deepEqual(JSON.parse(post.data), {
       idServicio: 301, idEnfermero: 201, fecha: '2099-12-10', hora: '09:00', direccionAtencion: 'Belgrano 50, Godoy Cruz',
+      latitudAtencion: -32.927, longitudAtencion: -68.845,
     });
     assert.match(window.location.pathname, /^\/solicitudes\/\d+$/);
     assert.match(document.querySelector('.solicitud-enviada').textContent, /¡Listo!/);
@@ -2350,7 +2366,9 @@ test('las tarjetas muestran Vencida, quién canceló y el motivo, WhatsApp en la
     assert.match(de(33).textContent, /Venció sin respuesta/);
     assert.match(de(35).textContent, /El profesional canceló el turno\./);
     assert.match(de(35).querySelector('.solicitud-motivo').textContent, /Motivo: Tengo una urgencia familiar\./);
-    const whatsapp = [...de(32).querySelectorAll('a')].find((a) => a.textContent === 'Escribir por WhatsApp');
+    assert.equal(de(32).querySelector('a[href^="https://wa.me"]'), null);
+    await click([...de(32).querySelectorAll('button')].find((b) => b.textContent === 'Escribirle al profesional'));
+    const whatsapp = [...de(32).querySelectorAll('.chat-whatsapp a')].find((a) => a.textContent.startsWith('Seguir por WhatsApp'));
     assert.ok(whatsapp.href.startsWith('https://wa.me/5492612222222?text='));
     assert.match(decodeURIComponent(whatsapp.href), /turno de Curaciones del jueves 10 de diciembre de 2099, 14:30 hs/);
     assert.equal(de(31).querySelector('a[href^="https://wa.me"]'), null);
@@ -2501,8 +2519,10 @@ test('el enfermero ve primero las pendientes y cancela un turno aceptado con un 
     await mount('/solicitudes-enfermero');
     const tarjetas = () => [...document.querySelectorAll('.solicitud-card')];
     assert.match(tarjetas()[0].textContent, /SOLICITUD #23/);
-    const whatsapp = tarjetas()[1].querySelector('a[href^="https://wa.me"]');
+    await click([...tarjetas()[1].querySelectorAll('button')].find((b) => b.textContent === 'Escribirle al paciente'));
+    const whatsapp = tarjetas()[1].querySelector('.chat-whatsapp a[href^="https://wa.me"]');
     assert.match(decodeURIComponent(whatsapp.href), /Curaciones del jueves 10 de diciembre de 2099, 14:30 hs/);
+    await click(button('Ocultar chat'));
     assert.match(tarjetas()[1].textContent, /jueves 10 de diciembre de 2099, 14:30 hs/);
 
     await click(button('Cancelar turno'));
@@ -2622,11 +2642,13 @@ test('el perfil del profesional oculta el contacto hasta que acepta la solicitud
   try {
     await mount('/perfil/1');
     const panel = document.querySelector('.contact-panel');
-    assert.match(panel.textContent, /Cuando el profesional acepte tu solicitud vas a poder escribirle por WhatsApp/);
+    assert.match(panel.textContent, /chat de Enfered\. Si lo acepta, también por WhatsApp/);
     assert.equal(panel.querySelector('a[href^="https://wa.me"]'), null);
     assert.equal(panel.querySelector('a[href^="tel:"]'), null);
     assert.doesNotMatch(panel.textContent, /laura@test\.local|Calle 123/);
-    assert.equal(panel.querySelector('a[href="/perfil/1/solicitar"]').textContent, 'Pedir un turno');
+    // Un solo botón para pedir el turno: el del encabezado del perfil.
+    assert.equal(panel.querySelector('a[href="/perfil/1/solicitar"]'), null);
+    assert.equal(document.querySelectorAll('a[href="/perfil/1/solicitar"]').length, 1);
     await act(async () => root.unmount());
     publico = { ...publico, contacto_habilitado: true, telefono: '2615551234' };
     await mount('/perfil/1');
@@ -3368,7 +3390,93 @@ test('la bandeja del enfermero separa pendientes, turnos aceptados y anteriores'
     assert.equal(seccionDe(de(31)), 'Anteriores (1)');
     // Los títulos de las tarjetas quedan un nivel abajo de los de sección.
     assert.ok(de(33).querySelector('h3'));
-    // WhatsApp del paciente como botón, con área táctil completa.
-    assert.match(de(32).querySelector('a[href*="wa.me"]').className, /button/);
+    // Pendientes y aceptadas: chat y ubicación del lugar de atención en la tarjeta.
+    for (const id of [32, 33]) {
+      const textos = [...de(id).querySelectorAll('button')].map((b) => b.textContent);
+      assert.ok(textos.includes('Escribirle al paciente'));
+      assert.ok(textos.includes('Ver ubicación'));
+    }
+    assert.ok(![...de(31).querySelectorAll('button')].some((b) => b.textContent === 'Ver ubicación'));
   } finally { globalThis.fetch = original; }
+});
+
+test('el enfermero ve el lugar de atención del pedido y lo abre en Google Maps', async () => {
+  session('enfermero');
+  const base = { ...comprobante, fecha: '2099-05-04', direccionAtencion: 'Belgrano 50, Godoy Cruz' };
+  solicitudHandler = async (config) => {
+    if (config.url === '/solicitudes/enfermero/201') return { data: [
+      { ...base, idSolicitud: 41, estado: 'Pendiente', paciente: { nombre: 'Ana' }, ubicacionAtencion: { latitud: -32.927, longitud: -68.845 } },
+      // Pedido anterior a la ubicación obligatoria: solo tiene la dirección escrita.
+      { ...base, idSolicitud: 42, estado: 'Aceptada', paciente: { nombre: 'Beto' }, ubicacionAtencion: null },
+    ] };
+    throw new Error(`Petición inesperada: ${config.method} ${config.url}`);
+  };
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url, options = {}) => (String(url).endsWith('/perfil/enfermero')
+    ? response({ ...profile, idEnfermero: 201 }) : original(url, options));
+  try {
+    await mount('/solicitudes-enfermero');
+    const de = (id) => [...document.querySelectorAll('.solicitud-card')].find((card) => card.textContent.includes(`SOLICITUD #${id}`));
+    const verUbicacion = (id) => [...de(id).querySelectorAll('button')].find((b) => b.textContent === 'Ver ubicación');
+    await click(verUbicacion(41));
+    for (let i = 0; i < 100 && !de(41).querySelector('.ubicacion-atencion'); i += 1) await esperar(10);
+    const mapa = de(41).querySelector('.ubicacion-atencion');
+    assert.match(mapa.textContent, /Lugar de atención: Belgrano 50, Godoy Cruz/);
+    assert.equal(mapa.querySelector('a[href^="https://www.google.com/maps/dir/"]').href,
+      'https://www.google.com/maps/dir/?api=1&destination=-32.927,-68.845');
+    assert.ok([...mapa.querySelectorAll('button')].some((b) => b.textContent === 'Ver cómo llegar desde donde estoy'));
+
+    await click(verUbicacion(42));
+    for (let i = 0; i < 100 && !de(42).querySelector('.ubicacion-atencion'); i += 1) await esperar(10);
+    const sinPunto = de(42).querySelector('.ubicacion-atencion');
+    assert.match(sinPunto.textContent, /no tiene el lugar marcado en el mapa/);
+    assert.match(sinPunto.querySelector('a').href, /maps\/search\/\?api=1&query=Belgrano%2050%2C%20Godoy%20Cruz/);
+  } finally { globalThis.fetch = original; }
+});
+
+test('sin marcar el lugar en el mapa el pedido de turno no se envía', async () => {
+  session();
+  solicitudesAPI();
+  await mount('/perfil/21/solicitar');
+  const select = document.querySelector('select[name="idServicio"]');
+  await act(async () => {
+    select.value = '301';
+    select.dispatchEvent(new window.Event('change', { bubbles: true }));
+  });
+  await type(document.querySelector('input[name="fecha"]'), '2099-12-10');
+  await type(document.querySelector('input[name="hora"]'), '14:30');
+  await type(document.querySelector('input[name="direccionAtencion"]'), 'San Martín 123');
+  await submitForm();
+  assert.equal(document.querySelector('[role="alert"]').textContent, 'Marcá en el mapa dónde vas a recibir la atención.');
+  assert.equal(solicitudRequests.filter((r) => r.method === 'post').length, 0);
+  assert.match(document.body.textContent, /Todavía no marcaste el lugar/);
+});
+
+test('si el turno se cancela con el chat abierto en Mis solicitudes, la tarjeta pasa a Anteriores sin perder el aviso', async () => {
+  session('paciente');
+  await conChat(() => [], async () => {
+    solicitudHandler = async (config) => {
+      if (config.url === '/solicitudes/paciente/101') return { data: [{ ...comprobante, estado: 'Aceptada' }] };
+      throw new Error(`Petición inesperada: ${config.method} ${config.url}`);
+    };
+    const delChat = globalThis.fetch;
+    globalThis.fetch = async (url, options = {}) => (String(url).endsWith('/perfil/paciente')
+      ? response({ idPaciente: 101, nombre: 'Ana' }) : delChat(url, options));
+    await mount('/mis-solicitudes');
+    const tarjeta = document.querySelector('.solicitud-card');
+    await click(button('Escribirle al profesional'));
+    // Dentro de la tarjeta (h3) el título del chat queda un nivel más abajo.
+    assert.equal(tarjeta.querySelector('.chat-servicio h4').textContent, 'Mensajes del servicio');
+    await typeTextArea(tarjeta.querySelector('.chat-formulario textarea'), '¿Seguís viniendo?');
+    await act(async () => tarjeta.querySelector('.chat-formulario').dispatchEvent(
+      new window.Event('submit', { bubbles: true, cancelable: true }),
+    ));
+    // Es la misma tarjeta (no se desmontó), ahora en Anteriores, con el aviso del cierre y el foco en él.
+    assert.ok(document.querySelector('.solicitud-card') === tarjeta, 'la tarjeta se volvió a montar');
+    assert.match(document.body.textContent, /En curso \(0\)/);
+    assert.match(document.body.textContent, /Anteriores \(1\)/);
+    const aviso = tarjeta.querySelector('.chat-servicio [role="alert"]');
+    assert.match(aviso.textContent, /pasó a Cancelada/);
+    assert.ok(document.activeElement === aviso, 'el foco no quedó en el aviso');
+  }, { estadoServidor: 'Cancelada', envio: () => response({ error: 'La conversación está cerrada' }, 409) });
 });

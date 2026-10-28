@@ -122,7 +122,7 @@ class SolicitarServicioOfrecidoTest(BaseCatalogoTest):
     def crear(self, servicio, enfermero=201):
         return self.client.post('/api/solicitudes', headers=self.headers(11), json={
             'idEnfermero': enfermero, 'idServicio': servicio, 'fecha': '2030-01-11', 'hora': '14:30',
-            'direccionAtencion': 'San Martín 123',
+            'direccionAtencion': 'San Martín 123', 'latitudAtencion': -32.89, 'longitudAtencion': -68.84,
         })
 
     def test_solo_se_pide_un_servicio_que_el_enfermero_ofrece(self):

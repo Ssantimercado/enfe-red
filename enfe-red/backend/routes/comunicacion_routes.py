@@ -13,13 +13,15 @@ from models.solicitud_models import SolicitudServicio
 from models.calificacion_models import Calificacion
 from models.mensaje_models import Mensaje
 from models.notificacion_models import notificar
-from services.turnos import ahora_local, vencer_solicitudes
+from services.turnos import ahora_local, vencer_cargadas, vencer_solicitudes
 
 
 comunicacion_bp = Blueprint('comunicacion', __name__)
 # SCRUM-62.1: el historial reúne las solicitudes ya cerradas.
 ESTADOS_HISTORIAL = ('Realizada', 'Rechazada', 'Cancelada', 'Vencida')
 MAX_CONTENIDO = 2000
+# Se puede escribir desde que el paciente pide el turno hasta que el servicio se cierra.
+ESTADOS_CHAT_ABIERTO = ('Pendiente', 'Aceptada')
 
 
 def _usuario_actual():
@@ -110,7 +112,7 @@ def mensajesSolicitud(idSolicitud):
 
         if request.method == 'GET':
             # Los participantes conservan acceso al registro después del cierre;
-            # únicamente el envío exige que el servicio esté Aceptado.
+            # únicamente el envío exige que el turno siga Pendiente o Aceptado.
             consulta_mensajes = Mensaje.query.filter_by(idSolicitud=idSolicitud)
             desde = request.args.get('desde')
             if desde is not None:
@@ -121,8 +123,12 @@ def mensajesSolicitud(idSolicitud):
             mensajes = consulta_mensajes.order_by(Mensaje.idMensaje).all()
             return jsonify([mensaje.to_dict() for mensaje in mensajes]), 200
 
-        if solicitud.estado != 'Aceptada':
-            return jsonify(error='Solo podés enviar mensajes cuando la solicitud está Aceptada'), 409
+        # Una Pendiente cuyo turno ya llegó vence ahora (el vencimiento es perezoso): no se escribe ni se avisa.
+        if solicitud.estado == 'Pendiente':
+            vencer_cargadas([solicitud], ahora_local())
+        if solicitud.estado not in ESTADOS_CHAT_ABIERTO:
+            return jsonify(error='La conversación está cerrada: solo se puede escribir mientras el turno '
+                                 'está pendiente o aceptado'), 409
         datos = request.get_json(silent=True)
         if not isinstance(datos, dict) or set(datos) != {'contenido'}:
             return jsonify(error='Enviá un objeto JSON con el único campo contenido'), 400

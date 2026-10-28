@@ -73,7 +73,7 @@ export default function Home() {
     : [
         ['Encontrá tu profesional', 'Buscá por nombre, especialidad o zona.'],
         ['Conocé su experiencia', 'Revisá el perfil, los horarios y la tarifa.'],
-        ['Pedí tu turno', 'Cuando el profesional acepta, coordinan por WhatsApp o por el chat.'],
+        ['Pedí tu turno', 'Desde que lo pedís hablan por el chat de Enfered; cuando acepta, también por WhatsApp.'],
       ];
   return (
     <div className="page-container home-page">

@@ -1,5 +1,6 @@
 """Creación, consulta y gestión de solicitudes: SCRUM-56 a SCRUM-61."""
 
+import math
 import re
 from datetime import date, datetime, time, timedelta
 
@@ -11,7 +12,7 @@ from sqlalchemy.orm import joinedload
 from database import db
 from models.notificacion_models import notificar
 from models.servicio_models import Servicio
-from models.solicitud_models import ESTADOS_ACTIVOS, MAX_MOTIVO_CANCELACION, SolicitudServicio
+from models.solicitud_models import ESTADOS_ACTIVOS, MAX_MOTIVO_CANCELACION, SIN_UBICACION, SolicitudServicio
 from models.usuario_models import Enfermero, Paciente, Usuario
 from services.turnos import (
     MAX_PENDIENTES_POR_PACIENTE, MESES_MAXIMOS, ahora_local, enviar_correos, fecha_legible, fecha_maxima,
@@ -22,6 +23,7 @@ from services.turnos import (
 solicitud_bp = Blueprint('solicitud_bp', __name__)
 CAMPOS_SOLICITUD = {
     'idPaciente', 'idEnfermero', 'idServicio', 'fecha', 'hora', 'direccionAtencion',
+    'latitudAtencion', 'longitudAtencion',
 }
 NOTIFICACIONES_ESTADO = {'Aceptada': ('aceptada', 'aceptó'), 'Rechazada': ('rechazada', 'rechazó')}
 MIN_MOTIVO_ENFERMERO = 5
@@ -73,6 +75,18 @@ def _validar_fecha_hora(fecha_texto, hora_texto):
     return fecha, hora
 
 
+def _coordenada(valor, limite):
+    """Número finito dentro del rango, o None (True/False no cuentan como número)."""
+    if isinstance(valor, bool) or not isinstance(valor, (int, float)):
+        return None
+    try:
+        numero = float(valor)
+    except OverflowError:
+        # Un entero gigante en el JSON no entra en un float.
+        return None
+    return numero if math.isfinite(numero) and abs(numero) <= limite else None
+
+
 def _validar_datos_solicitud(datos):
     """Normalizar el JSON o lanzar ValueError con el mensaje para el paciente."""
     if not isinstance(datos, dict):
@@ -90,12 +104,20 @@ def _validar_datos_solicitud(datos):
     if not isinstance(direccion, str) or not 1 <= len(direccion.strip()) <= 200:
         raise ValueError('La dirección de atención es obligatoria (máximo 200 caracteres)')
 
+    # El enfermero necesita el punto exacto para llegar: es obligatorio en cada pedido nuevo.
+    latitud = _coordenada(datos.get('latitudAtencion'), 90)
+    longitud = _coordenada(datos.get('longitudAtencion'), 180)
+    if latitud is None or longitud is None:
+        raise ValueError('Marcá en el mapa dónde vas a recibir la atención')
+
     fecha, hora = _validar_fecha_hora(datos.get('fecha'), datos.get('hora'))
     return {
         **datos,
         'fecha': fecha,
         'hora': hora,
         'direccionAtencion': direccion.strip(),
+        'latitudAtencion': latitud,
+        'longitudAtencion': longitud,
     }
 
 
@@ -296,6 +318,9 @@ def _cambiar_estado_solicitud(id_solicitud, *, rol, origen, destino, accion, men
     cambios = {'estado': destino}
     if destino == 'Cancelada':
         cambios.update(canceladaPor=rol, motivoCancelacion=motivo)
+    if destino not in ESTADOS_ACTIVOS:
+        # Cerrado el turno, el lugar de atención ya no hace falta: se borra.
+        cambios.update(SIN_UBICACION)
     try:
         if not _bloquear_agenda(solicitud.idEnfermero):
             db.session.rollback()
@@ -411,6 +436,8 @@ def crearSolicitud():
             fecha=datos['fecha'],
             hora=datos['hora'],
             direccionAtencion=datos['direccionAtencion'],
+            latitudAtencion=datos['latitudAtencion'],
+            longitudAtencion=datos['longitudAtencion'],
         )
         db.session.add(solicitud)
         db.session.flush()

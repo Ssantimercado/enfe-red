@@ -85,7 +85,7 @@ class BaseTurnosTest(unittest.TestCase):
 
     def crear(self, usuario=11, **cambios):
         datos = dict(idEnfermero=201, idServicio=301, fecha='2030-01-11', hora='14:30',
-                     direccionAtencion='San Martín 123')
+                     direccionAtencion='San Martín 123', latitudAtencion=-32.89, longitudAtencion=-68.84)
         datos.update(cambios)
         return self.client.post('/api/solicitudes', headers=self.headers(usuario), json=datos)
 

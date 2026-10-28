@@ -5,12 +5,24 @@ import { fechaLegible } from '../fechas';
 import CalificarSolicitud from './CalificarSolicitud';
 import ReprogramarSolicitud from './ReprogramarSolicitud';
 import { EstrellasLectura } from './SelectorEstrellas';
+import { CHAT_ABIERTO, CHAT_VISIBLE } from './ChatServicio';
 import { ESTADOS_SIN_TURNO, textoEstado } from './estadoSolicitud';
 
 // Partes de la solicitud que comparten la tarjeta de Mis solicitudes y el comprobante.
 export function mensajeWhatsappPaciente(solicitud) {
   return `Hola, te escribo desde Enfered por el turno de ${solicitud.servicio?.tipoServicio || 'atención'} del ${fechaLegible(solicitud.fecha, solicitud.hora)}.`;
 }
+
+export function mensajeWhatsappEnfermero(solicitud) {
+  return `Hola, te escribo desde Enfered por tu solicitud de ${solicitud.servicio?.tipoServicio || 'atención'} del ${fechaLegible(solicitud.fecha, solicitud.hora)}.`;
+}
+
+// HU13: el teléfono del profesional llega recién cuando acepta; antes se habla por el chat.
+export function whatsappParaPaciente(solicitud) {
+  return (solicitud.estado === 'Aceptada'
+    && enlaceWhatsapp(solicitud.contacto?.telefono, mensajeWhatsappPaciente(solicitud))) || null;
+}
+export const NOTA_WHATSAPP_PACIENTE = 'Cuando el profesional acepte el turno, también vas a poder seguir la charla por WhatsApp.';
 
 // El historial es lo único que dice si una atención Realizada ya tiene reseña.
 export async function calificacionesDelHistorial(signal) {
@@ -19,10 +31,12 @@ export async function calificacionesDelHistorial(signal) {
   return Object.fromEntries(historial.map((item) => [item.idSolicitud, (item.calificaciones || [])[0] || null]));
 }
 
-export function AccionesPaciente({ solicitud, calificacion, onActualizada, onCalificada, comprobante = false }) {
+// onAlternarChat: en Mis solicitudes el chat se abre dentro de la tarjeta (en el comprobante ya está abierto).
+export function AccionesPaciente({
+  solicitud, calificacion, onActualizada, onCalificada, comprobante = false, chatAbierto = false, onAlternarChat,
+}) {
   const [gracias, setGracias] = useState(false);
-  const whatsapp = solicitud.estado === 'Aceptada'
-    && enlaceWhatsapp(solicitud.contacto?.telefono, mensajeWhatsappPaciente(solicitud));
+  const chatActivo = CHAT_ABIERTO.includes(solicitud.estado);
   return (
     <>
       {solicitud.estado === 'Realizada' && calificacion && (
@@ -32,15 +46,23 @@ export function AccionesPaciente({ solicitud, calificacion, onActualizada, onCal
       )}
       {gracias && <p className="notice notice-success solicitud-aviso" role="status">¡Gracias! Tu calificación se guardó.</p>}
       <div className="solicitud-card-actions">
-        {!comprobante && (
-          <Link className="button button-primary" to={`/solicitudes/${solicitud.idSolicitud}`}>
-            {solicitud.estado === 'Aceptada' ? 'Ver comprobante y mensajes' : 'Ver comprobante'}
-          </Link>
+        {onAlternarChat && CHAT_VISIBLE.includes(solicitud.estado) && (
+          <button
+            className={`button ${chatActivo ? 'button-primary' : 'button-secondary'}`}
+            type="button"
+            aria-expanded={chatAbierto}
+            aria-controls={`chat-${solicitud.idSolicitud}`}
+            onClick={onAlternarChat}
+          >
+            {chatActivo
+              ? (chatAbierto ? 'Ocultar chat' : 'Escribirle al profesional')
+              : (chatAbierto ? 'Ocultar mensajes' : 'Ver mensajes')}
+          </button>
         )}
-        {whatsapp && (
-          <a className="button button-secondary" href={whatsapp} target="_blank" rel="noopener noreferrer">
-            Escribir por WhatsApp
-          </a>
+        {!comprobante && (
+          <Link className="button button-secondary" to={`/solicitudes/${solicitud.idSolicitud}`}>
+            Ver comprobante
+          </Link>
         )}
         {solicitud.estado === 'Realizada' && !calificacion && (
           <CalificarSolicitud

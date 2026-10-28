@@ -1,5 +1,4 @@
-
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Circle,
@@ -14,8 +13,11 @@ import {
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { MAPA_ATRIBUCION, MAPA_TILES_URL, RUTAS_URL } from './mapaConfig';
+import { useMiUbicacion, useRutaReal } from './useUbicacion';
 
 const DEFAULT_CENTER = [-32.8895, -68.8458]; // Mendoza capital
+// El backend publica la ubicación del profesional redondeada a unos 1 km: el círculo muestra esa zona.
+const RADIO_ZONA_METROS = 700;
 
 const nurseIcon = new L.DivIcon({
   className: 'enfermero-marker',
@@ -105,95 +107,26 @@ function coordinatesOf(enfermero) {
     : null;
 }
 
-// Calcula la ruta REAL mediante las calles de OpenStreetMap.
-function useRutaReal(origen, destino) {
-  const [ruta, setRuta] = useState(null);
-  const [loadingRoute, setLoadingRoute] = useState(false);
-  const [routeError, setRouteError] = useState('');
-
-  useEffect(() => {
-    if (!RUTAS_URL || !origen || !destino) {
-      setRuta(null);
-      setLoadingRoute(false);
-      setRouteError('');
-      return;
-    }
-
-    const controller = new AbortController();
-
-    async function obtenerRuta() {
-      setLoadingRoute(true);
-      setRuta(null);
-      setRouteError('');
-
-      try {
-        // OSRM requiere longitud,latitud (no latitud,longitud).
-        const coordenadas = [
-          `${origen[1]},${origen[0]}`,
-          `${destino[1]},${destino[0]}`,
-        ].join(';');
-
-        const url =
-          `${RUTAS_URL}/${coordenadas}` +
-          '?overview=full&geometries=geojson&steps=true';
-
-        const response = await fetch(url, {
-          signal: controller.signal,
-        });
-
-        if (!response.ok) {
-          throw new Error('No se pudo consultar el servicio de rutas.');
-        }
-
-        const data = await response.json();
-
-        if (
-          data.code !== 'Ok' ||
-          !data.routes ||
-          data.routes.length === 0
-        ) {
-          throw new Error(
-            'No se encontró una ruta por calles entre ambas ubicaciones.'
-          );
-        }
-
-        // OSRM devuelve [longitud, latitud].
-        // Leaflet necesita [latitud, longitud].
-        const rutaElegida = data.routes[0];
-
-        const positions = rutaElegida.geometry.coordinates.map(
-          ([lng, lat]) => [lat, lng]
-        );
-
-        setRuta({
-          positions,
-          distancia: rutaElegida.distance / 1000,
-          tiempo: rutaElegida.duration,
-        });
-      } catch (error) {
-        if (error.name !== 'AbortError') {
-          console.error('Error al calcular la ruta:', error);
-          setRouteError(
-            error.message ||
-              'No se pudo calcular la ruta. Intentá nuevamente.'
-          );
-          setRuta(null);
-        }
-      } finally {
-        if (!controller.signal.aborted) {
-          setLoadingRoute(false);
-        }
-      }
-    }
-
-    obtenerRuta();
-
-    return () => {
-      controller.abort();
+// Con la ubicación redondeada, dos profesionales de la misma zona caen en el mismo punto y el de abajo
+// no se puede tocar. Se reparten en un círculo chico alrededor de ese punto (solo para mostrarlos).
+const SEPARACION_GRADOS = 0.0025; // unos 250 m
+function separarRepetidos(items) {
+  const grupos = new Map();
+  items.forEach((item) => {
+    const clave = item.position.map((valor) => valor.toFixed(5)).join(',');
+    grupos.set(clave, [...(grupos.get(clave) || []), item]);
+  });
+  return [...grupos.values()].flatMap((grupo) => grupo.map((item, indice) => {
+    if (grupo.length === 1) return item;
+    const angulo = (2 * Math.PI * indice) / grupo.length;
+    const [lat, lng] = item.position;
+    // original: el círculo de la zona sigue en el punto publicado; solo el marcador se corre.
+    return {
+      ...item,
+      original: item.position,
+      position: [lat + SEPARACION_GRADOS * Math.sin(angulo), lng + SEPARACION_GRADOS * Math.cos(angulo)],
     };
-  }, [origen, destino]);
-
-  return { ruta, loadingRoute, routeError };
+  }));
 }
 
 export default function MapaEnfermeros({
@@ -204,9 +137,12 @@ export default function MapaEnfermeros({
   volverA = '/cartilla',
 }) {
   const mostrandoPacientes = tipoPersona === 'paciente';
-  const [userPosition, setUserPosition] = useState(null);
-  const [locationState, setLocationState] = useState('idle');
-  const [locationError, setLocationError] = useState('');
+  const {
+    posicion: userPosition,
+    estado: locationState,
+    error: locationError,
+    ubicar: locateUser,
+  } = useMiUbicacion();
 
   const navigate = useNavigate();
 
@@ -224,13 +160,14 @@ export default function MapaEnfermeros({
     userPosition || selectedPosition || DEFAULT_CENTER;
 
   const markers = useMemo(
-    () =>
+    () => separarRepetidos(
       personas
         .map((persona) => ({
           persona,
           position: coordinatesOf(persona),
         }))
-        .filter((item) => item.position),
+        .filter((item) => item.position)
+    ),
     [personas]
   );
   const markerPositions = useMemo(
@@ -238,108 +175,53 @@ export default function MapaEnfermeros({
     [markers]
   );
 
-  // La distancia y el tiempo ahora provienen de la ruta real.
+  // El recorrido es para el enfermero que va a la casa del paciente. Al paciente le basta saber
+  // qué profesionales atienden cerca: ver el camino hasta el domicilio del enfermero no le sirve.
   const { ruta, loadingRoute, routeError } = useRutaReal(
-    userPosition,
-    selectedPosition
+    mostrandoPacientes ? userPosition : null,
+    mostrandoPacientes ? selectedPosition : null
   );
-
-  const locateUser = () => {
-    if (!navigator.geolocation) {
-      setLocationState('error');
-      setLocationError(
-        'Este navegador no permite obtener tu ubicación.'
-      );
-      return;
-    }
-
-    if (
-      !window.isSecureContext &&
-      window.location.hostname !== 'localhost' &&
-      window.location.hostname !== '127.0.0.1'
-    ) {
-      setLocationState('error');
-      setLocationError(
-        'La ubicación solo funciona en localhost o mediante HTTPS.'
-      );
-      return;
-    }
-
-    setLocationState('loading');
-    setLocationError('');
-
-    navigator.geolocation.getCurrentPosition(
-      ({ coords }) => {
-        setUserPosition([
-          coords.latitude,
-          coords.longitude,
-        ]);
-        setLocationState('ready');
-      },
-      (error) => {
-        setLocationState('error');
-
-        const messages = {
-          1: 'Permití el acceso a tu ubicación en el navegador y volvé a intentarlo.',
-          2: 'El dispositivo no pudo determinar tu ubicación.',
-          3: 'La búsqueda de ubicación tardó demasiado.',
-        };
-
-        setLocationError(
-          messages[error.code] ||
-            'No se pudo obtener tu ubicación.'
-        );
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 60000,
-      }
-    );
-  };
+  const cantidad = `${markers.length} profesional${markers.length === 1 ? '' : 'es'}`;
 
   return (
     <section
       className={`mapa-enfermeros ${mostrandoPacientes ? 'mapa-pacientes' : ''}`}
-      aria-label={mostrandoPacientes ? 'Mapa de pacientes asignados' : 'Mapa de enfermeros'}
+      aria-label={mostrandoPacientes ? 'Mapa de pacientes asignados' : 'Mapa de enfermeros cerca de tu zona'}
       style={{ position: 'relative' }}
     >
       <div className="mapa-toolbar">
         <div>
-          <h2>{mostrandoPacientes ? 'Ubicaciones compartidas' : 'Enfermeros cercanos'}</h2>
+          <h2>{mostrandoPacientes ? 'Ubicaciones compartidas' : 'Enfermeros cerca de tu zona'}</h2>
           <p>{mostrandoPacientes
             ? `${markers.length} paciente${markers.length === 1 ? '' : 's'} compartió su ubicación`
-            : `${markers.length} profesional${markers.length === 1 ? '' : 'es'} con ubicación disponible`}
+            : `${markers.length === 1 ? 'Hay 1 profesional' : `Hay ${cantidad}`} en el mapa. Cada círculo es la zona donde atiende, no su domicilio. Tocá uno para ver su perfil.`}
           </p>
         </div>
 
         <button
           type="button"
-          onClick={locateUser}
+          onClick={() => locateUser()}
           disabled={locationState === 'loading'}
         >
           {locationState === 'loading'
             ? 'Buscando ubicación…'
             : mostrandoPacientes
               ? 'Usar mi ubicación actual'
-              : 'Usar mi ubicación'}
+              : 'Mostrar dónde estoy'}
         </button>
       </div>
 
-      {selectedPosition && RUTAS_URL && (
+      {mostrandoPacientes && selectedPosition && RUTAS_URL && (
         <div className="mapa-route-summary">
           <h3><span aria-hidden="true">🚗</span> Mejor ruta por calles</h3>
-          <p>
-            Desde tu ubicación actual hasta{' '}
-            {mostrandoPacientes ? 'el paciente' : 'el profesional'}.
-          </p>
+          <p>Desde tu ubicación actual hasta el paciente.</p>
           {!userPosition && (
             <p>Usá el botón para calcular el recorrido, el tiempo y la distancia.</p>
           )}
           {loadingRoute && <p role="status">Calculando recorrido…</p>}
           {!loadingRoute && ruta && (
             <p className="mapa-route-details">
-              {ruta.distancia.toFixed(1)} km · aprox.{' '}
+              {ruta.distancia.toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km · aprox.{' '}
               {Math.max(1, Math.ceil(ruta.tiempo / 60))} min
             </p>
           )}
@@ -415,6 +297,17 @@ export default function MapaEnfermeros({
           />
         )}
 
+        {/* Zona aproximada de cada profesional: solo de fondo, el que se toca es el marcador. */}
+        {!mostrandoPacientes && markers.map(({ persona, position, original }) => (
+          <Circle
+            key={`zona-${persona.usuario_id ?? persona.id}`}
+            center={original || position}
+            radius={RADIO_ZONA_METROS}
+            interactive={false}
+            pathOptions={{ color: '#127a71', weight: 1, fillColor: '#127a71', fillOpacity: 0.12 }}
+          />
+        ))}
+
         {/* Los marcadores de pacientes solo se reciben del endpoint autorizado para el enfermero. */}
         {markers.map(({ persona, position }) => {
           const id = persona.usuario_id ?? persona.id;
@@ -448,13 +341,17 @@ export default function MapaEnfermeros({
                   <p
                     style={{
                       margin: '4px 0 10px 0',
-                      color: '#64748b',
-                      fontSize: '13px',
+                      color: '#546878',
+                      fontSize: '14px',
                     }}
                   >
                     {mostrandoPacientes
                       ? `${persona.solicitudes_activas} solicitud${persona.solicitudes_activas === 1 ? '' : 'es'} activa${persona.solicitudes_activas === 1 ? '' : 's'}`
-                      : persona.especialidad || 'Enfermería general'}
+                      : [
+                        persona.especialidad || 'Enfermería general',
+                        persona.distancia_km != null ? `a unos ${persona.distancia_km} km` : null,
+                        'Atiende por esta zona',
+                      ].filter(Boolean).join(' · ')}
                   </p>
 
                   {!mostrandoPacientes && <button
@@ -462,19 +359,18 @@ export default function MapaEnfermeros({
                     onClick={() => navigate(`/perfil/${id}`, { state: { volverA } })}
                     style={{
                       width: '100%',
+                      minHeight: '44px',
                       padding: '8px 12px',
-                      backgroundColor: '#3498db',
+                      backgroundColor: '#11658f',
                       color: 'white',
                       border: 'none',
                       borderRadius: '6px',
                       cursor: 'pointer',
                       fontWeight: 'bold',
-                      fontSize: '13px',
-                      boxShadow:
-                        '0 2px 4px rgba(52, 152, 219, 0.2)',
+                      fontSize: '14px',
                     }}
                   >
-                    Ver Perfil Completo
+                    Ver perfil
                   </button>}
                 </div>
               </Popup>
@@ -487,7 +383,7 @@ export default function MapaEnfermeros({
         <p className="mapa-nota">
           {mostrandoPacientes
             ? 'Algunos pacientes todavía no eligieron compartir una ubicación y no aparecen en el mapa.'
-            : 'Algunos profesionales no tienen coordenadas cargadas y no pueden mostrarse en el mapa.'}
+            : 'Algunos profesionales no cargaron su zona de atención y no aparecen en el mapa.'}
         </p>
       )}
     </section>

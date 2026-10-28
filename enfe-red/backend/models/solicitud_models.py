@@ -13,6 +13,10 @@ CHECK_ESTADO_SOLICITUD = 'estado IN (' + ', '.join(f"'{estado}'" for estado in E
 MAX_MOTIVO_CANCELACION = 200
 
 
+# El enfermero ve el punto de atención mientras el turno está en curso; al cerrarse se borra.
+SIN_UBICACION = {'latitudAtencion': None, 'longitudAtencion': None}
+
+
 class SolicitudServicio(db.Model):
     """Pedido de un paciente; conserva los nombres de campos del diagrama."""
 
@@ -34,6 +38,10 @@ class SolicitudServicio(db.Model):
     # Quién canceló: 'paciente', 'enfermero' o 'administrador' (al suspender una cuenta).
     canceladaPor = db.Column(db.String(20), nullable=True)
     motivoCancelacion = db.Column(db.String(MAX_MOTIVO_CANCELACION), nullable=True)
+    # Punto del mapa donde se recibe la atención: el paciente lo marca al pedir el turno.
+    # Las solicitudes anteriores a esta mejora no lo tienen.
+    latitudAtencion = db.Column(db.Float, nullable=True)
+    longitudAtencion = db.Column(db.Float, nullable=True)
 
     paciente = db.relationship(Paciente)
     enfermero = db.relationship(Enfermero)
@@ -47,6 +55,15 @@ class SolicitudServicio(db.Model):
         if usuario is None or usuario.eliminado:
             return None
         return {'telefono': self.enfermero.telefono, 'email': usuario.email}
+
+    def ubicacion_atencion(self):
+        """El punto solo viaja mientras el turno está en curso: después nadie necesita saber dónde vive el paciente."""
+        if self.estado not in ESTADOS_ACTIVOS or self.latitudAtencion is None or self.longitudAtencion is None:
+            return None
+        return {'latitud': self.latitudAtencion, 'longitud': self.longitudAtencion}
+
+    def olvidar_ubicacion(self):
+        self.latitudAtencion = self.longitudAtencion = None
 
     def hora_fin(self):
         minutos = (self.servicio.duracionMinutos if self.servicio else None) or DURACION_POR_DEFECTO
@@ -70,6 +87,7 @@ class SolicitudServicio(db.Model):
             'canceladaPor': self.canceladaPor,
             'motivoCancelacion': self.motivoCancelacion,
             'direccionAtencion': self.direccionAtencion,
+            'ubicacionAtencion': self.ubicacion_atencion(),
             'paciente': {
                 'idPaciente': self.paciente.id,
                 'nombre': self.paciente.nombre,

@@ -84,7 +84,8 @@ class SolicitudesTest(unittest.TestCase):
 
     def payload(self, **changes):
         data = dict(idEnfermero=201, idServicio=301, fecha='2030-01-11', hora='14:30',
-                    direccionAtencion='  San Martín 123, Mendoza  ')
+                    direccionAtencion='  San Martín 123, Mendoza  ',
+                    latitudAtencion=-32.89, longitudAtencion=-68.84)
         data.update(changes)
         return data
 
@@ -394,6 +395,32 @@ class SolicitudesTest(unittest.TestCase):
                 self.assertEqual(response.status_code, 401)
                 self.assertEqual(db.session.get(SolicitudServicio, id_solicitud).estado, 'Pendiente')
 
+    def test_el_punto_de_atencion_es_obligatorio(self):
+        for cambios in ({'latitudAtencion': None}, {'longitudAtencion': None}, {'latitudAtencion': '-32.8'},
+                        {'latitudAtencion': True}, {'latitudAtencion': 91}, {'longitudAtencion': -181},
+                        {'latitudAtencion': 10 ** 400}):
+            with self.subTest(cambios=cambios):
+                respuesta = self.crear(**cambios)
+                self.assertEqual(respuesta.status_code, 400)
+                self.assertIn('Marcá en el mapa', respuesta.json['error'])
+        datos = self.payload()
+        del datos['latitudAtencion'], datos['longitudAtencion']
+        respuesta = self.client.post('/api/solicitudes', headers=self.headers(), json=datos)
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(SolicitudServicio.query.count(), 0)
+
+    def test_el_enfermero_ve_el_punto_solo_mientras_el_turno_sigue(self):
+        id_solicitud = self.crear().json['solicitud']['idSolicitud']
+        ruta = f'/api/solicitudes/{id_solicitud}'
+        self.assertEqual(self.client.get(ruta, headers=self.headers(21)).json['ubicacionAtencion'],
+                         {'latitud': -32.89, 'longitud': -68.84})
+        self.assertEqual(self.client.put(ruta + '/rechazar', headers=self.headers(21)).status_code, 200)
+        self.assertIsNone(self.client.get(ruta, headers=self.headers(21)).json['ubicacionAtencion'])
+        # Al cerrarse el turno el punto también se borra de la base.
+        db.session.expire_all()
+        guardada = db.session.get(SolicitudServicio, id_solicitud)
+        self.assertEqual((guardada.latitudAtencion, guardada.longitudAtencion), (None, None))
+
     def test_aceptar_solicitud_inexistente_devuelve_404(self):
         response = self.client.put('/api/solicitudes/999/aceptar', headers=self.headers(21))
         self.assertEqual(response.status_code, 404)
@@ -426,7 +453,9 @@ class SolicitudesTest(unittest.TestCase):
         self.pasar_turno()
         response = self.client.put(ruta + '/finalizar', headers=self.headers(21))
         self.assertEqual(response.status_code, 200, response.json)
-        esperado = {**creada.json['solicitud'], 'estado': 'Realizada'}
+        # Cerrado el servicio, el punto de atención deja de enviarse.
+        self.assertEqual(creada.json['solicitud']['ubicacionAtencion'], {'latitud': -32.89, 'longitud': -68.84})
+        esperado = {**creada.json['solicitud'], 'estado': 'Realizada', 'ubicacionAtencion': None}
         self.assertEqual(response.json['solicitud'], esperado)
         self.assertEqual(db.session.get(SolicitudServicio, id_solicitud).estado, 'Realizada')
         self.assertEqual(self.client.get(ruta, headers=self.headers()).json, esperado)
@@ -645,7 +674,7 @@ class MigracionSprint4Test(unittest.TestCase):
         inspector = inspect(db.engine)
         self.assertEqual({c['name'] for c in inspector.get_columns('solicitudes_servicio')}, {
             'idSolicitud', 'idPaciente', 'idEnfermero', 'idServicio', 'fecha', 'hora', 'estado', 'direccionAtencion',
-            'canceladaPor', 'motivoCancelacion',
+            'canceladaPor', 'motivoCancelacion', 'latitudAtencion', 'longitudAtencion',
         })
         self.assertEqual({fk['referred_table'] for fk in inspector.get_foreign_keys('solicitudes_servicio')},
                          {'pacientes', 'enfermeros', 'servicios'})

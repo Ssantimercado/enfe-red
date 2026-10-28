@@ -1,8 +1,7 @@
-import { Link } from 'react-router-dom';
 import { enlaceWhatsapp, formatPrice, sesionActual } from '../api';
 import Icon from './ui/Icon';
 
-export default function ProfessionalContact({ profile, idUsuario }) {
+export default function ProfessionalContact({ profile }) {
   // El teléfono solo llega cuando el profesional ya aceptó una solicitud de este paciente.
   const whatsapp = profile.contacto_habilitado ? enlaceWhatsapp(profile.telefono) : null;
   const paciente = sesionActual()?.rol === 'paciente';
@@ -48,20 +47,10 @@ export default function ProfessionalContact({ profile, idUsuario }) {
         <>
           <p className="notice notice-info">
             {paciente
-              ? 'Cuando el profesional acepte tu solicitud vas a poder escribirle por WhatsApp.'
-              : 'Los pacientes pueden escribirle por WhatsApp cuando el profesional acepta su solicitud.'}
+              ? 'Cuando le pidas un turno vas a poder hablar con el profesional por el chat de Enfered. Si lo acepta, también por WhatsApp.'
+              : 'Los pacientes hablan con el profesional por el chat de Enfered desde que piden un turno, y por WhatsApp cuando lo acepta.'}
           </p>
-          {paciente && profile.rol === 'enfermero' && idUsuario != null && (
-            <div className="contact-actions">
-              <Link
-                className="button button-primary button-full"
-                to={`/perfil/${idUsuario}/solicitar`}
-              >
-                <Icon name="calendar" size={18} />
-                Pedir un turno
-              </Link>
-            </div>
-          )}
+          {/* El turno se pide con el botón "Solicitar servicio" del encabezado del perfil: acá no se repite. */}
         </>
       )}
     </aside>

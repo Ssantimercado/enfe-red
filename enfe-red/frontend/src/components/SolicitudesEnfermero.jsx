@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { requestApi as api, enlaceWhatsapp } from '../api';
 import { fechaLegible, turnoFuturo } from '../fechas';
@@ -10,13 +10,12 @@ import {
   obtenerSolicitudesEnfermero,
   rechazarSolicitud,
 } from '../services/solicitudes';
-import ChatServicio from './ChatServicio';
-import { DetalleEstado } from './AccionesSolicitud';
+import ChatServicio, { CHAT_ABIERTO, CHAT_VISIBLE } from './ChatServicio';
+import { DetalleEstado, mensajeWhatsappEnfermero } from './AccionesSolicitud';
 import useActualizacionPeriodica from './useActualizacionPeriodica';
 import './Solicitudes.css';
 
-// El chat se habilita al aceptar; después de cerrar queda como registro de lectura.
-const CHAT_VISIBLE = ['Aceptada', 'Realizada', 'Cancelada'];
+const UbicacionAtencion = lazy(() => import('./UbicacionAtencion'));
 const ACCIONES = {
   aceptar: { enviar: aceptarSolicitud, exito: 'Solicitud aceptada.' },
   rechazar: { enviar: rechazarSolicitud, exito: 'Solicitud rechazada.' },
@@ -65,6 +64,8 @@ export default function SolicitudesEnfermero() {
   const [aviso, setAviso] = useState(null);
   const [intento, setIntento] = useState(0);
   const [chatAbierto, setChatAbierto] = useState(null);
+  // Mapa con el lugar de atención y el recorrido, dentro de la tarjeta del pedido.
+  const [ubicacionAbierta, setUbicacionAbierta] = useState(null);
   const dialog = useRef(null);
   const dialogCancelar = useRef(null);
   const ocupado = useRef(false);
@@ -209,23 +210,6 @@ export default function SolicitudesEnfermero() {
         <dt>Teléfono</dt>
         <dd>
           {solicitud.paciente?.telefono || 'No informado'}
-          {enlaceWhatsapp(solicitud.paciente?.telefono) && (
-            <>
-              <br />
-              <a
-                className="button button-secondary solicitud-whatsapp"
-                href={enlaceWhatsapp(
-                  solicitud.paciente.telefono,
-                  `Hola, te escribo desde Enfered por tu solicitud de ${solicitud.servicio?.tipoServicio || 'atención'} del ${fechaLegible(solicitud.fecha, solicitud.hora)}.`,
-                )}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Escribir por WhatsApp
-                <span className="sr-only"> (se abre en otra pestaña)</span>
-              </a>
-            </>
-          )}
         </dd>
         <dt>Fecha y hora</dt>
         <dd>{fechaLegible(solicitud.fecha, solicitud.hora)}</dd>
@@ -271,12 +255,39 @@ export default function SolicitudesEnfermero() {
             className="button button-secondary"
             type="button"
             aria-expanded={chatAbierto === solicitud.idSolicitud}
+            aria-controls={`chat-${solicitud.idSolicitud}`}
             onClick={() => setChatAbierto((actual) => (
               actual === solicitud.idSolicitud ? null : solicitud.idSolicitud
             ))}
           >
-            {chatAbierto === solicitud.idSolicitud ? 'Ocultar mensajes' : 'Ver mensajes'}
+            {CHAT_ABIERTO.includes(solicitud.estado)
+              ? (chatAbierto === solicitud.idSolicitud ? 'Ocultar chat' : 'Escribirle al paciente')
+              : (chatAbierto === solicitud.idSolicitud ? 'Ocultar mensajes' : 'Ver mensajes')}
           </button>
+          {CHAT_ABIERTO.includes(solicitud.estado) && (
+            <button
+              className="button button-secondary"
+              type="button"
+              aria-expanded={ubicacionAbierta === solicitud.idSolicitud}
+              aria-controls={`ubicacion-${solicitud.idSolicitud}`}
+              onClick={() => setUbicacionAbierta((actual) => (
+                actual === solicitud.idSolicitud ? null : solicitud.idSolicitud
+              ))}
+            >
+              {ubicacionAbierta === solicitud.idSolicitud ? 'Ocultar ubicación' : 'Ver ubicación'}
+            </button>
+          )}
+        </div>
+      )}
+      {ubicacionAbierta === solicitud.idSolicitud && CHAT_ABIERTO.includes(solicitud.estado) && (
+        <div id={`ubicacion-${solicitud.idSolicitud}`}>
+          <Suspense fallback={<p role="status">Cargando mapa…</p>}>
+            <UbicacionAtencion
+              ubicacion={solicitud.ubicacionAtencion}
+              direccion={solicitud.direccionAtencion}
+              paciente={nombrePaciente(solicitud)}
+            />
+          </Suspense>
         </div>
       )}
       {chatAbierto === solicitud.idSolicitud && CHAT_VISIBLE.includes(solicitud.estado) && (
@@ -284,9 +295,11 @@ export default function SolicitudesEnfermero() {
           key={solicitud.idSolicitud}
           solicitud={solicitud}
           onEstadoCambiado={(actual) => setSolicitudes((items) => items.map((item) => (
-            item.idSolicitud === actual.idSolicitud ? { ...item, estado: actual.estado } : item
+            item.idSolicitud === actual.idSolicitud ? { ...item, ...actual } : item
           )))}
           contraparte={nombrePaciente(solicitud)}
+          nivelTitulo={4}
+          whatsapp={enlaceWhatsapp(solicitud.paciente?.telefono, mensajeWhatsappEnfermero(solicitud))}
         />
       )}
       {solicitud.estado === 'Pendiente' && (

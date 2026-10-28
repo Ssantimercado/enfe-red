@@ -11,7 +11,7 @@ from sqlalchemy.orm.attributes import set_committed_value
 from database import db
 from models.notificacion_models import notificar
 from models.servicio_models import DURACION_POR_DEFECTO
-from models.solicitud_models import ESTADOS_ACTIVOS, SolicitudServicio
+from models.solicitud_models import ESTADOS_ACTIVOS, SIN_UBICACION, SolicitudServicio
 from services.correo import enviar_aviso
 
 ZONA_HORARIA_ARGENTINA = timezone(timedelta(hours=-3))
@@ -156,7 +156,7 @@ def vencer_cargadas(solicitudes, ahora):
             # Condicional: si otra petición ya la venció (o la aceptó), no se avisa dos veces.
             actualizadas = SolicitudServicio.query.filter_by(
                 idSolicitud=solicitud.idSolicitud, estado='Pendiente',
-            ).update({'estado': 'Vencida'}, synchronize_session=False)
+            ).update({'estado': 'Vencida', **SIN_UBICACION}, synchronize_session=False)
             if actualizadas != 1:
                 continue
             set_committed_value(solicitud, 'estado', 'Vencida')
@@ -212,6 +212,7 @@ def cancelar_por_suspension(usuario, ahora):
         solicitud.estado = 'Cancelada'
         solicitud.canceladaPor = 'administrador'
         solicitud.motivoCancelacion = motivo
+        solicitud.olvidar_ubicacion()
         if paciente:
             destino = solicitud.enfermero.usuario
             texto = (f'Se canceló el turno de {_texto_turno(solicitud)} con '

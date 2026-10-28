@@ -122,6 +122,7 @@ def _cancelar_solicitudes(usuario):
         solicitud.estado = 'Cancelada'
         solicitud.canceladaPor = 'paciente' if usuario.perfil_paciente else 'enfermero'
         solicitud.motivoCancelacion = 'Se eliminó la cuenta'
+        solicitud.olvidar_ubicacion()
         canceladas += 1
         servicio = solicitud.servicio.tipoServicio if solicitud.servicio else 'servicio'
         turno = f'{servicio} del {solicitud.fecha:%d/%m} a las {solicitud.hora:%H:%M}'
@@ -148,7 +149,8 @@ def _anonimizar(usuario):
         paciente.ubicacion_compartida = False
         # La dirección de atención también es del paciente.
         SolicitudServicio.query.filter_by(idPaciente=paciente.id).update(
-            {'direccionAtencion': DIRECCION_ELIMINADA}, synchronize_session=False,
+            {'direccionAtencion': DIRECCION_ELIMINADA, 'latitudAtencion': None, 'longitudAtencion': None},
+            synchronize_session=False,
         )
     if enfermero:
         enfermero.nombre, enfermero.apellido = NOMBRE_ELIMINADO, None

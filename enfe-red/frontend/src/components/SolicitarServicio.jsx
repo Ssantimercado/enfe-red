@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { requestApi as api, enlaceWhatsapp } from '../api';
 import { DIAS_SEMANA, diaDeLaSemana, fechaLegible, fechaMaximaISO, hoyISO } from '../fechas';
 import { crearSolicitud, obtenerProfesional, obtenerServicios, errorSolicitud } from '../services/solicitudes';
 import './Solicitudes.css';
+
+const LocationPicker = lazy(() => import('./LocationPicker'));
 
 const DURACION_POR_DEFECTO = 60;
 // Cada cuánto se ofrece un horario de inicio dentro de la franja del profesional.
@@ -75,6 +77,8 @@ export default function SolicitarServicio() {
   const [noDisponible, setNoDisponible] = useState(false);
   const [datos, setDatos] = useState({ idServicio: '', fecha: '', hora: '', direccionAtencion: '' });
   const [telefono, setTelefono] = useState('');
+  // Lugar exacto de la atención (obligatorio): el enfermero lo usa para llegar.
+  const [punto, setPunto] = useState(null);
   useEffect(() => {
     const controller = new AbortController();
     setCargando(true);
@@ -97,6 +101,9 @@ export default function SolicitarServicio() {
       setPaciente(propio);
       const direccion = direccionDelPerfil(propio?.direccion);
       if (direccion) setDatos(actual => (actual.direccionAtencion ? actual : { ...actual, direccionAtencion: direccion }));
+      if (propio?.latitud != null && propio?.longitud != null) {
+        setPunto(actual => actual || { lat: propio.latitud, lng: propio.longitud, delPerfil: true });
+      }
     }).catch(err => {
       if (controller.signal.aborted) return;
       if (err.response?.status === 404) setNoDisponible(true);
@@ -141,6 +148,7 @@ export default function SolicitarServicio() {
     if (!Number.isFinite(fechaHora.getTime()) || fechaHora <= new Date()) { setError('Elegí una fecha y hora futuras.'); return; }
     if (!datos.direccionAtencion.trim()) { setError('Ingresá la dirección de atención.'); return; }
     if (datos.direccionAtencion.trim().length > 200) { setError('La dirección admite hasta 200 caracteres.'); return; }
+    if (!punto) { setError('Marcá en el mapa dónde vas a recibir la atención.'); return; }
     if (pideTelefono && !telefonoValido(telefono)) { setError(MENSAJE_TELEFONO); return; }
     ocupado.current = true;
     setEnviando(true);
@@ -157,6 +165,8 @@ export default function SolicitarServicio() {
         idServicio: Number(datos.idServicio),
         idEnfermero: Number(idEnfermero),
         direccionAtencion: datos.direccionAtencion.trim(),
+        latitudAtencion: punto.lat,
+        longitudAtencion: punto.lng,
       });
       setCreada(true);
       const idSolicitud = respuesta.solicitud?.idSolicitud;
@@ -222,6 +232,23 @@ export default function SolicitarServicio() {
         <label className="field">Dirección de atención<input name="direccionAtencion" autoComplete="street-address" maxLength={200} required value={datos.direccionAtencion} onChange={cambiar} disabled={bloqueado} />
           {direccionDelPerfil(paciente?.direccion) && <span className="field-hint">La tomamos de tu perfil. Podés cambiarla si la atención es en otro lugar.</span>}
         </label>
+        <fieldset className="field solicitud-ubicacion" disabled={bloqueado}>
+          <legend>Lugar de atención en el mapa</legend>
+          <Suspense fallback={<p role="status">Cargando mapa…</p>}>
+            <LocationPicker
+              latitude={punto?.lat}
+              longitude={punto?.lng}
+              conMiUbicacion
+              helpText={`Tocá el mapa en el lugar exacto donde te atienden, o usá tu ubicación actual. ${nombre} lo ve solo mientras el turno esté pendiente o aceptado, para saber cómo llegar.`}
+              onChange={(lat, lng) => { if (!bloqueado) setPunto({ lat, lng }); }}
+            />
+          </Suspense>
+          <p className="field-hint" role="status">
+            {!punto ? 'Todavía no marcaste el lugar.'
+              : punto.delPerfil ? 'Marcamos el punto de tu perfil. Si te atienden en otro lugar, tocá el mapa.'
+                : 'Listo, el lugar quedó marcado.'}
+          </p>
+        </fieldset>
         {pideTelefono && <label className="field">Tu teléfono celular<input type="tel" name="telefono" autoComplete="tel" inputMode="tel" maxLength={40} required value={telefono} onChange={event => setTelefono(event.target.value)} disabled={bloqueado} />
           <span className="field-hint">Lo guardamos en tu perfil para que el profesional pueda avisarte. Por ejemplo: 261 555 1234.</span>
         </label>}

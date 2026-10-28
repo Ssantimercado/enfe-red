@@ -99,7 +99,7 @@ export default function VerPerfiles() {
             )}
           </header>
           <div className="profile-columns public-profile-layout">
-            <ProfessionalContact profile={profile} idUsuario={id} />
+            <ProfessionalContact profile={profile} />
             <div className="profile-information">
               <section className="content-panel">
                 <h2 className="panel-title">

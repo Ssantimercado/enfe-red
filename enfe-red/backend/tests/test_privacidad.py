@@ -89,7 +89,8 @@ class BasePrivacidadTest(unittest.TestCase):
 
     def solicitud(self, estado='Pendiente', enfermero=201, paciente=101, fecha=date(2030, 1, 11), hora=time(10)):
         solicitud = SolicitudServicio(idPaciente=paciente, idEnfermero=enfermero, idServicio=301, fecha=fecha,
-                                      hora=hora, estado=estado, direccionAtencion='Casa de Ana 123')
+                                      hora=hora, estado=estado, direccionAtencion='Casa de Ana 123',
+                                      latitudAtencion=-32.9, longitudAtencion=-68.8)
         db.session.add(solicitud)
         db.session.commit()
         return solicitud.idSolicitud
@@ -315,6 +316,8 @@ class EliminarCuentaTest(BasePrivacidadTest):
         self.assertEqual(estados, {pendiente: 'Cancelada', futura: 'Cancelada', pasada: 'Aceptada',
                                    realizada: 'Realizada'})
         self.assertEqual({s.direccionAtencion for s in SolicitudServicio.query}, {'Dirección eliminada'})
+        # El punto del mapa también es del paciente.
+        self.assertEqual({(s.latitudAtencion, s.longitudAtencion) for s in SolicitudServicio.query}, {(None, None)})
         avisos = Notificacion.query.filter_by(idUsuario=21, tipo='cancelada').all()
         self.assertEqual({a.idSolicitud for a in avisos}, {pendiente, futura})
         self.assertIn('Ana Pérez eliminó su cuenta', avisos[0].mensaje)

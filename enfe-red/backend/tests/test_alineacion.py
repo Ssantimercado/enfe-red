@@ -114,7 +114,7 @@ class AlineacionTest(unittest.TestCase):
         with patch('routes.solicitud_routes._ahora_local', return_value=datetime(2030, 1, 1, 9, 0)):
             respuesta = self.client.post('/api/solicitudes', headers=self.token(11), json={
                 'idEnfermero': 204, 'idServicio': 301, 'fecha': '2030-01-10', 'hora': '10:00',
-                'direccionAtencion': 'San Martín 123',
+                'direccionAtencion': 'San Martín 123', 'latitudAtencion': -32.89, 'longitudAtencion': -68.84,
             })
         self.assertEqual(respuesta.status_code, 409)
 

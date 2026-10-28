@@ -142,6 +142,7 @@ export function Privacidad() {
         <ul>
           <li><strong>Datos de cuenta:</strong> nombre, apellido, correo electrónico y contraseña (guardada cifrada).</li>
           <li><strong>Datos de contacto y ubicación:</strong> teléfono, dirección y, si la compartís, la ubicación aproximada de tu domicilio.</li>
+          <li><strong>Lugar de atención de cada turno (pacientes):</strong> el punto que marcás en el mapa al pedir un turno. Lo ve solo el profesional elegido, mientras el turno está pendiente o aceptado, para saber cómo llegar; cuando el turno se cierra se borra.</li>
           <li><strong>Datos de salud (pacientes):</strong> la información de salud que decidas cargar en tu perfil. Son datos sensibles según el artículo 2 de la ley y se guardan cifrados.</li>
           <li><strong>Datos profesionales (enfermeros):</strong> matrícula, especialidad, experiencia, tarifa y horarios.</li>
           <li><strong>Actividad en la plataforma:</strong> solicitudes, mensajes, calificaciones y notificaciones.</li>
@@ -201,7 +202,8 @@ export function Privacidad() {
         </p>
         <p>
           El mapa usa servicios de terceros (OpenStreetMap y el cálculo de rutas) que reciben la ubicación
-          que se muestra en pantalla para dibujarlo.
+          que se muestra en pantalla para dibujarlo. Si el profesional abre el lugar de atención en Google Maps,
+          ese punto también se envía a Google.
         </p>
       </section>
       <section>

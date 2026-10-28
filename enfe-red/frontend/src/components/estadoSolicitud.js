@@ -1,6 +1,6 @@
 // Textos de cada estado, compartidos por las tarjetas y el comprobante.
 const PARA_PACIENTE = {
-  Pendiente: 'Esperando que el profesional la acepte.',
+  Pendiente: 'Esperando que el profesional la acepte. Mientras tanto podés escribirle por el chat.',
   Aceptada: 'El profesional confirmó el turno. Podés escribirle para coordinar.',
   Realizada: 'Atención finalizada. Contanos cómo te fue.',
   Rechazada: 'El profesional no pudo tomar este turno.',

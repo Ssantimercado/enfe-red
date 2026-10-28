@@ -30,7 +30,7 @@ const steps = [
   [
     'chat',
     'Pedí tu turno y coordiná',
-    'Elegí el día y la hora en la app. Cuando el profesional acepta, coordinan los detalles por WhatsApp o por el chat de Enfered.',
+    'Elegí el día y la hora en la app y hablá con el profesional por el chat de Enfered desde que lo pedís. Cuando acepta, también pueden seguir por WhatsApp.',
   ],
 ];
 
@@ -95,7 +95,7 @@ const questions = [
   ],
   [
     '¿Cómo pido un turno y cómo se paga?',
-    'Pedís el turno desde el perfil del profesional eligiendo el servicio, el día y la hora. Cuando lo acepta, te avisamos y pueden coordinar los detalles por WhatsApp o por el chat de Enfered. El pago se arregla directamente con el profesional: Enfered no cobra la atención.',
+    'Pedís el turno desde el perfil del profesional eligiendo el servicio, el día y la hora. Desde que lo pedís podés hablar con el profesional por el chat de Enfered y, cuando acepta, te avisamos y también pueden seguir por WhatsApp. El pago se arregla directamente con el profesional: Enfered no cobra la atención.',
   ],
   [
     '¿Tengo que compartir mi ubicación?',
