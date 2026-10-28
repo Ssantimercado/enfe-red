@@ -12,7 +12,7 @@
   scroll-margin-top: 108px;
 }
 .landing-page .eyebrow {
-  font-size: 13px;
+  font-size: 14px;
   letter-spacing: 1.8px;
 }
 .lp-header {
@@ -375,7 +375,7 @@
   font-weight: 650;
 }
 .lp-preview-top > span:last-child {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 400;
   margin-left: auto;
   color: var(--muted);
@@ -416,7 +416,7 @@
   border: 1px solid #e3ebef;
   padding: 8px 10px;
   border-radius: 6px;
-  font-size: 13px;
+  font-size: 14px;
 }
 .lp-preview-filters .icon {
   transform: rotate(90deg);
@@ -471,7 +471,7 @@
   padding: 7px 10px;
   border-radius: 6px;
   color: var(--teal);
-  font-size: 13px;
+  font-size: 14px;
 }
 .lp-preview-profile {
   display: flex;
@@ -490,7 +490,7 @@
 .lp-preview-profile div > span {
   display: block;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   margin-top: 5px;
 }
 .lp-preview-profile > .icon {
@@ -501,7 +501,7 @@
   justify-content: space-between;
   gap: 8px;
   padding-top: 17px;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--muted);
 }
 .lp-preview-bottom span {
@@ -736,7 +736,7 @@
 .lp-review-example {
   margin-left: auto;
   color: #7a6f5c;
-  font-size: 13px;
+  font-size: 14px;
 }
 .lp-faq-section {
   background: #fafbf9;
@@ -1203,7 +1203,7 @@
     padding-block: 64px;
   }
   .landing-page .eyebrow {
-    font-size: 13px;
+    font-size: 14px;
     letter-spacing: 1.5px;
   }
   .lp-section-heading h2 {

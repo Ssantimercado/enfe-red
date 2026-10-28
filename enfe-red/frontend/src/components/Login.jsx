@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import AuthLayout from './AuthLayout';
 import Icon from './ui/Icon';
@@ -29,6 +29,11 @@ export default function Login() {
   const [visible, setVisible] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const avisoError = useRef(null);
+  // Tras un error el foco va al mensaje: quien usa teclado o lector no tiene que volver a buscarlo desde arriba.
+  useEffect(() => {
+    if (error) avisoError.current?.focus();
+  }, [error]);
   const navigate = useNavigate();
   const location = useLocation();
   const parametros = new URLSearchParams(location.search);
@@ -61,13 +66,13 @@ export default function Login() {
   return (
     <AuthLayout>
       <span className="eyebrow">TU ESPACIO DE CUIDADO</span>
-      <h2 className="auth-title">Qué bueno verte.</h2>
+      <h1 className="auth-title">Qué bueno verte.</h1>
       <p className="auth-subtitle">
         Ingresá a tu cuenta para seguir conectando.
       </p>
       {!error && <AvisoMotivo motivo={motivo} />}
       {error && (
-        <div className="notice notice-error" role="alert">
+        <div ref={avisoError} tabIndex={-1} id="login-error" className="notice notice-error" role="alert">
           {error}
         </div>
       )}
@@ -83,6 +88,8 @@ export default function Login() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
+              aria-invalid={Boolean(error)}
+              aria-describedby={error ? 'login-error' : undefined}
             />
           </span>
         </label>
@@ -97,6 +104,8 @@ export default function Login() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
+              aria-invalid={Boolean(error)}
+              aria-describedby={error ? 'login-error' : undefined}
             />
             <button
               type="button"
@@ -111,7 +120,7 @@ export default function Login() {
         </label>
         <button
           className="button button-primary button-full"
-          disabled={loading}
+          aria-disabled={loading}
         >
           {loading ? 'Ingresando…' : 'Iniciar sesión'}
           {!loading && <Icon name="arrow" size={18} />}

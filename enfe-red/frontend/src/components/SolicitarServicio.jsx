@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { requestApi as api, enlaceWhatsapp } from '../api';
 import { DIAS_SEMANA, diaDeLaSemana, fechaLegible, fechaMaximaISO, hoyISO } from '../fechas';
 import { crearSolicitud, obtenerProfesional, obtenerServicios, errorSolicitud } from '../services/solicitudes';
@@ -70,6 +70,7 @@ export default function SolicitarServicio() {
   const [cargando, setCargando] = useState(true);
   const [enviando, setEnviando] = useState(false);
   const [creada, setCreada] = useState(false);
+  const navigate = useNavigate();
   // 404 del perfil: el profesional ya no está en la cartilla (no disponible, sin verificar o suspendido).
   const [noDisponible, setNoDisponible] = useState(false);
   const [datos, setDatos] = useState({ idServicio: '', fecha: '', hora: '', direccionAtencion: '' });
@@ -168,6 +169,12 @@ export default function SolicitarServicio() {
         return;
       }
       setDatos(actual => ({ ...actual, idSolicitud }));
+      // Directo al comprobante: el formulario apagado con un aviso al final no deja claro que ya terminó.
+      // replace: volver atrás no debe llevar al formulario ya enviado.
+      navigate(`/solicitudes/${idSolicitud}`, {
+        replace: true,
+        state: { recienEnviada: true, profesional: [perfil?.nombre, perfil?.apellido].filter(Boolean).join(' ') },
+      });
     } catch (err) { setError(errorSolicitud(err)); }
     finally { ocupado.current = false; setEnviando(false); }
   }

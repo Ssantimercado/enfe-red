@@ -145,7 +145,7 @@
 .eyebrow {
   display: block;
   color: var(--teal);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
   font-weight: 750;
   letter-spacing: 1.7px;
@@ -305,7 +305,8 @@
 }
 .input-icon:focus-within {
   border-color: var(--blue);
-  box-shadow: 0 0 0 3px #167bb519;
+  outline: 3px solid #167bb5;
+  outline-offset: 2px;
 }
 .input-icon .icon-button {
   margin-right: -8px;
@@ -363,13 +364,13 @@
   margin: auto 0;
   padding: 64px 0 24px;
 }
-.auth-story h1 {
+.auth-story-title {
   margin-top: 16px;
   font-size: clamp(34px, 3.7vw, 52px);
   font-weight: 650;
   line-height: 1.17;
 }
-.auth-story h1 em {
+.auth-story-title em {
   font-style: normal;
   color: var(--blue);
 }
@@ -381,7 +382,7 @@
 }
 .auth-story-footer {
   color: #566b78;
-  font-size: 13px;
+  font-size: 14px;
 }
 .auth-main {
   display: flex;
@@ -439,6 +440,10 @@
   color: var(--muted);
   font-size: 14px;
   margin-top: 36px;
+}
+.auth-footnote a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 .auth-mobile-brand {
   display: none;
@@ -669,7 +674,7 @@
   font-weight: 650;
 }
 .hero-callout div > span {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--muted);
   margin-top: 4px;
 }
@@ -2544,6 +2549,15 @@ button.notification-item:hover {
   .logout-button {
     padding: 8px 11px;
   }
+  /* El acceso a solicitudes queda solo con el ícono (y su aria-label): con texto la página se deslizaba al costado. */
+  .nurse-requests-link {
+    min-width: 44px;
+    padding: 8px;
+    justify-content: center;
+  }
+  .nurse-requests-label {
+    display: none;
+  }
   .page-container {
     padding: 25px 16px;
   }
@@ -3018,3 +3032,21 @@ button.notification-item:hover {
 .admin-service-facts dd { margin: 2px 0 0; color: var(--ink); font-size: 16px; font-weight: 650; }
 .admin-service-form { display: grid; gap: 14px; margin-top: 12px; }
 .admin-service-form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+
+/* Área táctil de 44 px en enlaces de texto sueltos, sin cambiar cómo se ven. */
+/* :not(.brand): el logo del pie también es un enlace y necesita seguir siendo inline-flex. */
+.auth-footnote a,
+.auth-switch a,
+.site-footer a:not(.brand),
+.card-identity h3 a {
+  display: inline-block;
+  padding: 12px 2px;
+  margin: -12px -2px;
+}
+.solicitud-whatsapp {
+  margin-top: 8px;
+  min-height: 44px;
+}
+.solicitud-enviada {
+  margin-bottom: 18px;
+}

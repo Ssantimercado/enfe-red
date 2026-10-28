@@ -70,7 +70,7 @@ export default function RecuperarPassword() {
   return (
     <AuthLayout>
       <span className="eyebrow">RECUPERÁ TU ACCESO</span>
-      <h2 className="auth-title">Volvamos a conectar.</h2>
+      <h1 className="auth-title">Volvamos a conectar.</h1>
       <p className="auth-subtitle">
         {step === 1
           ? 'Ingresá el correo de tu cuenta para solicitar un código.'

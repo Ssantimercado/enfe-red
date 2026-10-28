@@ -39,6 +39,14 @@ function mensajeError(error) {
   return errorSolicitud(error);
 }
 
+// Como en "Mis solicitudes" del paciente: primero lo que espera respuesta, después lo aceptado y al final lo cerrado.
+const ACTIVOS = ['Pendiente', 'Aceptada'];
+const SECCIONES = [
+  { id: 'solicitudes-pendientes', titulo: 'Pendientes de respuesta', estados: ['Pendiente'], vacio: 'No tenés pedidos esperando respuesta.' },
+  { id: 'solicitudes-aceptadas', titulo: 'Turnos aceptados', estados: ['Aceptada'], vacio: 'No tenés turnos aceptados por ahora.' },
+  { id: 'solicitudes-anteriores', titulo: 'Anteriores' },
+];
+
 // Las pendientes primero (son las que esperan respuesta); el resto conserva el orden por fecha.
 function ordenar(items) {
   return [...items].sort((a, b) => (b.estado === 'Pendiente') - (a.estado === 'Pendiente'));
@@ -173,6 +181,141 @@ export default function SolicitudesEnfermero() {
 
   const nombrePaciente = (solicitud) => [solicitud?.paciente?.nombre, solicitud?.paciente?.apellido].filter(Boolean).join(' ');
 
+  const tarjeta = (solicitud) => (
+    <article className="content-panel solicitud-card" key={solicitud.idSolicitud}>
+      <div className="solicitud-card-heading">
+        <div>
+          <span className="eyebrow">SOLICITUD #{solicitud.idSolicitud}</span>
+          <h3>{solicitud.servicio?.tipoServicio || 'Servicio solicitado'}</h3>
+        </div>
+        <span className={`solicitud-status ${solicitud.estado.toLowerCase()}`}>
+          {solicitud.estado}
+        </span>
+      </div>
+      {solicitud.estado !== 'Pendiente' && <DetalleEstado solicitud={solicitud} enfermero />}
+      {aviso?.idSolicitud === solicitud.idSolicitud && (
+        <p
+          id={`aviso-solicitud-${solicitud.idSolicitud}`}
+          className={`notice ${aviso.exito ? 'notice-success' : 'notice-error'} solicitud-aviso`}
+          role={aviso.exito ? 'status' : 'alert'}
+          tabIndex={-1}
+        >
+          {aviso.texto}
+        </p>
+      )}
+      <dl className="solicitud-summary">
+        <dt>Paciente</dt>
+        <dd>{solicitud.paciente?.nombre} {solicitud.paciente?.apellido}</dd>
+        <dt>Teléfono</dt>
+        <dd>
+          {solicitud.paciente?.telefono || 'No informado'}
+          {enlaceWhatsapp(solicitud.paciente?.telefono) && (
+            <>
+              <br />
+              <a
+                className="button button-secondary solicitud-whatsapp"
+                href={enlaceWhatsapp(
+                  solicitud.paciente.telefono,
+                  `Hola, te escribo desde Enfered por tu solicitud de ${solicitud.servicio?.tipoServicio || 'atención'} del ${fechaLegible(solicitud.fecha, solicitud.hora)}.`,
+                )}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Escribir por WhatsApp
+                <span className="sr-only"> (se abre en otra pestaña)</span>
+              </a>
+            </>
+          )}
+        </dd>
+        <dt>Fecha y hora</dt>
+        <dd>{fechaLegible(solicitud.fecha, solicitud.hora)}</dd>
+        <dt>Dirección</dt>
+        <dd>{solicitud.direccionAtencion}</dd>
+      </dl>
+      {solicitud.estado === 'Aceptada' && (
+        !turnoFuturo(solicitud) ? (
+          <div className="solicitud-card-actions">
+            <button
+              className="button button-primary"
+              type="button"
+              disabled={guardando}
+              onClick={() => cambiarEstado(solicitud, 'finalizar')}
+            >
+              {guardando ? 'Actualizando…' : 'Marcar como realizado'}
+            </button>
+          </div>
+        ) : (
+          <>
+            <p className="solicitud-finalizar-hint">
+              Vas a poder marcarlo como realizado después del turno.
+            </p>
+            <div className="solicitud-card-actions">
+              <button
+                className="button button-secondary"
+                type="button"
+                disabled={guardando}
+                onClick={() => abrirCancelar(solicitud)}
+              >
+                Cancelar turno
+              </button>
+            </div>
+          </>
+        )
+      )}
+      {CHAT_VISIBLE.includes(solicitud.estado) && (
+        <div className="solicitud-card-actions">
+          <Link className="button button-secondary" to={`/solicitudes/${solicitud.idSolicitud}`}>
+            Ver comprobante
+          </Link>
+          <button
+            className="button button-secondary"
+            type="button"
+            aria-expanded={chatAbierto === solicitud.idSolicitud}
+            onClick={() => setChatAbierto((actual) => (
+              actual === solicitud.idSolicitud ? null : solicitud.idSolicitud
+            ))}
+          >
+            {chatAbierto === solicitud.idSolicitud ? 'Ocultar mensajes' : 'Ver mensajes'}
+          </button>
+        </div>
+      )}
+      {chatAbierto === solicitud.idSolicitud && CHAT_VISIBLE.includes(solicitud.estado) && (
+        <ChatServicio
+          key={solicitud.idSolicitud}
+          solicitud={solicitud}
+          onEstadoCambiado={(actual) => setSolicitudes((items) => items.map((item) => (
+            item.idSolicitud === actual.idSolicitud ? { ...item, estado: actual.estado } : item
+          )))}
+          contraparte={nombrePaciente(solicitud)}
+        />
+      )}
+      {solicitud.estado === 'Pendiente' && (
+        <div className="solicitud-card-actions">
+          <button
+            className="button button-primary"
+            type="button"
+            disabled={guardando}
+            onClick={() => cambiarEstado(solicitud, 'aceptar', { fecha: solicitud.fecha, hora: solicitud.hora })}
+          >
+            {guardando ? 'Actualizando…' : 'Aceptar solicitud'}
+          </button>
+          <button
+            className="button button-secondary"
+            type="button"
+            disabled={guardando}
+            onClick={() => {
+              setErrorDialogo('');
+              setSeleccionada(solicitud);
+              dialog.current.showModal();
+            }}
+          >
+            Rechazar
+          </button>
+        </div>
+      )}
+    </article>
+  );
+
   return (
     <div className="page-container solicitudes-inbox">
       <header className="page-heading">
@@ -198,140 +341,22 @@ export default function SolicitudesEnfermero() {
       {cargando ? (
         <p role="status">Cargando solicitudes…</p>
       ) : solicitudes.length ? (
-        <div className="solicitudes-grid">
-          {solicitudes.map((solicitud) => (
-            <article className="content-panel solicitud-card" key={solicitud.idSolicitud}>
-              <div className="solicitud-card-heading">
-                <div>
-                  <span className="eyebrow">SOLICITUD #{solicitud.idSolicitud}</span>
-                  <h2>{solicitud.servicio?.tipoServicio || 'Servicio solicitado'}</h2>
-                </div>
-                <span className={`solicitud-status ${solicitud.estado.toLowerCase()}`}>
-                  {solicitud.estado}
-                </span>
-              </div>
-              {solicitud.estado !== 'Pendiente' && <DetalleEstado solicitud={solicitud} enfermero />}
-              {aviso?.idSolicitud === solicitud.idSolicitud && (
-                <p
-                  id={`aviso-solicitud-${solicitud.idSolicitud}`}
-                  className={`notice ${aviso.exito ? 'notice-success' : 'notice-error'} solicitud-aviso`}
-                  role={aviso.exito ? 'status' : 'alert'}
-                  tabIndex={-1}
-                >
-                  {aviso.texto}
-                </p>
-              )}
-              <dl className="solicitud-summary">
-                <dt>Paciente</dt>
-                <dd>{solicitud.paciente?.nombre} {solicitud.paciente?.apellido}</dd>
-                <dt>Teléfono</dt>
-                <dd>
-                  {solicitud.paciente?.telefono || 'No informado'}
-                  {enlaceWhatsapp(solicitud.paciente?.telefono) && (
-                    <>
-                      {' · '}
-                      <a
-                        href={enlaceWhatsapp(
-                          solicitud.paciente.telefono,
-                          `Hola, te escribo desde Enfered por tu solicitud de ${solicitud.servicio?.tipoServicio || 'atención'} del ${fechaLegible(solicitud.fecha, solicitud.hora)}.`,
-                        )}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        Escribir por WhatsApp
-                      </a>
-                    </>
-                  )}
-                </dd>
-                <dt>Fecha y hora</dt>
-                <dd>{fechaLegible(solicitud.fecha, solicitud.hora)}</dd>
-                <dt>Dirección</dt>
-                <dd>{solicitud.direccionAtencion}</dd>
-              </dl>
-              {solicitud.estado === 'Aceptada' && (
-                !turnoFuturo(solicitud) ? (
-                  <div className="solicitud-card-actions">
-                    <button
-                      className="button button-primary"
-                      type="button"
-                      disabled={guardando}
-                      onClick={() => cambiarEstado(solicitud, 'finalizar')}
-                    >
-                      {guardando ? 'Actualizando…' : 'Marcar como realizado'}
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <p className="solicitud-finalizar-hint">
-                      Vas a poder marcarlo como realizado después del turno.
-                    </p>
-                    <div className="solicitud-card-actions">
-                      <button
-                        className="button button-secondary"
-                        type="button"
-                        disabled={guardando}
-                        onClick={() => abrirCancelar(solicitud)}
-                      >
-                        Cancelar turno
-                      </button>
-                    </div>
-                  </>
-                )
-              )}
-              {CHAT_VISIBLE.includes(solicitud.estado) && (
-                <div className="solicitud-card-actions">
-                  <Link className="button button-secondary" to={`/solicitudes/${solicitud.idSolicitud}`}>
-                    Ver comprobante
-                  </Link>
-                  <button
-                    className="button button-secondary"
-                    type="button"
-                    aria-expanded={chatAbierto === solicitud.idSolicitud}
-                    onClick={() => setChatAbierto((actual) => (
-                      actual === solicitud.idSolicitud ? null : solicitud.idSolicitud
-                    ))}
-                  >
-                    {chatAbierto === solicitud.idSolicitud ? 'Ocultar mensajes' : 'Ver mensajes'}
-                  </button>
-                </div>
-              )}
-              {chatAbierto === solicitud.idSolicitud && CHAT_VISIBLE.includes(solicitud.estado) && (
-                <ChatServicio
-                  key={solicitud.idSolicitud}
-                  solicitud={solicitud}
-                  onEstadoCambiado={(actual) => setSolicitudes((items) => items.map((item) => (
-                    item.idSolicitud === actual.idSolicitud ? { ...item, estado: actual.estado } : item
-                  )))}
-                  contraparte={nombrePaciente(solicitud)}
-                />
-              )}
-              {solicitud.estado === 'Pendiente' && (
-                <div className="solicitud-card-actions">
-                  <button
-                    className="button button-primary"
-                    type="button"
-                    disabled={guardando}
-                    onClick={() => cambiarEstado(solicitud, 'aceptar', { fecha: solicitud.fecha, hora: solicitud.hora })}
-                  >
-                    {guardando ? 'Actualizando…' : 'Aceptar solicitud'}
-                  </button>
-                  <button
-                    className="button button-secondary"
-                    type="button"
-                    disabled={guardando}
-                    onClick={() => {
-                      setErrorDialogo('');
-                      setSeleccionada(solicitud);
-                      dialog.current.showModal();
-                    }}
-                  >
-                    Rechazar
-                  </button>
-                </div>
-              )}
-            </article>
-          ))}
-        </div>
+        <>
+          {/* Un solo contenedor para las tres secciones: si una solicitud cambia de sección (por ejemplo la cancelan con
+              el chat abierto) React mueve la misma tarjeta y el chat no pierde lo escrito ni el aviso. */}
+          <div className="solicitudes-grid">
+            {SECCIONES.flatMap(({ id, titulo, vacio, estados }) => {
+              const lista = solicitudes.filter((s) => (estados ? estados.includes(s.estado) : !ACTIVOS.includes(s.estado)));
+              if (!lista.length && !vacio) return [];
+              return [
+                <h2 key={`titulo-${id}`} id={id} className="solicitudes-section-title">{titulo} ({lista.length})</h2>,
+                ...(lista.length
+                  ? lista.map(tarjeta)
+                  : [<p key={`vacio-${id}`} className="solicitudes-section-empty">{vacio}</p>]),
+              ];
+            })}
+          </div>
+        </>
       ) : (
         <div className="content-panel empty-state">
           <h2>Todavía no recibiste solicitudes</h2>

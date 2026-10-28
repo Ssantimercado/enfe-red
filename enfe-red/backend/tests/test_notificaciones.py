@@ -76,7 +76,7 @@ class NotificacionesTest(unittest.TestCase):
         self.assertEqual(aviso['tipo'], 'aceptada')
         self.assertEqual(aviso['idSolicitud'], id_solicitud)
         self.assertFalse(aviso['leida'])
-        self.assertEqual(aviso['mensaje'], 'Laura Gómez aceptó tu solicitud de Curaciones del 10/01 a las 10:30.')
+        self.assertEqual(aviso['mensaje'], 'Laura Gómez aceptó tu solicitud de Curaciones del jueves 10 de enero a las 10:30.')
         self.assertTrue(aviso['fechaHora'].endswith('Z'))
         self.assertEqual(self.notificaciones(21), [])
 
@@ -92,7 +92,7 @@ class NotificacionesTest(unittest.TestCase):
         self.client.put(f'/api/solicitudes/{cancelada}/cancelar', headers=self.headers(11))
         [aviso] = self.notificaciones(21)
         self.assertEqual((aviso['tipo'], aviso['idSolicitud']), ('cancelada', cancelada))
-        self.assertEqual(aviso['mensaje'], 'Ana Pérez canceló el turno de Curaciones del 10/01 a las 10:30.')
+        self.assertEqual(aviso['mensaje'], 'Ana Pérez canceló el turno de Curaciones del jueves 10 de enero a las 10:30.')
         # Finalizar antes del turno devuelve 409 y no avisa a nadie.
         finalizada = self.solicitud(estado='Aceptada')
         self.client.put(f'/api/solicitudes/{finalizada}/finalizar', headers=self.headers(21))

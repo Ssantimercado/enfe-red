@@ -121,14 +121,25 @@ def problema_de_horario(enfermero, inicio, fin):
             f'El turno dura {texto_duracion(minutos)} y tiene que terminar dentro de ese horario.')
 
 
+DIAS_SEMANA = ('lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo')
+MESES = ('enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre',
+         'noviembre', 'diciembre')
+
+
+def fecha_legible(fecha, con_anio=False):
+    """'lunes 2 de noviembre', igual que la app (sin depender del idioma del servidor)."""
+    texto = f'{DIAS_SEMANA[fecha.weekday()]} {fecha.day} de {MESES[fecha.month - 1]}'
+    return f'{texto} de {fecha.year}' if con_anio else texto
+
+
 def _texto_turno(solicitud):
     servicio = solicitud.servicio.tipoServicio if solicitud.servicio else 'servicio'
-    return f'{servicio} del {solicitud.fecha:%d/%m} a las {solicitud.hora:%H:%M}'
+    return f'{servicio} del {fecha_legible(solicitud.fecha)} a las {solicitud.hora:%H:%M}'
 
 
 def fecha_para_correo(solicitud):
     # Los correos no llevan el tipo de servicio ni otros datos de salud: solo el día y la hora.
-    return f'el {solicitud.fecha:%d/%m/%Y} a las {solicitud.hora:%H:%M}'
+    return f'el {fecha_legible(solicitud.fecha, con_anio=True)} a las {solicitud.hora:%H:%M}'
 
 
 def vencer_cargadas(solicitudes, ahora):

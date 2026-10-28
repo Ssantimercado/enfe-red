@@ -359,11 +359,11 @@ class NotificacionesTurnosTest(BaseTurnosTest):
         id_solicitud = respuesta.json['solicitud']['idSolicitud']
         [aviso] = self.avisos(21, 'nueva')
         self.assertEqual(aviso.idSolicitud, id_solicitud)
-        self.assertEqual(aviso.mensaje, 'Ana Pérez te pidió un turno de Curaciones del 11/01 a las 14:30. '
+        self.assertEqual(aviso.mensaje, 'Ana Pérez te pidió un turno de Curaciones del viernes 11 de enero a las 14:30. '
                                         'Tocá para aceptarlo o rechazarlo.')
         usuario, asunto, texto = self.enviar_aviso.call_args.args
         self.assertEqual(usuario.id, 21)
-        self.assertIn('el 11/01/2030 a las 14:30', texto)
+        self.assertIn('el viernes 11 de enero de 2030 a las 14:30', texto)
         for privado in ('Curaciones', 'Diabetes', 'San Martín', 'Ana'):
             self.assertNotIn(privado, asunto + texto)
 
@@ -527,3 +527,10 @@ class MigracionTurnosTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class FechaLegibleTest(unittest.TestCase):
+    def test_los_avisos_dicen_la_fecha_en_palabras_como_la_app(self):
+        from services.turnos import fecha_legible
+        self.assertEqual(fecha_legible(date(2026, 11, 2)), 'lunes 2 de noviembre')
+        self.assertEqual(fecha_legible(date(2026, 12, 27), con_anio=True), 'domingo 27 de diciembre de 2026')

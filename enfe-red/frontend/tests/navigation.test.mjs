@@ -231,6 +231,21 @@ test('el registro exige aceptar términos y privacidad y envía la aceptación',
   assert.equal(JSON.parse(registro.options.body).aceptaTerminos, true);
 });
 
+test('el registro deja el error escrito junto al campo y le lleva el foco', async () => {
+  await mount('/registro');
+  await type(document.querySelector('input[name="nombre"]'), 'Ana Pérez');
+  await type(document.querySelector('input[name="email"]'), 'ana-sin-arroba');
+  await submitForm();
+  const correo = document.querySelector('input[name="email"]');
+  const error = document.getElementById('registro-error');
+  assert.match(error.textContent, /correo válido/);
+  assert.equal(error.closest('label'), correo.closest('label'));
+  assert.equal(correo.getAttribute('aria-invalid'), 'true');
+  assert.match(correo.getAttribute('aria-describedby'), /registro-error/);
+  assert.equal(document.activeElement, correo);
+  assert.equal(requests.some((r) => r.url.endsWith('/registro')), false);
+});
+
 test('las páginas legales son públicas e incluyen las leyendas de la Ley 25.326', async () => {
   await mount('/privacidad');
   assert.match(document.querySelector('h1').textContent, /Política de privacidad/);
@@ -1148,11 +1163,16 @@ test('la solicitud muestra confirmación verde y permite abrir el comprobante', 
   assert.deepEqual(JSON.parse(posts[0].data), {
     idServicio: 301, idEnfermero: 201, fecha: '2099-12-10', hora: '14:30', direccionAtencion: 'San Martín 123',
   });
-  assert.equal(window.location.pathname, '/perfil/21/solicitar');
-  assert.match(document.querySelector('.solicitud-success strong').textContent, /¡Solicitud creada!/);
-  assert.match(document.querySelector('.solicitud-success').getAttribute('class'), /notice-success/);
-  await click(link('Ver comprobante'));
+  // Al enviar va directo al comprobante y confirma arriba de todo que el pedido salió.
   assert.equal(window.location.pathname, '/solicitudes/15');
+  const enviada = document.querySelector('.solicitud-enviada');
+  assert.match(enviada.textContent, /¡Listo! Tu pedido le llegó a Laura/);
+  assert.match(enviada.getAttribute('class'), /notice-success/);
+  // Recibe el foco, así que no lleva role="status": algunos lectores lo leerían dos veces.
+  assert.equal(enviada.getAttribute('role'), null);
+  // El foco va al aviso, y el aviso se borra del historial: al recargar o volver con Atrás no reaparece.
+  assert.equal(document.activeElement, enviada);
+  assert.equal(window.history.state?.usr ?? null, null);
   assert.match(document.body.textContent, /Comprobante de solicitud/);
   assert.match(document.body.textContent, /Laura Gómez/);
   assert.match(document.body.textContent, /Pendiente/);
@@ -1621,6 +1641,14 @@ test('el enfermero abre los mensajes de una solicitud aceptada y el polling se d
 });
 
 // SCRUM-59.3 y HU11: marcar como realizado habilita la calificación.
+
+// Sección de una tarjeta de la bandeja del enfermero: el título h2 que tiene antes en el mismo contenedor.
+function seccionDe(card) {
+  let el = card.previousElementSibling;
+  while (el && el.tagName !== 'H2') el = el.previousElementSibling;
+  return el?.textContent;
+}
+
 test('el enfermero marca como realizado un turno pasado y no uno futuro', async () => {
   session('enfermero');
   const pasada = { ...comprobante, idSolicitud: 21, estado: 'Aceptada', fecha: '2020-05-04', paciente: { nombre: 'Ana' } };
@@ -1640,11 +1668,18 @@ test('el enfermero marca como realizado un turno pasado y no uno futuro', async 
     await mount('/solicitudes-enfermero');
     const botones = [...document.querySelectorAll('button')].filter(b => b.textContent === 'Marcar como realizado');
     assert.equal(botones.length, 1);
+    const tarjetaAntes = botones[0].closest('.solicitud-card');
     assert.match(document.body.textContent, /después del turno/);
     await click(botones[0]);
     assert.ok(solicitudRequests.some(r => r.url === '/solicitudes/21/finalizar' && r.method === 'put'));
     assert.match(document.body.textContent, /Servicio marcado como realizado/);
-    assert.match(document.querySelectorAll('.solicitud-card')[0].textContent, /Realizada/);
+    // La realizada pasa a "Anteriores"; en "Turnos aceptados" queda solo la futura.
+    const realizada = [...document.querySelectorAll('.solicitud-card')].find((card) => /SOLICITUD #21/.test(card.textContent));
+    assert.match(realizada.textContent, /Realizada/);
+    assert.equal(seccionDe(realizada), 'Anteriores (1)');
+    // Es la misma tarjeta (no se volvió a montar): el chat abierto no pierde lo escrito al cambiar de sección.
+    assert.equal(realizada, tarjetaAntes);
+    assert.equal(document.querySelector('#solicitudes-aceptadas').textContent, 'Turnos aceptados (1)');
     assert.equal([...document.querySelectorAll('button')].some(b => b.textContent === 'Marcar como realizado'), false);
   } finally { globalThis.fetch = original; }
 });
@@ -2223,6 +2258,7 @@ test('pedir turno muestra los horarios del día, precarga la dirección y guarda
         ? { status: 409, data: { error: 'Ya tenés 5 solicitudes esperando respuesta. Esperá a que te respondan o cancelá alguna antes de pedir otra.' } }
         : { status: 201, data: { mensaje: 'Solicitud creada', solicitud: comprobante } };
     }
+    if (config.url === `/solicitudes/${comprobante.idSolicitud}`) return { data: comprobante };
     throw new Error(`Petición inesperada: ${config.method} ${config.url}`);
   };
   const original = globalThis.fetch;
@@ -2278,7 +2314,8 @@ test('pedir turno muestra los horarios del día, precarga la dirección y guarda
     assert.deepEqual(JSON.parse(post.data), {
       idServicio: 301, idEnfermero: 201, fecha: '2099-12-10', hora: '09:00', direccionAtencion: 'Belgrano 50, Godoy Cruz',
     });
-    assert.match(document.querySelector('.solicitud-success').textContent, /¡Solicitud creada!/);
+    assert.match(window.location.pathname, /^\/solicitudes\/\d+$/);
+    assert.match(document.querySelector('.solicitud-enviada').textContent, /¡Listo!/);
   } finally { globalThis.fetch = original; }
 });
 
@@ -3304,4 +3341,34 @@ test('al pedir un turno solo se ofrecen los servicios que hace ese profesional',
     await act(async () => root.unmount());
     root = null;
   }
+});
+
+test('la bandeja del enfermero separa pendientes, turnos aceptados y anteriores', async () => {
+  session('enfermero');
+  const base = { ...comprobante, fecha: '2099-05-04' };
+  solicitudHandler = async (config) => {
+    if (config.url === '/solicitudes/enfermero/201') return { data: [
+      { ...base, idSolicitud: 31, estado: 'Rechazada', paciente: { nombre: 'Uno' } },
+      { ...base, idSolicitud: 32, estado: 'Aceptada', paciente: { nombre: 'Dos', telefono: '2615551234' } },
+      { ...base, idSolicitud: 33, estado: 'Pendiente', paciente: { nombre: 'Tres' } },
+    ] };
+    throw new Error(`Petición inesperada: ${config.method} ${config.url}`);
+  };
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url, options = {}) => (String(url).endsWith('/perfil/enfermero')
+    ? response({ ...profile, idEnfermero: 201 }) : original(url, options));
+  try {
+    await mount('/solicitudes-enfermero');
+    const titulos = [...document.querySelectorAll('.solicitudes-section-title')].map((h) => h.textContent);
+    assert.deepEqual(titulos, ['Pendientes de respuesta (1)', 'Turnos aceptados (1)', 'Anteriores (1)']);
+    const tarjetas = [...document.querySelectorAll('.solicitud-card')];
+    const de = (id) => tarjetas.find((card) => card.textContent.includes(`SOLICITUD #${id}`));
+    assert.equal(seccionDe(de(33)), 'Pendientes de respuesta (1)');
+    assert.equal(seccionDe(de(32)), 'Turnos aceptados (1)');
+    assert.equal(seccionDe(de(31)), 'Anteriores (1)');
+    // Los títulos de las tarjetas quedan un nivel abajo de los de sección.
+    assert.ok(de(33).querySelector('h3'));
+    // WhatsApp del paciente como botón, con área táctil completa.
+    assert.match(de(32).querySelector('a[href*="wa.me"]').className, /button/);
+  } finally { globalThis.fetch = original; }
 });

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { guardarSesion, requestApi as api } from '../api';
 import { MIN_PASSWORD } from './reglasPassword';
@@ -19,22 +19,51 @@ export default function Register() {
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState('');
+  // Campo con error de validación: el mensaje queda escrito debajo de ese campo (el globo del navegador desaparece solo).
+  const [campoError, setCampoError] = useState(null);
+  const formulario = useRef(null);
+  const avisoError = useRef(null);
+  useEffect(() => {
+    if (campoError) {
+      formulario.current?.elements[campoError]?.focus();
+      // El mensaje está debajo del campo: se trae a la vista para que no quede tapado (por ejemplo, por el aviso de cookies).
+      document.getElementById('registro-error')?.scrollIntoView?.({ block: 'nearest' });
+    }
+    else if (error) avisoError.current?.focus();
+  }, [campoError, error]);
   const [visible, setVisible] = useState(false);
   const navigate = useNavigate();
   const change = (e) =>
     setForm((current) => ({ ...current, [e.target.name]: e.target.value }));
+  function validar() {
+    if (!form.nombre.trim()) return ['nombre', 'Escribí tu nombre y apellido.'];
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim()))
+      return ['email', 'Escribí un correo válido, por ejemplo nombre@gmail.com.'];
+    if (form.password.length < MIN_PASSWORD)
+      return ['password', `La contraseña tiene que tener al menos ${MIN_PASSWORD} caracteres.`];
+    if (!acepta)
+      return ['aceptaTerminos', 'Para crear la cuenta tenés que aceptar los Términos y condiciones y la Política de privacidad.'];
+    return null;
+  }
+  // Error junto al campo: se anuncia y queda escrito hasta que se corrija.
+  const errorDe = (campo) => campoError === campo && (
+    <span id="registro-error" className="field-error" role="alert">{error}</span>
+  );
+  const marcar = (campo, pista) => ({
+    'aria-invalid': campoError === campo,
+    'aria-describedby': [pista, campoError === campo && 'registro-error'].filter(Boolean).join(' ') || undefined,
+  });
   async function submit(e) {
     e.preventDefault();
     if (loading) return;
-    if (!acepta) {
-      setError('Para crear la cuenta tenés que aceptar los Términos y condiciones y la Política de privacidad.');
-      return;
-    }
-    if (form.password.length < MIN_PASSWORD) {
-      setError(`La contraseña tiene que tener al menos ${MIN_PASSWORD} caracteres.`);
+    const invalido = validar();
+    if (invalido) {
+      setCampoError(invalido[0]);
+      setError(invalido[1]);
       return;
     }
     setLoading(true);
+    setCampoError(null);
     setError('');
     const email = form.email.trim();
     try {
@@ -74,7 +103,7 @@ export default function Register() {
           <span className="soft-icon mint">
             <Icon name="check" size={28} />
           </span>
-          <h2 className="auth-title">Ya sos parte de la red.</h2>
+          <h1 className="auth-title">Ya sos parte de la red.</h1>
           <p className="auth-subtitle" role="status">
             Tu cuenta está creada. Iniciá sesión para completar tu perfil y
             empezar.
@@ -87,16 +116,16 @@ export default function Register() {
       ) : (
         <>
           <span className="eyebrow">UNITE A ENFERED</span>
-          <h2 className="auth-title">El primer paso es conectar.</h2>
+          <h1 className="auth-title">El primer paso es conectar.</h1>
           <p className="auth-subtitle">
             Creá tu cuenta y encontrá tu lugar en la red.
           </p>
-          {error && (
-            <div className="notice notice-error" role="alert">
+          {error && !campoError && (
+            <div ref={avisoError} tabIndex={-1} className="notice notice-error" role="alert">
               {error}
             </div>
           )}
-          <form className="form-stack" onSubmit={submit} aria-busy={loading}>
+          <form ref={formulario} className="form-stack" onSubmit={submit} aria-busy={loading} noValidate>
             <fieldset className="role-options">
               <legend>¿Cómo vas a usar Enfered?</legend>
               <div>
@@ -130,8 +159,10 @@ export default function Register() {
                 value={form.nombre}
                 onChange={change}
                 required
+                {...marcar('nombre')}
                 placeholder="Tu nombre completo"
               />
+              {errorDe('nombre')}
             </label>
             <label className="field">
               Correo electrónico
@@ -142,8 +173,10 @@ export default function Register() {
                 value={form.email}
                 onChange={change}
                 required
+                {...marcar('email')}
                 placeholder="tu@email.com"
               />
+              {errorDe('email')}
             </label>
             <label className="field">
               Contraseña
@@ -157,7 +190,7 @@ export default function Register() {
                   onChange={change}
                   required
                   minLength={MIN_PASSWORD}
-                  aria-describedby="registro-password-pista"
+                  {...marcar('password', 'registro-password-pista')}
                   placeholder="Creá tu contraseña"
                 />
                 <button
@@ -175,6 +208,7 @@ export default function Register() {
               <span id="registro-password-pista" className="filter-hint">
                 Al menos {MIN_PASSWORD} caracteres.
               </span>
+              {errorDe('password')}
             </label>
             <label className="consentimiento">
               <input
@@ -183,6 +217,7 @@ export default function Register() {
                 checked={acepta}
                 onChange={(e) => setAcepta(e.target.checked)}
                 required
+                {...marcar('aceptaTerminos')}
               />
               <span>
                 Leí y acepto los{' '}
@@ -193,9 +228,10 @@ export default function Register() {
                 Ley 25.326.
               </span>
             </label>
+            {errorDe('aceptaTerminos')}
             <button
               className="button button-primary button-full"
-              disabled={loading}
+              aria-disabled={loading}
             >
               {loading ? 'Creando tu cuenta…' : 'Crear cuenta'}
               {!loading && <Icon name="arrow" size={17} />}

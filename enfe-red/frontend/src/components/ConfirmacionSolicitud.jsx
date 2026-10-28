@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { sesionActual } from '../api';
 import { fechaLegible } from '../fechas';
 import { obtenerSolicitud, errorSolicitud } from '../services/solicitudes';
@@ -13,11 +13,25 @@ const CHAT_VISIBLE = ['Aceptada', 'Realizada', 'Cancelada'];
 
 export default function ConfirmacionSolicitud() {
   const { idSolicitud } = useParams();
+  // Al llegar recién enviada desde el formulario se confirma arriba de todo que el pedido salió. Se guarda en el
+  // estado y se borra del historial: al recargar o volver con Atrás el aviso no reaparece.
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [enviada] = useState(() => location.state?.recienEnviada ? location.state : null);
+  const avisoEnviada = useRef(null);
+  useEffect(() => {
+    if (location.state?.recienEnviada) navigate(location.pathname, { replace: true, state: null });
+  }, [location, navigate]);
   // El paciente y el enfermero asignado ven el mismo comprobante; el backend valida el acceso.
   const enfermero = sesionActual()?.rol === 'enfermero';
   const otraParte = (s) => (enfermero ? s?.paciente : s?.enfermero);
   const nombreOtraParte = (s) => [otraParte(s)?.nombre, otraParte(s)?.apellido].filter(Boolean).join(' ');
   const [solicitud, setSolicitud] = useState(null);
+  // El foco va al aviso (y no al título) para que el lector de pantalla confirme que el pedido salió.
+  const mostrarEnviada = Boolean(enviada) && solicitud?.estado === 'Pendiente';
+  useEffect(() => {
+    if (mostrarEnviada) avisoEnviada.current?.focus();
+  }, [mostrarEnviada]);
   const [error, setError] = useState('');
   const [intento, setIntento] = useState(0);
   const [calificaciones, setCalificaciones] = useState({});
@@ -44,6 +58,10 @@ export default function ConfirmacionSolicitud() {
   // AppShell ya tiene el <main>: acá va un contenedor común para no anidarlo.
   return <div className="page-container solicitud-page">
     <header className="page-heading"><h1>Comprobante de solicitud</h1></header>
+    {mostrarEnviada && <p ref={avisoEnviada} tabIndex={-1} className="notice notice-success solicitud-enviada">
+      <strong>¡Listo! Tu pedido le llegó a {enviada.profesional || 'el profesional'}.</strong> Te avisamos en la campana y en
+      Mis solicitudes cuando lo acepte.
+    </p>}
     <section className="content-panel">
     {error ? <><p role="alert" className="notice notice-error">{error}</p><button className="button button-secondary" onClick={() => setIntento(i => i + 1)}>Reintentar consulta</button></> : !solicitud ? <p role="status">Cargando comprobante…</p> : <>
       <p className="notice notice-info" role="status">Estado: <strong>{solicitud.estado}</strong></p>

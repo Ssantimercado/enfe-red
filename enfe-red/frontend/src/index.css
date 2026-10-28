@@ -16,7 +16,7 @@
   --blue: #167bb5;
   --blue-dark: #11658f;
   --blue-soft: #edf6fc;
-  --teal: #137e75;
+  --teal: #127a71;
   --mint: #e9f6f1;
   --border: #dfe8ec;
   /* Los bordes de campos necesitan 3:1 contra el blanco para que se vean como campos. */
@@ -57,7 +57,8 @@ textarea {
 button {
   cursor: pointer;
 }
-button:disabled {
+button:disabled,
+button[aria-disabled='true'] {
   cursor: not-allowed;
   opacity: 0.55;
 }

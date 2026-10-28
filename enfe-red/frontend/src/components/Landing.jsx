@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { sesionActual } from '../api';
 import Brand from './ui/Brand';
@@ -215,6 +215,10 @@ export default function Landing() {
   // Mensaje de despedida después de eliminar la cuenta desde el perfil.
   const cuentaEliminada = location.state?.cuentaEliminada;
   const [menuOpen, setMenuOpen] = useState(false);
+  // El menú está antes que el botón en el DOM: sin esto, el siguiente Tab saltearía sus enlaces.
+  useEffect(() => {
+    if (menuOpen) document.querySelector('#landing-menu a')?.focus();
+  }, [menuOpen]);
   const menuButton = useRef(null);
   const session = sesionActual();
   const patientLink = session ? '/cartilla' : '/registro?rol=paciente';
@@ -574,6 +578,7 @@ export default function Landing() {
               <figure className="lp-review" key={review.name}>
                 <div
                   className="lp-stars"
+                  role="img"
                   aria-label="5 de 5 estrellas, valoración de ejemplo"
                 >
                   {[1, 2, 3, 4, 5].map((star) => (

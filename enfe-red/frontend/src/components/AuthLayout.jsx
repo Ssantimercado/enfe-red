@@ -8,11 +8,11 @@ export default function AuthLayout({ children }) {
         <Brand to="/" />
         <div className="auth-story-content">
           <span className="eyebrow">CUIDADO QUE CONECTA</span>
-          <h1>
+          <p className="auth-story-title">
             Más cerca de quien
             <br />
             <em>te cuida.</em>
-          </h1>
+          </p>
           <p>
             Encontrá profesionales de enfermería y acompañamiento para vos y tu
             familia, en un solo lugar.

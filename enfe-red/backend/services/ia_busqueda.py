@@ -15,7 +15,8 @@ import urllib.request
 
 DIAS = ('Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo')
 MAX_TEXTO = 300
-TIMEOUT_SEGUNDOS = 12
+# Si Gemini no contesta en 5 segundos se usan las reglas: más espera se siente como que la búsqueda no anda.
+TIMEOUT_SEGUNDOS = 5
 
 # Franjas para expresiones como "a la tarde". Rangos cortos para que coincidan con más horarios cargados.
 FRANJAS = {

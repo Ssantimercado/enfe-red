@@ -14,7 +14,7 @@ from models.servicio_models import Servicio
 from models.solicitud_models import ESTADOS_ACTIVOS, MAX_MOTIVO_CANCELACION, SolicitudServicio
 from models.usuario_models import Enfermero, Paciente, Usuario
 from services.turnos import (
-    MAX_PENDIENTES_POR_PACIENTE, MESES_MAXIMOS, ahora_local, enviar_correos, fecha_maxima,
+    MAX_PENDIENTES_POR_PACIENTE, MESES_MAXIMOS, ahora_local, enviar_correos, fecha_legible, fecha_maxima,
     fecha_para_correo, inicio_y_fin, nombre_completo, problema_de_horario, vencer_cargadas,
 )
 
@@ -180,7 +180,7 @@ MENSAJE_LIMITE_PENDIENTES = (
 
 def _texto_turno(solicitud):
     servicio = solicitud.servicio.tipoServicio if solicitud.servicio else 'servicio'
-    return f'{servicio} del {solicitud.fecha:%d/%m} a las {solicitud.hora:%H:%M}'
+    return f'{servicio} del {fecha_legible(solicitud.fecha)} a las {solicitud.hora:%H:%M}'
 
 
 def _notificar_cambio_estado(solicitud, destino, rol, motivo):
