@@ -569,7 +569,7 @@ class CurrentFlowsTest(unittest.TestCase):
             self.assertEqual(self.client.post(endpoint, json=[], headers=self.headers).status_code, 400)
 
     def test_seed_preserves_existing_password(self):
-        self.assertEqual(cargar_datos_demo(), 4)
+        self.assertEqual(cargar_datos_demo(), 13)
         user = Usuario.query.filter_by(email='laura.gomez@test.com').one()
         changed = bcrypt.generate_password_hash('conservar').decode()
         user.password_hash = changed

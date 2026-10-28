@@ -398,7 +398,7 @@ class MigracionYDemoTest(unittest.TestCase):
         runner = self.app.test_cli_runner()
         resultado = runner.invoke(args=['cargar-demo'])
         self.assertEqual(resultado.exit_code, 0, resultado.output)
-        self.assertIn('4 nuevas', resultado.output)
+        self.assertIn('13 nuevas', resultado.output)
         self.assertIsNotNone(Usuario.query.filter_by(email='laura.gomez@test.com').first())
         self.assertIn('0 nuevas', runner.invoke(args=['cargar-demo']).output)
 

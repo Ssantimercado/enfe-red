@@ -50,7 +50,7 @@ def cargar_datos_demo():
 
     No pisa cuentas existentes. Devuelve cuántas cuentas creó.
     """
-    # Los 4 enfermeros de prueba con coordenadas de Mendoza
+    # Enfermeros de prueba con coordenadas de Mendoza
     datos_prueba = [
         {
             "email": "laura.gomez@test.com", "nombre": "Laura", "apellido": "Gómez",
@@ -87,6 +87,90 @@ def cargar_datos_demo():
             "disponible": False, "latitud": -33.0350, "longitud": -68.8780,
             "horarios": [],
             "servicios": ['Curaciones', 'Inyecciones']
+        },
+        # Más profesionales para mostrar la cartilla: especialidades, zonas, servicios y horarios distintos
+        # (mañana, tarde, noche y fin de semana). Lucía queda con la matrícula pendiente para mostrar la verificación.
+        {
+            "email": "valeria.rios@test.com", "nombre": "Valeria", "apellido": "Ríos",
+            "matricula": "MAT-5005", "especialidad": "Pediatría", "telefono": "2615005555",
+            "experiencia_anios": 8, "descripcion": "Atención de bebés y niños en casa: vacunas, nebulizaciones y control de fiebre.",
+            "direccion": "Lavalle 300", "ciudad": "Las Heras", "tarifa_hora": 7000.0,
+            "disponible": True, "latitud": -32.8500, "longitud": -68.8200,
+            "horarios": [("Martes", time(8, 0), time(13, 0)), ("Jueves", time(8, 0), time(13, 0)), ("Sábado", time(9, 0), time(12, 0))],
+            "servicios": ['Control de signos vitales', 'Curaciones', 'Inyecciones']
+        },
+        {
+            "email": "jorge.benitez@test.com", "nombre": "Jorge", "apellido": "Benítez",
+            "matricula": "MAT-5006", "especialidad": "Geriatría", "telefono": "2615006666",
+            "experiencia_anios": 15, "descripcion": "Acompañamiento de adultos mayores, higiene y control de la medicación diaria.",
+            "direccion": "Ozamis 1500", "ciudad": "Maipú", "tarifa_hora": 6500.0,
+            "disponible": True, "latitud": -32.9800, "longitud": -68.7900,
+            "horarios": [("Lunes", time(14, 0), time(20, 0)), ("Miércoles", time(14, 0), time(20, 0)), ("Viernes", time(14, 0), time(20, 0))],
+            "servicios": ['Acompañamiento de adultos mayores', 'Higiene y confort', 'Control de signos vitales']
+        },
+        {
+            "email": "natalia.quiroga@test.com", "nombre": "Natalia", "apellido": "Quiroga",
+            "matricula": "MAT-5007", "especialidad": "Cuidados Intensivos", "telefono": "2615007777",
+            "experiencia_anios": 12, "descripcion": "Guardias nocturnas para pacientes con alta complejidad o recién operados.",
+            "direccion": "Av. San Martín 900", "ciudad": "Mendoza Capital", "tarifa_hora": 15000.0,
+            "disponible": True, "latitud": -32.8900, "longitud": -68.8400,
+            "horarios": [("Lunes", time(20, 0), time(23, 30)), ("Martes", time(20, 0), time(23, 30)), ("Miércoles", time(20, 0), time(23, 30))],
+            "servicios": ['Cuidados Intensivos', 'Control de signos vitales', 'Curaciones']
+        },
+        {
+            "email": "diego.ferreyra@test.com", "nombre": "Diego", "apellido": "Ferreyra",
+            "matricula": "MAT-5008", "especialidad": "General", "telefono": "2615008888",
+            "experiencia_anios": 3, "descripcion": "Inyecciones y curaciones los fines de semana, cuando no hay consultorios abiertos.",
+            "direccion": "Bandera de los Andes 2200", "ciudad": "Guaymallén", "tarifa_hora": 5500.0,
+            "disponible": True, "latitud": -32.9000, "longitud": -68.7850,
+            "horarios": [("Sábado", time(8, 0), time(14, 0)), ("Domingo", time(8, 0), time(14, 0))],
+            "servicios": ['Inyecciones', 'Curaciones']
+        },
+        {
+            "email": "paula.sosa@test.com", "nombre": "Paula", "apellido": "Sosa",
+            "matricula": "MAT-5009", "especialidad": "Geriatría", "telefono": "2615009999",
+            "experiencia_anios": 9, "descripcion": "Cuidado integral de adultos mayores con movilidad reducida.",
+            "direccion": "Roque Sáenz Peña 400", "ciudad": "Luján de Cuyo", "tarifa_hora": 8000.0,
+            "disponible": True, "latitud": -33.0400, "longitud": -68.8800,
+            "horarios": [("Martes", time(9, 0), time(17, 0)), ("Jueves", time(9, 0), time(17, 0))],
+            "servicios": ['Acompañamiento de adultos mayores', 'Higiene y confort']
+        },
+        {
+            "email": "mariano.videla@test.com", "nombre": "Mariano", "apellido": "Videla",
+            "matricula": "MAT-5010", "especialidad": "General", "telefono": "2615001010",
+            "experiencia_anios": 5, "descripcion": "Inyecciones, curaciones y control de presión temprano, antes de ir a trabajar.",
+            "direccion": "Perito Moreno 700", "ciudad": "Godoy Cruz", "tarifa_hora": 6000.0,
+            "disponible": True, "latitud": -32.9300, "longitud": -68.8500,
+            "horarios": [("Lunes", time(7, 0), time(11, 0)), ("Miércoles", time(7, 0), time(11, 0)), ("Viernes", time(7, 0), time(11, 0))],
+            "servicios": ['Inyecciones', 'Control de signos vitales', 'Curaciones']
+        },
+        {
+            "email": "florencia.herrera@test.com", "nombre": "Florencia", "apellido": "Herrera",
+            "matricula": "MAT-5011", "especialidad": "Pediatría", "telefono": "2615001111",
+            "experiencia_anios": 6, "descripcion": "Enfermera pediátrica: controles, higiene y acompañamiento de chicos con discapacidad.",
+            "direccion": "Colón 250", "ciudad": "Mendoza Capital", "tarifa_hora": 9000.0,
+            "disponible": True, "latitud": -32.8950, "longitud": -68.8450,
+            "horarios": [("Miércoles", time(15, 0), time(21, 0)), ("Sábado", time(15, 0), time(21, 0))],
+            "servicios": ['Control de signos vitales', 'Higiene y confort']
+        },
+        {
+            "email": "gabriel.ortiz@test.com", "nombre": "Gabriel", "apellido": "Ortiz",
+            "matricula": "MAT-5012", "especialidad": "Cuidados Intensivos", "telefono": "2615001212",
+            "experiencia_anios": 10, "descripcion": "Cuidados de alta complejidad los fines de semana por la noche.",
+            "direccion": "San Miguel 1800", "ciudad": "Las Heras", "tarifa_hora": 12000.0,
+            "disponible": True, "latitud": -32.8450, "longitud": -68.8300,
+            "horarios": [("Viernes", time(18, 0), time(23, 30)), ("Sábado", time(18, 0), time(23, 30)), ("Domingo", time(18, 0), time(23, 30))],
+            "servicios": ['Cuidados Intensivos', 'Curaciones']
+        },
+        {
+            "email": "lucia.pereyra@test.com", "nombre": "Lucía", "apellido": "Pereyra",
+            "matricula": "MAT-5013", "especialidad": "General", "telefono": "2615001313",
+            "experiencia_anios": 1, "descripcion": "Recién recibida: inyecciones y control de signos vitales.",
+            "direccion": "Padre Vázquez 120", "ciudad": "Maipú", "tarifa_hora": 5000.0,
+            "disponible": True, "latitud": -32.9850, "longitud": -68.7950,
+            "horarios": [("Lunes", time(9, 0), time(15, 0)), ("Jueves", time(9, 0), time(15, 0))],
+            "servicios": ['Inyecciones', 'Control de signos vitales'],
+            "verificado": False
         }
     ]
 
@@ -107,7 +191,8 @@ def cargar_datos_demo():
                 telefono=item["telefono"], experiencia_anios=item["experiencia_anios"],
                 descripcion=item["descripcion"], direccion=item["direccion"],
                 ciudad=item["ciudad"], tarifa_hora=item["tarifa_hora"],
-                disponible=item["disponible"], latitud=item["latitud"], longitud=item["longitud"]
+                disponible=item["disponible"], latitud=item["latitud"], longitud=item["longitud"],
+                verificado=item.get("verificado", True)
             )
             db.session.add(nuevo_enf)
             db.session.flush()
