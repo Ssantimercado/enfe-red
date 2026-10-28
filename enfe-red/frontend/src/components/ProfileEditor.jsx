@@ -283,6 +283,7 @@ export default function ProfileEditor({ role }) {
                             <LocationPicker
                               latitude={form.latitud}
                               longitude={form.longitud}
+                              conMiUbicacion
                               helpText={
                                 nurse
                                   ? 'Marcá tu zona de atención tocando el mapa. En la cartilla se muestra un punto aproximado, no tu dirección.'

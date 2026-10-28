@@ -9,6 +9,8 @@ from models.solicitud_models import SolicitudServicio  # noqa: F401  (registra l
 TIPOS_NOTIFICACION = (
     'aceptada', 'rechazada', 'mensaje', 'cancelada',
     'nueva', 'reprogramada', 'realizada', 'vencida', 'matricula',
+    # El paciente marcó o cambió en el mapa el lugar de atención (HU16).
+    'ubicacion',
 )
 # schema_mejoras.py recrea la restricción en bases existentes con este mismo texto.
 CHECK_TIPO_NOTIFICACION = 'tipo IN (' + ', '.join(f"'{tipo}'" for tipo in TIPOS_NOTIFICACION) + ')'

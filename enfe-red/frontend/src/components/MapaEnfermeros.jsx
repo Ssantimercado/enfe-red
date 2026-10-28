@@ -410,7 +410,10 @@ export default function MapaEnfermeros({
         })}
       </MapContainer>
 
-      {markers.length < personas.length && (
+      {(mostrandoPacientes
+        // Solo cuentan los turnos en curso: los pacientes con turnos cerrados no tienen por qué estar en el mapa.
+        ? personas.some((persona) => persona.solicitudes_activas > 0 && !coordinatesOf(persona))
+        : markers.length < personas.length) && (
         <p className="mapa-nota">
           {mostrandoPacientes
             ? 'Algunos pacientes no tienen el lugar de atención marcado (pedidos anteriores al mapa) y no aparecen. Su dirección está en Solicitudes.'

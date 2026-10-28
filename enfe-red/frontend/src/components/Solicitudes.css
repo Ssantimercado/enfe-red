@@ -185,4 +185,5 @@
 /* Acciones del encabezado de una página (por ejemplo, la bandeja del enfermero). */
 .page-heading-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; }
 @media (max-width: 540px) { .page-heading-actions { justify-content: flex-start; } }
-
+/* El paciente marca o corrige el lugar de atención desde la tarjeta o el comprobante. */
+.lugar-atencion-paciente, .lugar-atencion-editor { display: grid; gap: 12px; margin-top: 14px; }

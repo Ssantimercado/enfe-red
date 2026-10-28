@@ -585,6 +585,58 @@ def cancelarSolicitudEnfermero(idSolicitud):
     )
 
 
+@solicitud_bp.route('/solicitudes/<int:idSolicitud>/ubicacion', methods=['PUT'])
+@jwt_required()
+def actualizarUbicacionAtencion(idSolicitud):
+    """HU16: el paciente marca o cambia en el mapa el lugar de atención de un turno en curso.
+
+    Sirve para los pedidos anteriores a la ubicación obligatoria y para corregir el punto.
+    """
+    usuario = _usuario_actual()
+    if not usuario:
+        return jsonify({'error': 'La sesión no corresponde a un usuario existente'}), 401
+    if usuario.rol != 'paciente':
+        return jsonify({'error': 'Solo el paciente puede marcar el lugar de atención'}), 403
+    solicitud = _consulta_con_resumen().filter_by(idSolicitud=idSolicitud).first()
+    if not solicitud:
+        return jsonify({'error': 'Solicitud no encontrada'}), 404
+    if solicitud.paciente.usuario_id != usuario.id:
+        return jsonify({'error': 'Solo podés marcar el lugar de tus propias solicitudes'}), 403
+    if solicitud.estado not in ESTADOS_ACTIVOS:
+        return jsonify({'error': 'Este turno ya se cerró, así que no hace falta marcar el lugar.'}), 409
+    datos = request.get_json(silent=True)
+    if not isinstance(datos, dict) or set(datos) != {'latitudAtencion', 'longitudAtencion'}:
+        return jsonify({'error': 'Enviá latitudAtencion y longitudAtencion'}), 400
+    latitud = _coordenada(datos['latitudAtencion'], 90)
+    longitud = _coordenada(datos['longitudAtencion'], 180)
+    if latitud is None or longitud is None:
+        return jsonify({'error': 'Marcá en el mapa dónde vas a recibir la atención'}), 400
+
+    tenia_lugar = solicitud.ubicacion_atencion() is not None
+    try:
+        # Condicional: si el turno se cerró entre la consulta y el guardado, no se guarda el punto.
+        actualizadas = SolicitudServicio.query.filter(
+            SolicitudServicio.idSolicitud == idSolicitud,
+            SolicitudServicio.estado.in_(ESTADOS_ACTIVOS),
+        ).update({'latitudAtencion': latitud, 'longitudAtencion': longitud}, synchronize_session=False)
+        if actualizadas != 1:
+            db.session.rollback()
+            return jsonify({'error': 'Este turno ya se cerró, así que no hace falta marcar el lugar.'}), 409
+        notificar(
+            solicitud.enfermero.usuario_id, 'ubicacion',
+            f'{nombre_completo(solicitud.paciente, "Tu paciente")} {"cambió" if tenia_lugar else "marcó"} en el mapa '
+            f'el lugar de atención del turno de {_texto_turno(solicitud)}. Tocá para ver cómo llegar.',
+            idSolicitud,
+        )
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.exception('No se pudo guardar el lugar de atención')
+        return jsonify({'error': 'No se pudo guardar el lugar. Intentá nuevamente.'}), 500
+    db.session.expire(solicitud)
+    return jsonify({'mensaje': 'Lugar de atención guardado', 'solicitud': solicitud.to_dict()}), 200
+
+
 @solicitud_bp.route('/solicitudes/<int:idSolicitud>/reprogramar', methods=['PUT'])
 @jwt_required()
 def reprogramarSolicitud(idSolicitud):

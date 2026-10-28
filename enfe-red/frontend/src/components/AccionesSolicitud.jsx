@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { requestApi as api, enlaceWhatsapp, sesionActual } from '../api';
 import { fechaLegible } from '../fechas';
 import CalificarSolicitud from './CalificarSolicitud';
+import LugarAtencionPaciente from './LugarAtencionPaciente';
 import ReprogramarSolicitud from './ReprogramarSolicitud';
 import { EstrellasLectura } from './SelectorEstrellas';
 import { CHAT_ABIERTO, CHAT_VISIBLE } from './ChatServicio';
@@ -74,6 +75,7 @@ export function AccionesPaciente({
           <Link className="button button-secondary" to="/cartilla">Buscar otro profesional</Link>
         )}
       </div>
+      {chatActivo && <LugarAtencionPaciente solicitud={solicitud} onActualizada={onActualizada} />}
       <ReprogramarSolicitud solicitud={solicitud} onReprogramada={onActualizada} />
     </>
   );

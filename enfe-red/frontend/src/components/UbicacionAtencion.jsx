@@ -35,7 +35,8 @@ export default function UbicacionAtencion({ ubicacion, direccion, paciente }) {
     return (
       <div className="ubicacion-atencion">
         <p className="notice notice-info">
-          Este pedido no tiene el lugar marcado en el mapa. La dirección es: <strong>{direccion}</strong>.
+          El paciente todavía no marcó el lugar en el mapa. Podés pedirle por el chat que lo marque desde Mis
+          solicitudes; cuando lo haga, te avisamos y aparece acá. La dirección es: <strong>{direccion}</strong>.
         </p>
         <a
           className="button button-secondary"

@@ -27,6 +27,8 @@ export const crearSolicitud = (datos) => api.post('/solicitudes', datos).then(r 
 export const obtenerSolicitud = (id, signal) => api.get(`/solicitudes/${id}`, { signal }).then(r => r.data);
 export const cancelarSolicitud = (id) => api.put(`/solicitudes/${id}/cancelar`).then(r => r.data);
 // El paciente cambia día u hora de un turno Pendiente o Aceptado (vuelve a quedar Pendiente).
+// HU16: el paciente marca o cambia el lugar de atención de un turno en curso.
+export const guardarUbicacionAtencion = (id, latitudAtencion, longitudAtencion) => api.put(`/solicitudes/${id}/ubicacion`, { latitudAtencion, longitudAtencion }).then(r => r.data);
 export const reprogramarSolicitud = (id, { fecha, hora }) => api.put(`/solicitudes/${id}/reprogramar`, { fecha, hora }).then(r => r.data);
 // El enfermero cancela un turno ya aceptado; el motivo le llega al paciente.
 export const cancelarTurnoEnfermero = (id, motivo) => api.put(`/solicitudes/${id}/cancelar-enfermero`, { motivo }).then(r => r.data);

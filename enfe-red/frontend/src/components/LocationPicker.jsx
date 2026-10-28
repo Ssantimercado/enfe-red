@@ -42,6 +42,8 @@ export default function LocationPicker({
     ubicar(([lat, lng], precision) => {
       if (pedido.current !== numero) return;
       onChange(lat, lng);
+      // Se acerca hasta la calle para que la persona confirme que el punto es donde está.
+      map.current?.setView([lat, lng], 17);
       setAviso(precision > 100
         ? `La ubicación del navegador es aproximada (unos ${Math.round(precision)} m). Revisá que el punto esté donde te atienden; si no, tocá el mapa.`
         : '');

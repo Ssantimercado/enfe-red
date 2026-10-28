@@ -3429,7 +3429,7 @@ test('el enfermero ve el lugar de atención del pedido y lo abre en Google Maps'
     await click(verUbicacion(42));
     for (let i = 0; i < 100 && !de(42).querySelector('.ubicacion-atencion'); i += 1) await esperar(10);
     const sinPunto = de(42).querySelector('.ubicacion-atencion');
-    assert.match(sinPunto.textContent, /no tiene el lugar marcado en el mapa/);
+    assert.match(sinPunto.textContent, /El paciente todavía no marcó el lugar en el mapa. Podés pedirle por el chat/);
     assert.match(sinPunto.querySelector('a').href, /maps\/search\/\?api=1&query=Belgrano%2050%2C%20Godoy%20Cruz/);
   } finally { globalThis.fetch = original; }
 });
@@ -3524,4 +3524,40 @@ test('el enfermero ve a sus pacientes en el mapa con el recorrido, la distancia 
     globalThis.fetch = original;
     delete globalThis.navigator.geolocation;
   }
+});
+
+test('el paciente marca el lugar de un pedido que no lo tenía y queda guardado', async () => {
+  session('paciente');
+  let guardado = null;
+  const sinPunto = { ...comprobante, idSolicitud: 51, estado: 'Aceptada', ubicacionAtencion: null };
+  solicitudHandler = async (config) => {
+    if (config.url === '/solicitudes/paciente/101') return { data: [sinPunto] };
+    if (config.url === '/solicitudes/51/ubicacion' && config.method === 'put') {
+      guardado = JSON.parse(config.data);
+      return { data: { mensaje: 'Lugar de atención guardado', solicitud: { ...sinPunto, ubicacionAtencion: { latitud: guardado.latitudAtencion, longitud: guardado.longitudAtencion } } } };
+    }
+    throw new Error(`Petición inesperada: ${config.method} ${config.url}`);
+  };
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url, options = {}) => (String(url).endsWith('/perfil/paciente')
+    ? response({ idPaciente: 101, nombre: 'Ana' }) : original(url, options));
+  try {
+    await mount('/mis-solicitudes');
+    const tarjeta = document.querySelector('.solicitud-card');
+    assert.match(tarjeta.textContent, /Este pedido no tiene el lugar marcado en el mapa/);
+    await click(button('Marcar el lugar en el mapa'));
+    // Sin tocar el mapa no se guarda.
+    for (let i = 0; i < 100 && !tarjeta.querySelector('.location-picker button'); i += 1) await esperar(10);
+    await click(button('Guardar lugar'));
+    assert.match(tarjeta.querySelector('[role="alert"]').textContent, /Tocá el mapa o usá tu ubicación actual/);
+    assert.equal(guardado, null);
+    // Ofrece la ubicación actual y también elegir el centro.
+    assert.ok([...tarjeta.querySelectorAll('button')].some((b) => b.textContent === 'Usar mi ubicación actual'));
+    await click(button('Elegir el centro del mapa'));
+    await click(button('Guardar lugar'));
+    assert.deepEqual(guardado, LUGAR_CENTRO);
+    assert.match(tarjeta.textContent, /el profesional ya puede ver el lugar en el mapa/);
+    assert.doesNotMatch(tarjeta.textContent, /Este pedido no tiene el lugar marcado/);
+    assert.ok([...tarjeta.querySelectorAll('button')].some((b) => b.textContent === 'Cambiar el lugar de atención'));
+  } finally { globalThis.fetch = original; }
 });

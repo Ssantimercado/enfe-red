@@ -16,6 +16,7 @@ const TIPOS = {
   realizada: 'Atención realizada',
   vencida: 'Venció sin respuesta',
   matricula: 'Tu matrícula',
+  ubicacion: 'Lugar de atención',
 };
 
 function fechaLegible(valor) {

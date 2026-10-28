@@ -409,6 +409,39 @@ class SolicitudesTest(unittest.TestCase):
         self.assertEqual(respuesta.status_code, 400)
         self.assertEqual(SolicitudServicio.query.count(), 0)
 
+    def test_el_paciente_marca_el_lugar_de_un_pedido_viejo_y_el_enfermero_lo_ve(self):
+        from models.notificacion_models import Notificacion
+        # Pedido anterior a la ubicación obligatoria: sin punto.
+        id_solicitud = self.guardar_solicitud()
+        ruta = f'/api/solicitudes/{id_solicitud}'
+        self.assertIsNone(self.client.get(ruta, headers=self.headers(21)).json['ubicacionAtencion'])
+        punto = {'latitudAtencion': -32.91, 'longitudAtencion': -68.83}
+        respuesta = self.client.put(ruta + '/ubicacion', headers=self.headers(11), json=punto)
+        self.assertEqual(respuesta.status_code, 200, respuesta.json)
+        self.assertEqual(respuesta.json['solicitud']['ubicacionAtencion'], {'latitud': -32.91, 'longitud': -68.83})
+        self.assertEqual(self.client.get(ruta, headers=self.headers(21)).json['ubicacionAtencion'],
+                         {'latitud': -32.91, 'longitud': -68.83})
+        aviso = Notificacion.query.filter_by(tipo='ubicacion').one()
+        self.assertIn('marcó en el mapa el lugar de atención', aviso.mensaje)
+        # Cambiarlo avisa que cambió.
+        self.client.put(ruta + '/ubicacion', headers=self.headers(11), json={**punto, 'latitudAtencion': -32.92})
+        self.assertIn('cambió en el mapa', Notificacion.query.filter_by(tipo='ubicacion').order_by(
+            Notificacion.idNotificacion.desc()).first().mensaje)
+
+    def test_solo_el_paciente_del_turno_en_curso_marca_el_lugar(self):
+        punto = {'latitudAtencion': -32.91, 'longitudAtencion': -68.83}
+        id_solicitud = self.guardar_solicitud()
+        ruta = f'/api/solicitudes/{id_solicitud}/ubicacion'
+        self.assertEqual(self.client.put(ruta, headers=self.headers(21), json=punto).status_code, 403)
+        self.assertEqual(self.client.put(ruta, headers=self.headers(12), json=punto).status_code, 403)
+        for datos in ({}, {'latitudAtencion': -32.91}, {**punto, 'otro': 1}, {**punto, 'latitudAtencion': 95}):
+            self.assertEqual(self.client.put(ruta, headers=self.headers(11), json=datos).status_code, 400)
+        cerrada = self.guardar_solicitud(estado='Realizada', hora=16)
+        self.assertEqual(self.client.put(f'/api/solicitudes/{cerrada}/ubicacion', headers=self.headers(11),
+                                         json=punto).status_code, 409)
+        self.assertEqual(self.client.put('/api/solicitudes/999/ubicacion', headers=self.headers(11),
+                                         json=punto).status_code, 404)
+
     def test_el_enfermero_ve_el_punto_solo_mientras_el_turno_sigue(self):
         id_solicitud = self.crear().json['solicitud']['idSolicitud']
         ruta = f'/api/solicitudes/{id_solicitud}'
