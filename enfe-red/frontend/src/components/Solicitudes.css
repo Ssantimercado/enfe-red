@@ -187,3 +187,11 @@
 @media (max-width: 540px) { .page-heading-actions { justify-content: flex-start; } }
 /* El paciente marca o corrige el lugar de atención desde la tarjeta o el comprobante. */
 .lugar-atencion-paciente, .lugar-atencion-editor { display: grid; gap: 12px; margin-top: 14px; }
+/* Pedir turno: dónde se atiende (dirección del perfil, ubicación actual u otra). */
+.solicitud-lugar-opciones { display: grid; gap: 10px; margin-bottom: 14px; }
+.solicitud-lugar-opcion { display: flex; align-items: flex-start; gap: 12px; min-height: 44px; padding: 12px 14px;
+  border: 1px solid var(--border); border-radius: 10px; font-weight: 600; cursor: pointer; }
+.solicitud-lugar-opcion input { flex-shrink: 0; width: 22px; height: 22px; margin: 1px 0 0; accent-color: var(--blue); }
+.solicitud-lugar-opcion small { display: block; margin-top: 2px; color: var(--muted); font-size: 14px; font-weight: 400; }
+.solicitud-lugar-opcion:has(input:checked) { border-color: var(--blue); background: var(--blue-soft); }
+.solicitud-ubicacion > .field { margin-bottom: 14px; }

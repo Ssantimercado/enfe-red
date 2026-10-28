@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { requestApi as api, enlaceWhatsapp } from '../api';
 import { DIAS_SEMANA, diaDeLaSemana, fechaLegible, fechaMaximaISO, hoyISO } from '../fechas';
 import { crearSolicitud, obtenerProfesional, obtenerServicios, errorSolicitud } from '../services/solicitudes';
+import { direccionDe, useBuscarDireccion, useMiUbicacion } from './useUbicacion';
 import './Solicitudes.css';
 
 const LocationPicker = lazy(() => import('./LocationPicker'));
@@ -79,6 +80,17 @@ export default function SolicitarServicio() {
   const [telefono, setTelefono] = useState('');
   // Lugar exacto de la atención (obligatorio): el enfermero lo usa para llegar.
   const [punto, setPunto] = useState(null);
+  // Dónde se atiende: 'perfil' (dirección y punto del perfil), 'actual' (ubicación del celular) u 'otra'.
+  const [modo, setModo] = useState('otra');
+  const modoActual = useRef(modo);
+  useEffect(() => {
+    modoActual.current = modo;
+  }, [modo]);
+  // La dirección escrita se busca en el mapa solo cuando la persona la cambió.
+  const [direccionEditada, setDireccionEditada] = useState(false);
+  const [avisoActual, setAvisoActual] = useState('');
+  const direccionInput = useRef(null);
+  const { estado: estadoUbicacion, error: errorUbicacion, ubicar } = useMiUbicacion();
   useEffect(() => {
     const controller = new AbortController();
     setCargando(true);
@@ -104,6 +116,8 @@ export default function SolicitarServicio() {
       if (propio?.latitud != null && propio?.longitud != null) {
         setPunto(actual => actual || { lat: propio.latitud, lng: propio.longitud, delPerfil: true });
       }
+      // Con dirección o punto en el perfil, se propone ese lugar; si no, se pide escribir otro.
+      if (direccion || (propio?.latitud != null && propio?.longitud != null)) setModo('perfil');
     }).catch(err => {
       if (controller.signal.aborted) return;
       if (err.response?.status === 404) setNoDisponible(true);
@@ -132,6 +146,53 @@ export default function SolicitarServicio() {
     .filter(([, delDia]) => delDia.length)
     .map(([dia, delDia]) => `${dia} ${rangos(delDia)}`);
   const pideTelefono = paciente !== null && !telefonoValido(paciente.telefono);
+  const perfilDireccion = direccionDelPerfil(paciente?.direccion);
+  const perfilPunto = paciente?.latitud != null && paciente?.longitud != null;
+  const tienePerfil = Boolean(perfilDireccion || perfilPunto);
+  // Perfil sin punto: se ubica su dirección. Otra dirección: se ubica lo que escribe al terminar.
+  const direccionEnMapa = useBuscarDireccion(
+    modo === 'perfil' ? perfilDireccion : datos.direccionAtencion,
+    !bloqueado && ((modo === 'perfil' && !perfilPunto && Boolean(perfilDireccion)) || (modo === 'otra' && direccionEditada)),
+    ([lat, lng]) => setPunto({ lat, lng, porDireccion: true }),
+  );
+  function elegirModo(nuevo) {
+    // Al instante (no en el efecto): la ubicación puede llegar antes del próximo render.
+    modoActual.current = nuevo;
+    setModo(nuevo);
+    setAvisoActual('');
+    setDireccionEditada(false);
+    if (nuevo === 'perfil') {
+      setDatos(actual => ({ ...actual, direccionAtencion: perfilDireccion }));
+      setPunto(perfilPunto ? { lat: paciente.latitud, lng: paciente.longitud, delPerfil: true } : null);
+    } else if (nuevo === 'actual') {
+      setPunto(null);
+      ubicar(async ([lat, lng]) => {
+        if (modoActual.current !== 'actual') return;
+        setPunto({ lat, lng, actual: true });
+        // Se completa la dirección escrita con la del punto; la persona la revisa y agrega piso o departamento.
+        try {
+          const { direccion } = await direccionDe([lat, lng]);
+          if (modoActual.current !== 'actual' || !direccion) return;
+          setDatos(actual => ({ ...actual, direccionAtencion: direccion.slice(0, 200) }));
+          setAvisoActual('Marcamos tu ubicación actual y completamos la dirección. Revisala y agregá piso o departamento si hace falta.');
+        } catch {
+          if (modoActual.current === 'actual') setAvisoActual('Marcamos tu ubicación actual. Escribí la dirección del lugar (calle y número).');
+        }
+      });
+    } else {
+      setDatos(actual => ({ ...actual, direccionAtencion: '' }));
+      setPunto(null);
+      window.requestAnimationFrame(() => direccionInput.current?.focus());
+    }
+  }
+  const textoLugar = modo === 'actual' && estadoUbicacion === 'loading' ? 'Buscando dónde estás…'
+    : modo === 'actual' && errorUbicacion && !punto ? errorUbicacion
+      : modo === 'actual' && avisoActual ? avisoActual
+        : punto && !punto.delPerfil && !punto.porDireccion && !punto.actual ? 'Listo, el lugar quedó marcado.'
+          : direccionEnMapa.mensaje
+            || (punto?.delPerfil ? 'Marcamos el punto de tu perfil. Si te atienden en otro lugar, elegí otra opción o tocá el mapa.'
+              : punto ? 'Listo, el lugar quedó marcado.'
+                : 'Todavía no marcaste el lugar.');
   const cambiar = event => {
     const { name, value } = event.target;
     // Al cambiar el día o el servicio cambian los horarios posibles: la hora elegida se vuelve a pedir.
@@ -229,25 +290,39 @@ export default function SolicitarServicio() {
         </fieldset> : <label className="field">Hora<input type="time" name="hora" required value={datos.hora} onChange={cambiar} disabled={bloqueado} />
           <span className="field-hint">{nombre} no cargó días y horarios: elegí la hora que te quede mejor.</span>
         </label>}
-        <label className="field">Dirección de atención<input name="direccionAtencion" autoComplete="street-address" maxLength={200} required value={datos.direccionAtencion} onChange={cambiar} disabled={bloqueado} />
-          {direccionDelPerfil(paciente?.direccion) && <span className="field-hint">La tomamos de tu perfil. Podés cambiarla si la atención es en otro lugar.</span>}
-        </label>
         <fieldset className="field solicitud-ubicacion" disabled={bloqueado}>
-          <legend>Lugar de atención en el mapa</legend>
+          <legend>¿Dónde te atienden?</legend>
+          <div className="solicitud-lugar-opciones">
+            {tienePerfil && <label className="solicitud-lugar-opcion">
+              <input type="radio" name="lugar" value="perfil" checked={modo === 'perfil'} onChange={() => elegirModo('perfil')} />
+              <span>En mi dirección del perfil{perfilDireccion && <small>{perfilDireccion}</small>}</span>
+            </label>}
+            <label className="solicitud-lugar-opcion">
+              <input type="radio" name="lugar" value="actual" checked={modo === 'actual'} onChange={() => elegirModo('actual')} />
+              <span>Donde estoy ahora<small>Usamos la ubicación de tu celular o computadora.</small></span>
+            </label>
+            <label className="solicitud-lugar-opcion">
+              <input type="radio" name="lugar" value="otra" checked={modo === 'otra'} onChange={() => elegirModo('otra')} />
+              <span>En otra dirección<small>La escribís y la ubicamos en el mapa.</small></span>
+            </label>
+          </div>
+          <label className="field">Dirección de atención<input ref={direccionInput} name="direccionAtencion" autoComplete="street-address" maxLength={200} required value={datos.direccionAtencion} disabled={bloqueado}
+            onChange={(event) => {
+              cambiar(event);
+              // Escribir otra dirección sobre la del perfil es elegir "otra"; con la ubicación actual solo se corrige el texto.
+              if (modo === 'perfil') setModo('otra');
+              if (modo !== 'actual') setDireccionEditada(true);
+            }} />
+          </label>
           <Suspense fallback={<p role="status">Cargando mapa…</p>}>
             <LocationPicker
               latitude={punto?.lat}
               longitude={punto?.lng}
-              conMiUbicacion
-              helpText={`Tocá el mapa en el lugar exacto donde te atienden, o usá tu ubicación actual. ${nombre} lo ve solo mientras el turno esté pendiente o aceptado, para saber cómo llegar.`}
+              helpText={`Revisá el punto en el mapa: si no es el lugar exacto, tocá el lugar correcto. ${nombre} lo ve solo mientras el turno esté pendiente o aceptado, para saber cómo llegar.`}
               onChange={(lat, lng) => { if (!bloqueado) setPunto({ lat, lng }); }}
             />
           </Suspense>
-          <p className="field-hint" role="status">
-            {!punto ? 'Todavía no marcaste el lugar.'
-              : punto.delPerfil ? 'Marcamos el punto de tu perfil. Si te atienden en otro lugar, tocá el mapa.'
-                : 'Listo, el lugar quedó marcado.'}
-          </p>
+          <p className="field-hint" role="status">{textoLugar}</p>
         </fieldset>
         {pideTelefono && <label className="field">Tu teléfono celular<input type="tel" name="telefono" autoComplete="tel" inputMode="tel" maxLength={40} required value={telefono} onChange={event => setTelefono(event.target.value)} disabled={bloqueado} />
           <span className="field-hint">Lo guardamos en tu perfil para que el profesional pueda avisarte. Por ejemplo: 261 555 1234.</span>

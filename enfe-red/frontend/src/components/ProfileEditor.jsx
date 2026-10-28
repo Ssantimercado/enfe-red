@@ -9,6 +9,7 @@ import HistorialServicios from './HistorialServicios';
 import MiCuenta from './MiCuenta';
 import AvisoMatricula from './AvisoMatricula';
 import { estadoMatricula, MENSAJE_TELEFONO, TEXTO_MATRICULA, telefonoValido } from './perfilPendiente';
+import { useBuscarDireccion } from './useUbicacion';
 
 // El servidor no pudo abrir el dato guardado (clave de cifrado distinta): se conserva hasta recuperarlo.
 const HISTORIAL_ILEGIBLE = 'No pudimos mostrar tu información de salud guardada. Si querés, escribila de nuevo.';
@@ -42,6 +43,12 @@ export default function ProfileEditor({ role }) {
   const [success, setSuccess] = useState('');
   const [retry, setRetry] = useState(0);
   const [locationOpen, setLocationOpen] = useState(false);
+  // Dirección que se está escribiendo: al terminar se ubica sola en el mapa (null = no se editó todavía).
+  const [buscarTexto, setBuscarTexto] = useState(null);
+  const direccionEnMapa = useBuscarDireccion(buscarTexto, editing && buscarTexto !== null, ([latitud, longitud]) => {
+    setForm((current) => ({ ...current, latitud, longitud }));
+    setLocationOpen(true);
+  });
   // SCRUM-14/53: catálogo para elegir qué servicios ofrece el enfermero.
   const [catalogo, setCatalogo] = useState([]);
   const fields = [...COMMON, ...(nurse ? PROFESSIONAL : PATIENT)];
@@ -197,6 +204,7 @@ export default function ProfileEditor({ role }) {
                       setSuccess('');
                       setError('');
                       setLocationOpen(false);
+                      setBuscarTexto(null);
                     }}
                   >
                     Editar datos
@@ -215,15 +223,22 @@ export default function ProfileEditor({ role }) {
                           type={type}
                           autoComplete={complete}
                           value={form[key] ?? ''}
-                          onChange={(e) =>
+                          onChange={(e) => {
+                            const valor = e.target.value;
                             setForm((current) => ({
                               ...current,
-                              [key]: e.target.value,
+                              [key]: valor,
                               ...(nurse && ['direccion', 'ciudad'].includes(key)
                                 ? { latitud: null, longitud: null }
                                 : {}),
-                            }))
-                          }
+                            }));
+                            if (key === 'direccion' || (nurse && key === 'ciudad')) {
+                              const siguiente = { ...form, [key]: valor };
+                              setBuscarTexto(nurse
+                                ? [siguiente.direccion, siguiente.ciudad].filter(Boolean).join(', ')
+                                : siguiente.direccion || '');
+                            }
+                          }}
                           required={['nombre', 'matricula'].includes(key)}
                           min={type === 'number' ? '0' : undefined}
                           step={key === 'tarifa_hora' ? '0.01' : undefined}
@@ -249,6 +264,10 @@ export default function ProfileEditor({ role }) {
                           : nurse
                             ? 'Sin punto seleccionado. Podés guardar el perfil sin publicar una ubicación.'
                             : 'Sin punto seleccionado. Podés elegir dónde recibir la atención; no se comparte hasta que lo habilites.'}
+                      </p>
+                      <p className="filter-hint" aria-live="polite">
+                        {direccionEnMapa.mensaje
+                          || 'Al escribir tu dirección la ubicamos sola en el mapa; también podés tocar el lugar o usar tu ubicación actual.'}
                       </p>
                       <button
                         type="button"

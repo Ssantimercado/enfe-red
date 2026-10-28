@@ -203,7 +203,9 @@ export function Privacidad() {
         <p>
           El mapa usa servicios de terceros (OpenStreetMap y el cálculo de rutas) que reciben la ubicación
           que se muestra en pantalla para dibujarlo. Si el profesional abre el lugar de atención en Google Maps,
-          ese punto también se envía a Google.
+          ese punto también se envía a Google. Para ubicar en el mapa la dirección que escribís (o escribir la de tu
+          ubicación actual), el servidor de Enfered la consulta en el buscador de direcciones de OpenStreetMap
+          (Nominatim), sin tu nombre ni otros datos.
         </p>
       </section>
       <section>

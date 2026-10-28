@@ -1,5 +1,57 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { requestApi } from '../api';
 import { RUTAS_URL } from './mapaConfig';
+
+// Dirección escrita <-> punto del mapa. Lo resuelve el servidor (Nominatim, de OpenStreetMap).
+export const buscarDireccion = (direccion, signal) =>
+  requestApi(`/geocodificar?direccion=${encodeURIComponent(direccion)}`, { signal });
+export const direccionDe = ([lat, lng], signal) => requestApi(`/geocodificar/inversa?lat=${lat}&lng=${lng}`, { signal });
+
+// Se espera a que la persona deje de escribir: no se busca en cada letra (y Nominatim pide pocos pedidos).
+export const ESPERA_DIRECCION_MS = 1200;
+
+// Mientras `activo`, busca `texto` en el mapa al terminar de escribir y avisa con alEncontrar([lat, lng], lugar).
+export function useBuscarDireccion(texto, activo, alEncontrar) {
+  const [estado, setEstado] = useState({ fase: 'idle', mensaje: '' });
+  const ultimo = useRef(alEncontrar);
+  useEffect(() => {
+    ultimo.current = alEncontrar;
+  });
+  useEffect(() => {
+    const limpio = String(texto || '').trim();
+    if (!activo || limpio.length < 4) {
+      setEstado({ fase: 'idle', mensaje: '' });
+      return undefined;
+    }
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setEstado({ fase: 'buscando', mensaje: 'Buscando la dirección en el mapa…' });
+      try {
+        const lugar = await buscarDireccion(limpio, controller.signal);
+        if (controller.signal.aborted) return;
+        if (!Number.isFinite(lugar?.latitud) || !Number.isFinite(lugar?.longitud)) throw new Error('Respuesta inválida');
+        ultimo.current?.([lugar.latitud, lugar.longitud], lugar);
+        setEstado({
+          fase: 'ok',
+          mensaje: `Ubicamos la dirección en el mapa${lugar.descripcion ? ` (${lugar.descripcion})` : ''}. Si el punto no es exacto, tocá el lugar correcto.`,
+        });
+      } catch (error) {
+        if (controller.signal.aborted || error.name === 'AbortError') return;
+        setEstado({
+          fase: error.status === 404 ? 'no' : 'error',
+          mensaje: error.status === 404 || error.status === 503
+            ? error.message
+            : 'No pudimos buscar la dirección en este momento. Marcá el lugar tocando el mapa.',
+        });
+      }
+    }, ESPERA_DIRECCION_MS);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [texto, activo]);
+  return estado;
+}
 
 const MENSAJES_GEOLOCALIZACION = {
   1: 'Permití el acceso a tu ubicación en el navegador y volvé a intentarlo.',

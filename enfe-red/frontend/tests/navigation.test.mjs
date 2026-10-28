@@ -3561,3 +3561,108 @@ test('el paciente marca el lugar de un pedido que no lo tenía y queda guardado'
     assert.ok([...tarjeta.querySelectorAll('button')].some((b) => b.textContent === 'Cambiar el lugar de atención'));
   } finally { globalThis.fetch = original; }
 });
+
+test('al escribir la dirección en el perfil se ubica sola en el mapa y se guarda el punto', async () => {
+  session('paciente');
+  const original = globalThis.fetch;
+  let guardado;
+  const busquedas = [];
+  globalThis.fetch = async (url, options = {}) => {
+    const ruta = String(url);
+    if (ruta.includes('/geocodificar?')) {
+      busquedas.push(new URL(ruta).searchParams.get('direccion'));
+      return response({ latitud: -32.919654, longitud: -68.843691, descripcion: 'General Manuel Belgrano 450, Godoy Cruz' });
+    }
+    if (ruta.endsWith('/perfil/paciente')) {
+      if (options.method === 'PUT') {
+        guardado = JSON.parse(options.body);
+        return response({ idPaciente: 101, nombre: 'Ana', ...guardado });
+      }
+      return response({ idPaciente: 101, nombre: 'Ana', direccion: '', telefono: '2615551234' });
+    }
+    return original(url, options);
+  };
+  try {
+    await mount('/perfil-paciente');
+    await click(button('Editar datos'));
+    const direccion = document.querySelector('input[name="direccion"]');
+    await type(direccion, 'Belgrano 450, Godoy Cruz');
+    // Se busca una sola vez, cuando la persona dejó de escribir.
+    assert.deepEqual(busquedas, []);
+    await esperar(1400);
+    assert.deepEqual(busquedas, ['Belgrano 450, Godoy Cruz']);
+    assert.match(document.body.textContent, /Ubicamos la dirección en el mapa \(General Manuel Belgrano 450, Godoy Cruz\)/);
+    for (let i = 0; i < 100 && !document.querySelector('.location-picker'); i += 1) await esperar(10);
+    assert.ok(document.querySelector('.location-picker'), 'el mapa se abre con el punto');
+    await act(async () => direccion.closest('form').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })));
+    await esperar(20);
+    assert.equal(guardado.direccion, 'Belgrano 450, Godoy Cruz');
+    assert.deepEqual([guardado.latitud, guardado.longitud], [-32.919654, -68.843691]);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test('al pedir turno se propone la dirección del perfil, la ubicación actual u otra dirección', async () => {
+  session();
+  solicitudesAPI();
+  const original = globalThis.fetch;
+  const busquedas = [];
+  globalThis.fetch = async (url, options = {}) => {
+    const ruta = String(url);
+    if (ruta.endsWith('/perfil/paciente')) return response({ idPaciente: 101, direccion: 'Belgrano 450, Godoy Cruz', telefono: '2615551234' });
+    if (ruta.includes('/geocodificar/inversa')) return response({ direccion: 'Avenida San Martín 1200, Ciudad de Mendoza' });
+    if (ruta.includes('/geocodificar?')) {
+      const buscada = new URL(ruta).searchParams.get('direccion');
+      busquedas.push(buscada);
+      return buscada.startsWith('Belgrano')
+        ? response({ latitud: -32.92, longitud: -68.84, descripcion: 'Belgrano 450, Godoy Cruz' })
+        : response({ latitud: -32.95, longitud: -68.8, descripcion: 'Mitre 800, Maipú' });
+    }
+    return original(url, options);
+  };
+  Object.defineProperty(globalThis.navigator, 'geolocation', {
+    configurable: true,
+    value: { getCurrentPosition: (ok) => ok({ coords: { latitude: -32.8893, longitude: -68.8391, accuracy: 10 } }) },
+  });
+  try {
+    await mount('/perfil/21/solicitar');
+    const lugar = (valor) => document.querySelector(`input[name="lugar"][value="${valor}"]`);
+    const direccion = () => document.querySelector('input[name="direccionAtencion"]');
+    const estadoLugar = () => document.querySelector('.solicitud-ubicacion > p[role="status"]').textContent;
+    // 1. Viene elegida la dirección del perfil; como el perfil no tiene punto, se ubica sola.
+    assert.equal(lugar('perfil').checked, true);
+    assert.equal(direccion().value, 'Belgrano 450, Godoy Cruz');
+    await esperar(1400);
+    assert.deepEqual(busquedas, ['Belgrano 450, Godoy Cruz']);
+    assert.match(estadoLugar(), /Ubicamos la dirección en el mapa \(Belgrano 450, Godoy Cruz\)/);
+    // 2. Donde estoy ahora: marca la ubicación y completa la dirección escrita.
+    await click(lugar('actual'));
+    await esperar(50);
+    assert.equal(direccion().value, 'Avenida San Martín 1200, Ciudad de Mendoza');
+    assert.match(estadoLugar(), /Marcamos tu ubicación actual y completamos la dirección/);
+    // 3. Otra dirección: se escribe y se ubica en el mapa.
+    await click(lugar('otra'));
+    assert.equal(direccion().value, '');
+    await type(direccion(), 'Mitre 800, Maipú');
+    await esperar(1400);
+    assert.deepEqual(busquedas, ['Belgrano 450, Godoy Cruz', 'Mitre 800, Maipú']);
+    assert.match(estadoLugar(), /Mitre 800, Maipú/);
+    const select = document.querySelector('select[name="idServicio"]');
+    await act(async () => {
+      select.value = '301';
+      select.dispatchEvent(new window.Event('change', { bubbles: true }));
+    });
+    await type(document.querySelector('input[name="fecha"]'), '2099-12-10');
+    await type(document.querySelector('input[name="hora"]'), '14:30');
+    await submitForm();
+    const post = solicitudRequests.filter((r) => r.method === 'post').at(-1);
+    assert.deepEqual(JSON.parse(post.data), {
+      idServicio: 301, idEnfermero: 201, fecha: '2099-12-10', hora: '14:30', direccionAtencion: 'Mitre 800, Maipú',
+      latitudAtencion: -32.95, longitudAtencion: -68.8,
+    });
+  } finally {
+    globalThis.fetch = original;
+    delete globalThis.navigator.geolocation;
+  }
+});

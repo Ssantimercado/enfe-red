@@ -20,6 +20,7 @@ from routes.admin_routes import admin_bp
 from routes.ia_routes import ia_bp
 from routes.cuenta_routes import cuenta_bp
 from routes.salud_routes import salud_bp
+from routes.mapa_routes import mapa_bp
 from preparar_bd import debe_preparar_al_arrancar, preparar_base
 from seguridad import configurar_sesiones
 from services.cifrado import configurar_cifrado
@@ -86,6 +87,7 @@ app.register_blueprint(admin_bp, url_prefix='/api')
 app.register_blueprint(ia_bp, url_prefix='/api')
 app.register_blueprint(cuenta_bp, url_prefix='/api')
 app.register_blueprint(salud_bp, url_prefix='/api')
+app.register_blueprint(mapa_bp, url_prefix='/api')
 registrar_comandos(app)
 
 # En producción la base se prepara una vez por despliegue (flask --app app preparar-bd), no en cada
