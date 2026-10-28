@@ -3666,3 +3666,41 @@ test('al pedir turno se propone la dirección del perfil, la ubicación actual u
     delete globalThis.navigator.geolocation;
   }
 });
+
+test('el paciente ve en el mapa la ruta estimada hasta la zona del profesional (Incremento 3)', async () => {
+  session('paciente');
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url, options = {}) => {
+    const ruta = String(url);
+    if (ruta.includes('/enfermeros/buscar')) {
+      return response({
+        enfermeros: [{ id: 4, usuario_id: 4, nombre: 'Sofía', apellido: 'Méndez', especialidad: 'Pediatría', latitud: -32.93, longitud: -68.85 }],
+        total_resultados: 1, total_paginas: 1,
+      });
+    }
+    if (ruta.includes('/route/v1/')) {
+      return response({ code: 'Ok', routes: [{ distance: 5900, duration: 720, geometry: { coordinates: [[-68.83, -32.89], [-68.85, -32.93]] } }] });
+    }
+    return original(url, options);
+  };
+  Object.defineProperty(globalThis.navigator, 'geolocation', {
+    configurable: true,
+    value: { getCurrentPosition: (ok) => ok({ coords: { latitude: -32.89, longitude: -68.83, accuracy: 20 } }) },
+  });
+  try {
+    await mount('/cartilla?vista=mapa');
+    for (let i = 0; i < 100 && !document.querySelector('.enfermero-marker'); i += 1) await esperar(10);
+    await act(async () => document.querySelector('.enfermero-marker').dispatchEvent(new window.MouseEvent('click', { bubbles: true })));
+    await esperar(50);
+    const resumen = document.querySelector('.mapa-route-summary');
+    assert.match(resumen.textContent, /Mejor ruta estimada/);
+    assert.match(resumen.textContent, /hasta la zona de Sofía Méndez/);
+    assert.match(resumen.textContent, /5,9 km · aprox\. 12 min/);
+    // El recorrido se dibuja en el mapa y el globo lleva al perfil completo.
+    assert.ok(document.querySelector('.mapa-leaflet path.leaflet-interactive'));
+    assert.ok([...document.querySelectorAll('.leaflet-popup button')].some((b) => b.textContent === 'Ver perfil completo'));
+  } finally {
+    globalThis.fetch = original;
+    delete globalThis.navigator.geolocation;
+  }
+});

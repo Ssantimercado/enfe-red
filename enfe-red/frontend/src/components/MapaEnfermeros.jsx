@@ -180,22 +180,19 @@ export default function MapaEnfermeros({
     [markers]
   );
 
-  // El recorrido es para el enfermero que va a la casa del paciente. Al paciente le basta saber
-  // qué profesionales atienden cerca: ver el camino hasta el domicilio del enfermero no le sirve.
-  const { ruta, loadingRoute, routeError } = useRutaReal(
-    mostrandoPacientes ? userPosition : null,
-    mostrandoPacientes ? selectedPosition : null
-  );
+  // Recorrido desde la ubicación de quien mira hasta el elegido: el enfermero va al lugar de atención del
+  // paciente, y el paciente ve la ruta estimada hasta la zona del profesional (como en el Incremento 3).
+  const { ruta, loadingRoute, routeError } = useRutaReal(userPosition, selectedPosition);
   const cantidad = `${markers.length} profesional${markers.length === 1 ? '' : 'es'}`;
   // Sin servicio de rutas (o si falla) se muestra al menos la distancia en línea recta.
-  const lineal = mostrandoPacientes && userPosition && selectedPosition
-    ? distanciaLineal(userPosition, selectedPosition) : null;
+  const lineal = userPosition && selectedPosition ? distanciaLineal(userPosition, selectedPosition) : null;
   const nombreElegido = selected ? [selected.nombre, selected.apellido].filter(Boolean).join(' ') : '';
+  const minutosRuta = ruta ? Math.max(1, Math.ceil(ruta.tiempo / 60)) : null;
 
-  // El enfermero toca a un paciente para ver cómo llegar: si todavía no se sabe dónde está, se le pregunta.
+  // Al tocar a alguien se muestra el recorrido: si todavía no se sabe dónde está quien mira, se le pregunta.
   function elegir(id) {
     onSelect?.(id);
-    if (mostrandoPacientes && !userPosition && locationState !== 'loading') locateUser();
+    if (!userPosition && locationState !== 'loading') locateUser();
   }
 
   return (
@@ -209,7 +206,7 @@ export default function MapaEnfermeros({
           <h2>{mostrandoPacientes ? 'Tus pacientes en el mapa' : 'Enfermeros cerca de tu zona'}</h2>
           <p>{mostrandoPacientes
             ? `${markers.length === 1 ? '1 paciente' : `${markers.length} pacientes`} con turno pendiente o aceptado. Tocá uno para ver el recorrido, la distancia y cómo llegar.`
-            : `${markers.length === 1 ? 'Hay 1 profesional' : `Hay ${cantidad}`} en el mapa. Cada círculo es la zona donde atiende, no su domicilio. Tocá uno para ver su perfil.`}
+            : `${markers.length === 1 ? 'Hay 1 profesional' : `Hay ${cantidad}`} en el mapa. Cada círculo es la zona donde atiende, no su domicilio. Tocá uno para ver la ruta estimada y su perfil.`}
           </p>
         </div>
 
@@ -239,7 +236,7 @@ export default function MapaEnfermeros({
             {loadingRoute && <p>Calculando recorrido…</p>}
             {!loadingRoute && ruta && (
               <p className="mapa-route-details">
-                Estás a {km(ruta.distancia)} km · unos {Math.max(1, Math.ceil(ruta.tiempo / 60))} min en auto
+                Estás a {km(ruta.distancia)} km · unos {minutosRuta} min en auto
               </p>
             )}
             {!loadingRoute && !ruta && lineal != null && (
@@ -257,6 +254,28 @@ export default function MapaEnfermeros({
           >
             Abrir en Google Maps<span className="sr-only"> (se abre en otra pestaña)</span>
           </a>
+        </div>
+      )}
+
+      {!mostrandoPacientes && selectedPosition && (
+        <div className="mapa-route-summary">
+          <h3><span aria-hidden="true">🚗</span> Mejor ruta estimada</h3>
+          <p>Desde tu ubicación hasta la zona de {nombreElegido || 'el profesional'}.</p>
+          {!userPosition && (
+            <p>Usá el botón “Mostrar dónde estoy” para ver el recorrido, la distancia y el tiempo.</p>
+          )}
+          <div aria-live="polite">
+            {loadingRoute && <p>Calculando recorrido…</p>}
+            {!loadingRoute && ruta && (
+              <p className="mapa-route-details">{km(ruta.distancia)} km · aprox. {minutosRuta} min</p>
+            )}
+            {!loadingRoute && !ruta && lineal != null && (
+              <p className="mapa-route-details">A unos {km(lineal)} km en línea recta</p>
+            )}
+          </div>
+          {!loadingRoute && routeError && (
+            <p className="mapa-route-error">No pudimos calcular el recorrido por calles.</p>
+          )}
         </div>
       )}
 
@@ -401,7 +420,7 @@ export default function MapaEnfermeros({
                       fontSize: '14px',
                     }}
                   >
-                    Ver perfil
+                    Ver perfil completo
                   </button>
                 </div>
               </Popup>}
