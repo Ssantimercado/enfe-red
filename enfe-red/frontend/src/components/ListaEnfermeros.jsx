@@ -543,7 +543,7 @@ export default function ListaEnfermeros() {
                   </Suspense>
                   <p className="map-results-note">
                     {nurse
-                      ? 'El mapa muestra únicamente ubicaciones que cada paciente eligió compartir y solo para enfermeros con una solicitud activa asignada.'
+                      ? 'El mapa muestra el lugar de atención de tus turnos pendientes y aceptados. Lo ves solo mientras el turno sigue en curso.'
                       : 'El mapa muestra a todos los profesionales de esta búsqueda que informaron su zona. La ubicación es aproximada.'}
                   </p>
                 </div>
@@ -580,7 +580,7 @@ export default function ListaEnfermeros() {
                   </Suspense>
                   <p className="map-results-note">
                     {nurse
-                      ? 'El mapa muestra únicamente ubicaciones que cada paciente eligió compartir y solo para enfermeros con una solicitud activa asignada.'
+                      ? 'El mapa muestra el lugar de atención de tus turnos pendientes y aceptados. Lo ves solo mientras el turno sigue en curso.'
                       : 'El mapa muestra a todos los profesionales de esta búsqueda que informaron su zona. La ubicación es aproximada.'}
                   </p>
                 </div>
@@ -639,7 +639,7 @@ export default function ListaEnfermeros() {
                               }}
                             >
                               <Icon name="pin" size={14} />
-                              Ver ubicación compartida
+                              Ver en el mapa
                             </button>
                           )}
                         </>

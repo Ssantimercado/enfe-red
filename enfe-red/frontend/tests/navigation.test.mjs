@@ -3480,3 +3480,48 @@ test('si el turno se cancela con el chat abierto en Mis solicitudes, la tarjeta 
     assert.ok(document.activeElement === aviso, 'el foco no quedó en el aviso');
   }, { estadoServidor: 'Cancelada', envio: () => response({ error: 'La conversación está cerrada' }, 409) });
 });
+
+test('el enfermero ve a sus pacientes en el mapa con el recorrido, la distancia y Google Maps', async () => {
+  session('enfermero');
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url, options = {}) => {
+    const ruta = String(url);
+    if (ruta.includes('/pacientes/solicitudes-activas')) {
+      return response({
+        pacientes: [{
+          id: 7, idPaciente: 70, nombre: 'Ana', apellido: 'Prueba', solicitudes: 1, solicitudes_activas: 1,
+          latitud: -32.927, longitud: -68.845,
+          turno: { idSolicitud: 41, estado: 'Aceptada', fecha: '2099-12-10', hora: '14:30', direccionAtencion: 'Belgrano 50, Godoy Cruz' },
+        }],
+        total_resultados: 1, total_paginas: 1,
+      });
+    }
+    // Servicio de rutas por calles (OSRM).
+    if (ruta.includes('/route/v1/')) {
+      return response({ code: 'Ok', routes: [{ distance: 3400, duration: 540, geometry: { coordinates: [[-68.83, -32.89], [-68.845, -32.927]] } }] });
+    }
+    return original(url, options);
+  };
+  Object.defineProperty(globalThis.navigator, 'geolocation', {
+    configurable: true,
+    value: { getCurrentPosition: (ok) => ok({ coords: { latitude: -32.89, longitude: -68.83, accuracy: 20 } }) },
+  });
+  try {
+    await mount('/cartilla?vista=mapa');
+    for (let i = 0; i < 100 && !document.querySelector('.paciente-marker'); i += 1) await esperar(10);
+    const mapa = document.querySelector('.mapa-enfermeros');
+    assert.match(mapa.textContent, /Tus pacientes en el mapa/);
+    assert.match(mapa.textContent, /1 paciente con turno pendiente o aceptado/);
+    await act(async () => document.querySelector('.paciente-marker').dispatchEvent(new window.MouseEvent('click', { bubbles: true })));
+    await esperar(50);
+    const resumen = document.querySelector('.mapa-route-summary');
+    assert.match(resumen.textContent, /Cómo llegar a Ana Prueba/);
+    assert.match(resumen.textContent, /Turno aceptado: jueves 10 de diciembre de 2099, 14:30 hs · Belgrano 50, Godoy Cruz/);
+    // Al tocar al paciente se pidió la ubicación: el recorrido muestra kilómetros y minutos.
+    assert.match(resumen.textContent, /Estás a 3,4 km · unos 9 min en auto/);
+    assert.equal(resumen.querySelector('a').href, 'https://www.google.com/maps/dir/?api=1&destination=-32.927,-68.845');
+  } finally {
+    globalThis.fetch = original;
+    delete globalThis.navigator.geolocation;
+  }
+});

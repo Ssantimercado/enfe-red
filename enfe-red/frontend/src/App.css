@@ -3046,3 +3046,9 @@ button.notification-item:hover {
 .solicitud-enviada {
   margin-bottom: 18px;
 }
+
+/* En el celular el resumen del recorrido va debajo de la barra, no encima del mapa: si no, tapa al paciente y el botón. */
+@media (max-width: 800px) {
+  .mapa-route-summary { position: static; max-width: none; margin: 0 20px 14px; box-shadow: none; }
+}
+.mapa-route-summary .button { margin-top: 10px; }

@@ -182,3 +182,7 @@
 .ubicacion-atencion-mapa { height: 280px; border-radius: 12px; border: 1px solid var(--border); }
 /* WhatsApp como alternativa dentro del chat. */
 .chat-whatsapp { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 14px 0 0; }
+/* Acciones del encabezado de una página (por ejemplo, la bandeja del enfermero). */
+.page-heading-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; }
+@media (max-width: 540px) { .page-heading-actions { justify-content: flex-start; } }
+

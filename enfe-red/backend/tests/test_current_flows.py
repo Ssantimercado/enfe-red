@@ -351,6 +351,8 @@ class CurrentFlowsTest(unittest.TestCase):
                 hora=time(10),
                 estado='Aceptada',
                 direccionAtencion='Dirección del servicio',
+                latitudAtencion=-32.95,
+                longitudAtencion=-68.80,
             ),
             SolicitudServicio(
                 idPaciente=self.patient.id,
@@ -389,8 +391,16 @@ class CurrentFlowsTest(unittest.TestCase):
         self.assertEqual((ana['nombre'], ana['solicitudes'], ana['solicitudes_activas']), ('Ana', 1, 1))
         self.assertEqual((ana['latitud'], ana['longitud']), (-32.89, -68.84))
         self.assertEqual((bruno['nombre'], bruno['solicitudes']), ('Bruno', 1))
+        # HU16: el mapa usa el lugar de atención del turno en curso, con su fecha, hora y dirección.
+        self.assertEqual((bruno['latitud'], bruno['longitud']), (-32.95, -68.80))
+        self.assertEqual(bruno['turno'], {'idSolicitud': bruno['turno']['idSolicitud'], 'estado': 'Aceptada',
+                                          'fecha': '2030-01-11', 'hora': '10:00',
+                                          'direccionAtencion': 'Dirección del servicio'})
+        # Sin lugar marcado en el turno, queda la ubicación que el paciente eligió compartir.
+        self.assertIsNone(ana['turno'])
         self.assertEqual((carla['nombre'], carla['solicitudes'], carla['solicitudes_activas']), ('Carla', 1, 0))
         self.assertEqual((carla['latitud'], carla['longitud']), (None, None))
+        self.assertIsNone(carla['turno'])
         response_text = result.get_data(as_text=True)
         for dato_privado in ('Dirección privada', '2615550000', 'Dato médico privado'):
             self.assertNotIn(dato_privado, response_text)

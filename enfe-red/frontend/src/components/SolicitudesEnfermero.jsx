@@ -337,9 +337,15 @@ export default function SolicitudesEnfermero() {
           <h1>Solicitudes recibidas</h1>
           <p>Revisá los pedidos de atención y aceptá o rechazá los pendientes.</p>
         </div>
-        <Link className="button button-secondary" to="/perfil-enfermero">
-          Volver a mi perfil
-        </Link>
+        <div className="page-heading-actions">
+          {/* Todos los pacientes con turno en curso en un mapa, con recorrido y Google Maps (HU16). */}
+          <Link className="button button-primary" to="/cartilla?vista=mapa">
+            Ver mis pacientes en el mapa
+          </Link>
+          <Link className="button button-secondary" to="/perfil-enfermero">
+            Volver a mi perfil
+          </Link>
+        </div>
       </header>
       {error && (
         <div className="notice notice-error" role="alert">

@@ -12,8 +12,13 @@ import {
 } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { MAPA_ATRIBUCION, MAPA_TILES_URL, RUTAS_URL } from './mapaConfig';
-import { useMiUbicacion, useRutaReal } from './useUbicacion';
+import { fechaLegible } from '../fechas';
+import { MAPA_ATRIBUCION, MAPA_TILES_URL } from './mapaConfig';
+import { distanciaLineal, useMiUbicacion, useRutaReal } from './useUbicacion';
+
+const km = (valor) => valor.toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const enlaceGoogleMaps = ([lat, lng]) => `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+const textoTurno = (turno) => turno && `${turno.estado === 'Pendiente' ? 'Pedido pendiente' : 'Turno aceptado'}: ${fechaLegible(turno.fecha, turno.hora)}`;
 
 const DEFAULT_CENTER = [-32.8895, -68.8458]; // Mendoza capital
 // El backend publica la ubicación del profesional redondeada a unos 1 km: el círculo muestra esa zona.
@@ -182,6 +187,16 @@ export default function MapaEnfermeros({
     mostrandoPacientes ? selectedPosition : null
   );
   const cantidad = `${markers.length} profesional${markers.length === 1 ? '' : 'es'}`;
+  // Sin servicio de rutas (o si falla) se muestra al menos la distancia en línea recta.
+  const lineal = mostrandoPacientes && userPosition && selectedPosition
+    ? distanciaLineal(userPosition, selectedPosition) : null;
+  const nombreElegido = selected ? [selected.nombre, selected.apellido].filter(Boolean).join(' ') : '';
+
+  // El enfermero toca a un paciente para ver cómo llegar: si todavía no se sabe dónde está, se le pregunta.
+  function elegir(id) {
+    onSelect?.(id);
+    if (mostrandoPacientes && !userPosition && locationState !== 'loading') locateUser();
+  }
 
   return (
     <section
@@ -191,9 +206,9 @@ export default function MapaEnfermeros({
     >
       <div className="mapa-toolbar">
         <div>
-          <h2>{mostrandoPacientes ? 'Ubicaciones compartidas' : 'Enfermeros cerca de tu zona'}</h2>
+          <h2>{mostrandoPacientes ? 'Tus pacientes en el mapa' : 'Enfermeros cerca de tu zona'}</h2>
           <p>{mostrandoPacientes
-            ? `${markers.length} paciente${markers.length === 1 ? '' : 's'} compartió su ubicación`
+            ? `${markers.length === 1 ? '1 paciente' : `${markers.length} pacientes`} con turno pendiente o aceptado. Tocá uno para ver el recorrido, la distancia y cómo llegar.`
             : `${markers.length === 1 ? 'Hay 1 profesional' : `Hay ${cantidad}`} en el mapa. Cada círculo es la zona donde atiende, no su domicilio. Tocá uno para ver su perfil.`}
           </p>
         </div>
@@ -211,23 +226,37 @@ export default function MapaEnfermeros({
         </button>
       </div>
 
-      {mostrandoPacientes && selectedPosition && RUTAS_URL && (
+      {mostrandoPacientes && selectedPosition && (
         <div className="mapa-route-summary">
-          <h3><span aria-hidden="true">🚗</span> Mejor ruta por calles</h3>
-          <p>Desde tu ubicación actual hasta el paciente.</p>
+          <h3><span aria-hidden="true">🚗</span> Cómo llegar a {nombreElegido || 'el paciente'}</h3>
+          {selected?.turno && (
+            <p>{textoTurno(selected.turno)} · {selected.turno.direccionAtencion}</p>
+          )}
           {!userPosition && (
-            <p>Usá el botón para calcular el recorrido, el tiempo y la distancia.</p>
+            <p>Usá el botón “Usar mi ubicación actual” para ver el recorrido, la distancia y el tiempo.</p>
           )}
-          {loadingRoute && <p role="status">Calculando recorrido…</p>}
-          {!loadingRoute && ruta && (
-            <p className="mapa-route-details">
-              {ruta.distancia.toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km · aprox.{' '}
-              {Math.max(1, Math.ceil(ruta.tiempo / 60))} min
-            </p>
-          )}
+          <div aria-live="polite">
+            {loadingRoute && <p>Calculando recorrido…</p>}
+            {!loadingRoute && ruta && (
+              <p className="mapa-route-details">
+                Estás a {km(ruta.distancia)} km · unos {Math.max(1, Math.ceil(ruta.tiempo / 60))} min en auto
+              </p>
+            )}
+            {!loadingRoute && !ruta && lineal != null && (
+              <p className="mapa-route-details">Estás a unos {km(lineal)} km en línea recta</p>
+            )}
+          </div>
           {!loadingRoute && routeError && (
-            <p className="mapa-route-error" role="alert">{routeError}</p>
+            <p className="mapa-route-error">No pudimos calcular el recorrido por calles. Abrí Google Maps para navegar.</p>
           )}
+          <a
+            className="button button-primary"
+            href={enlaceGoogleMaps(selectedPosition)}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Abrir en Google Maps<span className="sr-only"> (se abre en otra pestaña)</span>
+          </a>
         </div>
       )}
 
@@ -317,11 +346,15 @@ export default function MapaEnfermeros({
               key={id}
               position={position}
               icon={mostrandoPacientes ? patientIcon : nurseIcon}
+              title={[`${persona.nombre || ''} ${persona.apellido || ''}`.trim(), mostrandoPacientes && textoTurno(persona.turno)]
+                .filter(Boolean).join(' · ')}
               eventHandlers={{
-                click: () => onSelect?.(id),
+                click: () => elegir(id),
               }}
             >
-              <Popup>
+              {/* Para un paciente, nombre, turno, recorrido y Google Maps están en el resumen de arriba: sin globo, que
+                  además quedaba cortado al encuadrar el recorrido. */}
+              {!mostrandoPacientes && <Popup>
                 <div
                   style={{
                     fontFamily: "'Segoe UI', Roboto, sans-serif",
@@ -345,16 +378,14 @@ export default function MapaEnfermeros({
                       fontSize: '14px',
                     }}
                   >
-                    {mostrandoPacientes
-                      ? `${persona.solicitudes_activas} solicitud${persona.solicitudes_activas === 1 ? '' : 'es'} activa${persona.solicitudes_activas === 1 ? '' : 's'}`
-                      : [
-                        persona.especialidad || 'Enfermería general',
-                        persona.distancia_km != null ? `a unos ${persona.distancia_km} km` : null,
-                        'Atiende por esta zona',
-                      ].filter(Boolean).join(' · ')}
+                    {[
+                      persona.especialidad || 'Enfermería general',
+                      persona.distancia_km != null ? `a unos ${persona.distancia_km} km` : null,
+                      'Atiende por esta zona',
+                    ].filter(Boolean).join(' · ')}
                   </p>
 
-                  {!mostrandoPacientes && <button
+                  <button
                     type="button"
                     onClick={() => navigate(`/perfil/${id}`, { state: { volverA } })}
                     style={{
@@ -371,9 +402,9 @@ export default function MapaEnfermeros({
                     }}
                   >
                     Ver perfil
-                  </button>}
+                  </button>
                 </div>
-              </Popup>
+              </Popup>}
             </Marker>
           );
         })}
@@ -382,7 +413,7 @@ export default function MapaEnfermeros({
       {markers.length < personas.length && (
         <p className="mapa-nota">
           {mostrandoPacientes
-            ? 'Algunos pacientes todavía no eligieron compartir una ubicación y no aparecen en el mapa.'
+            ? 'Algunos pacientes no tienen el lugar de atención marcado (pedidos anteriores al mapa) y no aparecen. Su dirección está en Solicitudes.'
             : 'Algunos profesionales no cargaron su zona de atención y no aparecen en el mapa.'}
         </p>
       )}

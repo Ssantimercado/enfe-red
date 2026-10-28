@@ -615,21 +615,31 @@ def buscar_pacientes_con_solicitudes():
     paginacion = query.paginate(page=pagina, per_page=por_pagina, error_out=False)
     pacientes = []
     for paciente in paginacion.items:
-        solicitudes_activas = SolicitudServicio.query.filter(
+        activas = SolicitudServicio.query.filter(
             SolicitudServicio.idPaciente == paciente.id,
             SolicitudServicio.idEnfermero == enfermero.id,
             SolicitudServicio.estado.in_(ESTADOS_ACTIVOS),
-        ).count()
+        ).order_by(SolicitudServicio.fecha, SolicitudServicio.hora).all()
+        solicitudes_activas = len(activas)
         solicitudes = SolicitudServicio.query.filter_by(
             idPaciente=paciente.id,
             idEnfermero=enfermero.id,
         ).count()
+        # HU16: el mapa del enfermero usa el lugar de atención del próximo turno en curso (el mismo punto que ya
+        # ve en ese pedido). Si ningún turno lo tiene, queda la ubicación que el paciente eligió compartir.
+        turno = next((s for s in activas if s.ubicacion_atencion()), None)
         compartir_ubicacion = (
             solicitudes_activas > 0
             and paciente.ubicacion_compartida
             and paciente.latitud is not None
             and paciente.longitud is not None
         )
+        if turno:
+            latitud, longitud = turno.latitudAtencion, turno.longitudAtencion
+        elif compartir_ubicacion:
+            latitud, longitud = paciente.latitud, paciente.longitud
+        else:
+            latitud = longitud = None
         pacientes.append({
             'id': paciente.usuario_id,
             'idPaciente': paciente.id,
@@ -637,8 +647,15 @@ def buscar_pacientes_con_solicitudes():
             'apellido': paciente.apellido,
             'solicitudes': solicitudes,
             'solicitudes_activas': solicitudes_activas,
-            'latitud': paciente.latitud if compartir_ubicacion else None,
-            'longitud': paciente.longitud if compartir_ubicacion else None,
+            'latitud': latitud,
+            'longitud': longitud,
+            'turno': {
+                'idSolicitud': turno.idSolicitud,
+                'estado': turno.estado,
+                'fecha': turno.fecha.isoformat(),
+                'hora': turno.hora.strftime('%H:%M'),
+                'direccionAtencion': turno.direccionAtencion,
+            } if turno else None,
         })
 
     return jsonify({
