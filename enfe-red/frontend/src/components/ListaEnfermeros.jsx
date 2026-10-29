@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import Avatar from './ui/Avatar';
 import Icon from './ui/Icon';
 import DirectoryFilters from './DirectoryFilters';
+import { nombreServicios } from './nombreServicios';
 import BusquedaAsistida from './BusquedaAsistida';
 import { formatoPuntuacion } from './SelectorEstrellas';
 import { requestApi as api, formatPrice, sesionActual } from '../api';
@@ -270,8 +271,12 @@ export default function ListaEnfermeros() {
   }
   // HU12: reemplaza los filtros por los que interpretó la búsqueda asistida.
   function aplicarBusquedaAsistida(filtros, { horarioParcial = false } = {}) {
-    // El servicio llega por su nombre ("Inyecciones"); la cartilla filtra por su número.
-    const servicio = servicios.find((item) => item.tipoServicio === filtros.servicio);
+    // Los servicios llegan por su nombre ("Inyecciones"); la cartilla filtra por su número. Si el pedido tiene
+    // varias tareas ("curar y medir la insulina"), van todas y aparecen quienes las ofrecen todas.
+    const nombres = filtros.servicios?.length ? filtros.servicios : [filtros.servicio].filter(Boolean);
+    const ids = nombres
+      .map((nombre) => servicios.find((item) => item.tipoServicio === nombre)?.idServicio)
+      .filter((id) => id != null);
     setParams(
       (current) => {
         const next = new URLSearchParams(current);
@@ -280,7 +285,7 @@ export default function ListaEnfermeros() {
         ['especialidad', 'ciudad', 'dia_semana', 'hora_desde', 'hora_hasta'].forEach((key) => {
           if (filtros[key]) next.set(key, filtros[key]);
         });
-        if (servicio) next.set('servicio', String(servicio.idServicio));
+        if (ids.length) next.set('servicio', ids.join(','));
         if (horarioParcial && filtros.hora_desde) next.set(HORARIO_PARCIAL, 'parcial');
         next.delete('q');
         next.delete('page');
@@ -357,9 +362,7 @@ export default function ListaEnfermeros() {
   const horarioParcial = params.get(HORARIO_PARCIAL) === 'parcial';
   const hasFilters = Boolean(query || active.length || cercania);
   const labels = {
-    servicio:
-      servicios.find((item) => String(item.idServicio) === filterValues.servicio)?.tipoServicio ||
-      'Servicio elegido',
+    servicio: nombreServicios(filterValues.servicio, servicios) || 'Servicio elegido',
     especialidad: filterValues.especialidad,
     ciudad: filterValues.ciudad,
     precio_min: `Desde $${Number(filterValues.precio_min).toLocaleString('es-AR')}`,

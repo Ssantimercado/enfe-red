@@ -303,7 +303,7 @@ class CurrentFlowsTest(unittest.TestCase):
         ).json['total_resultados'], 0)
 
     def test_bad_search_parameters(self):
-        for query in ('precio_min=500&precio_max=100', 'precio_min=no', 'precio_min=-1',
+        for query in ('servicio=', 'servicio=1,x', 'servicio=0', 'servicio=1,2,3,4,5,6,7','precio_min=500&precio_max=100', 'precio_min=no', 'precio_min=-1',
                       'precio_max=nan', 'page=0', 'per_page=0', 'per_page=1000',
                       'hora_desde=08:00', 'hora_desde=25:00&hora_hasta=16:00',
                       'hora_desde=16:00&hora_hasta=08:00'):

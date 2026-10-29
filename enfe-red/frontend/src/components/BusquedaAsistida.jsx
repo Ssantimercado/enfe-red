@@ -10,6 +10,17 @@ const FUENTES = {
   reglas: 'Interpretado con el asistente de búsqueda.',
 };
 
+// "el servicio Curaciones" o "los servicios Curaciones y Control de signos vitales".
+function textoServicios({ servicios, servicio }) {
+  const lista = servicios?.length ? servicios : [servicio].filter(Boolean);
+  if (!lista.length) return null;
+  return lista.length === 1
+    ? <>el servicio <strong>{lista[0]}</strong></>
+    : <>los servicios {lista.map((nombre, i) => (
+      <span key={nombre}>{i > 0 && (i === lista.length - 1 ? ' y ' : ', ')}<strong>{nombre}</strong></span>
+    ))}</>;
+}
+
 export default function BusquedaAsistida({ onAplicar }) {
   const [texto, setTexto] = useState('');
   const [buscando, setBuscando] = useState(false);
@@ -26,7 +37,7 @@ export default function BusquedaAsistida({ onAplicar }) {
       const respuesta = await api('/ia/interpretar-busqueda', { method: 'POST', body: { texto: pedido } });
       const { filtros = {}, fuente, horarioParcial = false } = respuesta;
       const encontrados = ['servicio', 'especialidad', 'ciudad', 'dia_semana', 'hora_desde', 'hora_hasta']
-        .some((clave) => filtros[clave]);
+        .some((clave) => filtros[clave]) || Boolean(filtros.servicios?.length);
       setResultado({ ...filtros, fuente, encontrados });
       if (encontrados) onAplicar(filtros, { horarioParcial });
     } catch (err) {
@@ -79,13 +90,13 @@ export default function BusquedaAsistida({ onAplicar }) {
           {resultado.encontrados ? (
             <p>
               Aplicamos los filtros que entendimos; los ves abajo y podés quitarlos.{' '}
-              {resultado.servicio && <>Al pedir el turno, elegí el servicio <strong>{resultado.servicio}</strong>. </>}
+              {textoServicios(resultado) && <>Al pedir el turno, elegí {textoServicios(resultado)}. </>}
               <span className="assisted-search-source">{FUENTES[resultado.fuente] || FUENTES.reglas}</span>
             </p>
           ) : (
             <p>
               No encontramos datos para filtrar en tu mensaje. Probá mencionando el tipo de cuidado, el día o la zona.
-              {resultado.servicio && <> Para lo que contás, el servicio indicado es <strong>{resultado.servicio}</strong>.</>}
+              {textoServicios(resultado) && <> Para lo que contás, corresponde {textoServicios(resultado)}.</>}
             </p>
           )}
         </div>

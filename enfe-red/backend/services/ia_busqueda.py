@@ -34,15 +34,64 @@ FRANJAS = {
     'noche': ('20:00', '23:00'),
 }
 # Palabras clave → tipo de servicio del catálogo.
-CLAVES_SERVICIO = {
-    'Inyecciones': ('inyec', 'insulina', 'aplicar', 'vacuna', 'intramuscular', 'subcutan', 'pinchazo'),
-    'Curaciones': ('curacion', 'curar', 'herida', 'ulcera', 'escara', 'puntos', 'vendaje', 'aposito'),
-    'Control de signos vitales': ('presion', 'signos vitales', 'glucemia', 'azucar', 'temperatura', 'saturacion',
-                                  'fiebre'),
-    'Higiene y confort': ('higiene', 'banar', 'baño', 'bano', 'aseo', 'cambiar pañal', 'panal'),
-    'Acompañamiento de adultos mayores': ('acompan', 'cuidar a mi', 'cuidadora', 'compania'),
-    'Cuidados Intensivos': ('intensiv', 'terapia', 'respirador', 'traqueo', 'oxigeno'),
+# Cómo dice la gente cada tarea. Son expresiones regulares sobre el texto normalizado (sin tildes ni mayúsculas;
+# la ñ queda como n). Un pedido puede tener varias tareas: "curar una herida y medir la insulina".
+_MEDIR = (r'(medir|medirle|medirme|medirla|medirlo|medicion|mida|midan|mide|controlar|controlarle|controlarme|'
+          r'controle|controlen|control|controles|chequear|chequearle|chequeo|tomar|tomarle|tomarme|tome|tomen|'
+          r'revisar|revisarle)')
+_PONER = (r'(poner|ponerle|ponerme|ponerla|ponerlo|ponga|pongan|aplicar|aplicarle|aplicarme|aplique|apliquen|'
+          r'colocar|colocarle|coloque|coloquen|inyectar|inyectarle|inyecte|dar|darle|darme|den|de la)')
+_GLUCOSA = r'(insulina|azucar|glucosa|glucemia|diabetes|hgt)'
+# "Medirle la insulina" es controlar el azúcar; "ponerle la insulina" es una inyección.
+MEDIR_GLUCOSA = rf'\b{_MEDIR}\b(?:\s+\w+){{0,3}}?\s+{_GLUCOSA}\b'
+PONER_INSULINA = rf'\b{_PONER}\b(?:\s+\w+){{0,3}}?\s+insulina\b'
+PATRONES_SERVICIO = {
+    'Control de signos vitales': (
+        MEDIR_GLUCOSA, r'\b(glucemia|glucosa|azucar|hgt|glucometro)\b',
+        r'\b(presion|tension arterial|signos vitales|saturacion|saturometro|oximetro|pulso|temperatura|fiebre)\b',
+        r'\b(chequeo|control general|controles de rutina)\b',
+    ),
+    'Inyecciones': (
+        PONER_INSULINA, r'\binyec', r'\bvacuna', r'\bintramuscular', r'\bsubcutane', r'\bpinchazo',
+        r'\bampolla', r'\bheparina', r'\benoxaparina', r'\bpenicilina', r'\bb12\b',
+    ),
+    'Curaciones': (
+        r'\bcura(cion|ciones|r|rle|rla|rlo|rme|rte|n|s)?\b', r'\bherida', r'\bulcera', r'\bescara', r'\bllaga',
+        r'\bquemadura', r'\blastimadura', r'\bpuntos\b', r'\bvendaje', r'\bvendar', r'\baposito', r'\bgasa',
+        r'\bpost ?operatori', r'\bpostquirurgic', r'\bdespues de (la|una|su) (operacion|cirugia)', r'\bdrenaje',
+        r'\bpie diabetico', r'\bcicatriz',
+    ),
+    'Higiene y confort': (
+        r'\bhigien', r'\bban(ar|arla|arlo|arle|arme|en|e|o)\b', r'\bduch', r'\baseo\b', r'\bpanal(es)?\b',
+        r'\blavar(la|lo|le)?\b', r'\bropa de cama\b', r'\bcambiar(la|lo|le)? (la ropa|de ropa|las sabanas)',
+        r'\bconfort\b', r'\bcambio de posicion', r'\bvestir(la|lo|le)?\b',
+    ),
+    'Acompañamiento de adultos mayores': (
+        r'\bacompan', r'\bcompania\b', r'\bcuidador', r'\bcuid(ar|arla|arlo|arle|e|en)\b', r'\bque se quede\b',
+        r'\bquedarse con\b', r'\basist(ir|irla|irlo|a|an)\b', r'\bayud(ar|arla|arlo|e|en) a (comer|caminar|levantarse)',
+    ),
+    'Cuidados Intensivos': (
+        r'\bintensiv', r'\brespirador', r'\btraqueo', r'\boxigeno\b', r'\bsonda', r'\balta complejidad',
+        r'\binternacion domiciliaria', r'\bventilacion mecanica',
+    ),
 }
+
+
+def servicios_del_texto(texto, permitidos):
+    """Servicios que pide el texto, en el orden en que aparecen (puede ser más de uno)."""
+    t = normalizar(texto)
+    encontrados = {}
+    for servicio, patrones in PATRONES_SERVICIO.items():
+        if servicio not in permitidos:
+            continue
+        posiciones = [m.start() for patron in patrones for m in [re.search(patron, t)] if m]
+        if posiciones:
+            encontrados[servicio] = min(posiciones)
+    # "Insulina" sola ("necesito insulina para mi mamá") es aplicarla, salvo que se pida medirla.
+    if 'Inyecciones' in permitidos and 'Inyecciones' not in encontrados and re.search(r'\binsulina\b', t) \
+            and not re.search(MEDIR_GLUCOSA, t):
+        encontrados['Inyecciones'] = t.index('insulina')
+    return sorted(encontrados, key=encontrados.get)
 # Palabras clave → especialidad del profesional.
 CLAVES_ESPECIALIDAD = {
     # Solo cuando se pide la especialidad con esa palabra. Quién es el paciente ("mi abuela", "mi bebé") no la
@@ -81,7 +130,9 @@ INSTRUCCIONES = (
     'Completá "especialidad" SOLO si la persona pide una especialidad con esa palabra (por ejemplo "geriatra", '
     '"enfermera pediátrica", "terapia intensiva"). No la deduzcas por quién es el paciente: "mi abuela", '
     '"mi bebé" o "mi mamá" no piden una especialidad, y elegirla escondería a otros profesionales que pueden '
-    'atenderlo. Si pide una tarea concreta (poner insulina, una inyección, una curación), completá "servicio".'
+    'atenderlo. En "servicios" poné todas las tareas que pide (pueden ser varias, por ejemplo curar una herida y '
+    'medir la insulina). Medir o controlar la insulina o el azúcar es "Control de signos vitales"; ponerle o '
+    'aplicarle insulina es "Inyecciones". Si no pide una tarea concreta ("que la vengan a ver"), dejá la lista vacía.'
 )
 
 
@@ -141,10 +192,10 @@ def esquema_respuesta(permitidos):
             'dia_semana': enumerado(DIAS),
             'hora_desde': {'type': ['string', 'null']},
             'hora_hasta': {'type': ['string', 'null']},
-            'servicio': enumerado(permitidos['servicios']),
+            'servicios': {'type': 'array', 'items': {'type': 'string', 'enum': list(permitidos['servicios'])}},
             'aclaracion': {'type': ['string', 'null']},
         },
-        'required': ['especialidad', 'ciudad', 'dia_semana', 'hora_desde', 'hora_hasta', 'servicio', 'aclaracion'],
+        'required': ['especialidad', 'ciudad', 'dia_semana', 'hora_desde', 'hora_hasta', 'servicios', 'aclaracion'],
     }
 
 
@@ -180,7 +231,8 @@ def consultar_gemini(texto, permitidos):
     esquema = esquema_respuesta(permitidos)
     # Gemini usa "nullable" en lugar de tipos combinados.
     propiedades = {
-        nombre: ({'type': 'string', 'nullable': True, **({'enum': [v for v in p['enum'] if v]} if 'enum' in p else {})})
+        nombre: (p if p.get('type') == 'array' else
+                 {'type': 'string', 'nullable': True, **({'enum': [v for v in p['enum'] if v]} if 'enum' in p else {})})
         for nombre, p in esquema['properties'].items()
     }
     cuerpo = {
@@ -208,10 +260,8 @@ def interpretar_con_reglas(texto, permitidos):
     t = normalizar(texto)
     resultado = dict.fromkeys(('especialidad', 'ciudad', 'dia_semana', 'hora_desde', 'hora_hasta',
                                'servicio', 'aclaracion'))
-    for servicio, claves in CLAVES_SERVICIO.items():
-        if servicio in permitidos['servicios'] and any(normalizar(c) in t for c in claves):
-            resultado['servicio'] = servicio
-            break
+    resultado['servicios'] = servicios_del_texto(texto, permitidos['servicios'])
+    resultado['servicio'] = resultado['servicios'][0] if resultado['servicios'] else None
     for especialidad in permitidos['especialidades']:
         if pide_especialidad(texto, especialidad):
             resultado['especialidad'] = especialidad
@@ -259,11 +309,18 @@ def validar(crudo, permitidos):
         'especialidad': elegir('especialidad', permitidos['especialidades']),
         'ciudad': elegir('ciudad', permitidos['ciudades']),
         'dia_semana': elegir('dia_semana', DIAS),
-        'servicio': elegir('servicio', permitidos['servicios']),
+        'servicios': [],
+        'servicio': None,
         'hora_desde': None,
         'hora_hasta': None,
         'aclaracion': None,
     }
+    pedidos = crudo.get('servicios')
+    pedidos = pedidos if isinstance(pedidos, list) else [crudo.get('servicio')]
+    for servicio in pedidos:
+        if isinstance(servicio, str) and servicio in permitidos['servicios'] and servicio not in resultado['servicios']:
+            resultado['servicios'].append(servicio)
+    resultado['servicio'] = resultado['servicios'][0] if resultado['servicios'] else None
     horas = [crudo.get('hora_desde'), crudo.get('hora_hasta')]
     if all(isinstance(h, str) and re.fullmatch(r'(?:[01]\d|2[0-3]):[0-5]\d', h) for h in horas) and horas[0] < horas[1]:
         resultado['hora_desde'], resultado['hora_hasta'] = horas
@@ -302,8 +359,13 @@ def interpretar(texto, permitidos, proveedor=None):
     # La regla de seguridad no depende del modelo: si las reglas detectan urgencia, se avisa igual.
     filtros['aclaracion'] = filtros['aclaracion'] or reglas['aclaracion']
     # Lo que la IA no reconoció y las reglas sí, se completa con las reglas.
-    for campo in ('especialidad', 'ciudad', 'dia_semana', 'servicio'):
+    for campo in ('especialidad', 'ciudad', 'dia_semana'):
         filtros[campo] = filtros[campo] or reglas[campo]
+    # Las tareas: si las reglas reconocen alguna, mandan las reglas (distinguen "medir" de "poner" la insulina);
+    # si no, quedan las que entendió el modelo.
+    if reglas['servicios']:
+        filtros['servicios'] = reglas['servicios']
+        filtros['servicio'] = reglas['servicio']
     if not filtros['hora_desde'] and reglas['hora_desde']:
         filtros['hora_desde'], filtros['hora_hasta'] = reglas['hora_desde'], reglas['hora_hasta']
     return filtros, proveedor

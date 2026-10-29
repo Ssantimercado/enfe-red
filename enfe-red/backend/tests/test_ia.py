@@ -48,8 +48,44 @@ class ReglasTest(unittest.TestCase):
         # "mi abuela" no pide un geriatra: insulina la pone cualquiera que haga inyecciones.
         self.assertEqual(filtros, {
             'especialidad': None, 'ciudad': 'Godoy Cruz', 'dia_semana': 'Martes',
-            'hora_desde': '14:00', 'hora_hasta': '18:00', 'servicio': 'Inyecciones', 'aclaracion': None,
+            'hora_desde': '14:00', 'hora_hasta': '18:00', 'servicio': 'Inyecciones', 'servicios': ['Inyecciones'],
+            'aclaracion': None,
         })
+
+    def test_entiende_las_tareas_como_las_dice_la_gente(self):
+        permitidos = {**PERMITIDOS, 'servicios': [
+            'Curaciones', 'Inyecciones', 'Control de signos vitales', 'Higiene y confort',
+            'Acompañamiento de adultos mayores', 'Cuidados Intensivos']}
+        casos = {
+            # Medir la insulina es controlar el azúcar; ponerla es una inyección.
+            'necesito alguien que venga a medirme la insulina': ['Control de signos vitales'],
+            'necesito alguien que venga a medir la insulina de mi mamá': ['Control de signos vitales'],
+            'que le controlen el azúcar a mi abuelo diabético': ['Control de signos vitales'],
+            'necesito que le pongan la insulina a mi abuela': ['Inyecciones'],
+            'necesito insulina para mi papá': ['Inyecciones'],
+            # Varias tareas en el mismo pedido.
+            'quiero a alguien que venga a curar y a medir la insulina a mi hijo': ['Curaciones', 'Control de signos vitales'],
+            'necesito que le curen una herida y le midan la insulina': ['Curaciones', 'Control de signos vitales'],
+            'necesito que le den la insulina y la acompañen': ['Inyecciones', 'Acompañamiento de adultos mayores'],
+            # Otras formas de decirlo.
+            'necesito alguien que venga a darle curaciones a mi hijo': ['Curaciones'],
+            'sacarle los puntos a mi hijo después de la operación': ['Curaciones'],
+            'curar una quemadura en la mano': ['Curaciones'],
+            'tomarle la presión a mi mamá todos los días': ['Control de signos vitales'],
+            'aplicarle una vacuna a mi bebé': ['Inyecciones'],
+            'necesito que la bañen y le cambien los pañales': ['Higiene y confort'],
+            'alguien que se quede con mi abuela a la noche': ['Acompañamiento de adultos mayores'],
+            'que cuiden a mi abuelo mientras trabajo': ['Acompañamiento de adultos mayores'],
+            'mi papá está con oxígeno y sonda': ['Cuidados Intensivos'],
+            # Sin una tarea concreta, cualquier enfermero sirve: no se filtra por servicio.
+            'necesito que a mi abuela la vengan a ver': [],
+        }
+        for texto, servicios in casos.items():
+            with self.subTest(texto=texto):
+                filtros = interpretar_con_reglas(texto, permitidos)
+                self.assertEqual(filtros['servicios'], servicios)
+                # Ninguna de estas frases pide una especialidad.
+                self.assertIsNone(filtros['especialidad'])
 
     def test_quien_es_el_paciente_no_elige_la_especialidad(self):
         for texto in ('insulina para mi abuela', 'curación para mi bebé', 'cuidar a mi abuelo, adulto mayor',
@@ -107,7 +143,9 @@ class ReglasTest(unittest.TestCase):
         filtros = validar({'especialidad': 'Cardiología', 'ciudad': 'Córdoba', 'dia_semana': 'Feriado',
                            'hora_desde': '18:00', 'hora_hasta': '14:00', 'servicio': 'Masajes',
                            'aclaracion': 'Tomá ibuprofeno'}, PERMITIDOS)
-        self.assertTrue(all(valor is None for valor in filtros.values()))
+        self.assertTrue(all(valor in (None, []) for valor in filtros.values()))
+        self.assertEqual(validar({'servicios': ['Curaciones', 'Masajes', 'Curaciones', 'Inyecciones']},
+                                 PERMITIDOS)['servicios'], ['Curaciones', 'Inyecciones'])
         with self.assertRaises(IAError):
             validar('texto', PERMITIDOS)
 

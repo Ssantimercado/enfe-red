@@ -786,10 +786,14 @@ def buscar_enfermeros():
     texto = request.args.get('q', '').strip()
     especialidad = request.args.get('especialidad', '').strip()
     ciudad = request.args.get('ciudad', '').strip()
-    # SCRUM-14/53: id de un servicio del catálogo; solo quienes declararon ofrecerlo.
-    servicio_id = request.args.get('servicio', type=int)
-    if 'servicio' in request.args and (servicio_id is None or servicio_id < 1):
-        return jsonify({'error': 'El servicio no es válido'}), 400
+    # SCRUM-14/53: id de un servicio del catálogo; solo quienes declararon ofrecerlo. La búsqueda asistida puede
+    # pedir varios separados por coma ("curar y medir la insulina"): aparecen quienes ofrecen todos.
+    servicio_ids = []
+    if 'servicio' in request.args:
+        partes = request.args.get('servicio', '').split(',')
+        if not partes or len(partes) > 6 or not all(p.strip().isdigit() and int(p) >= 1 for p in partes):
+            return jsonify({'error': 'El servicio no es válido'}), 400
+        servicio_ids = list(dict.fromkeys(int(p) for p in partes))
     precio_max = request.args.get('precio_max', type=float)
     precio_min = request.args.get('precio_min', type=float)
     dia_semana = request.args.get('dia_semana', '').strip()
@@ -854,7 +858,7 @@ def buscar_enfermeros():
     if ciudad:
         query = query.filter(_filtro_zona(ciudad))
 
-    if servicio_id is not None:
+    for servicio_id in servicio_ids:
         query = query.filter(Enfermero.servicios.any(and_(
             Servicio.idServicio == servicio_id, Servicio.activo.is_(True),
         )))

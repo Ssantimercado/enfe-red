@@ -1,4 +1,5 @@
 import { DAYS } from '../api';
+import { nombreServicios } from './nombreServicios';
 
 export default function DirectoryFilters({
   values,
@@ -30,6 +31,10 @@ export default function DirectoryFilters({
           onChange={(e) => onChange('servicio', e.target.value)}
         >
           <option value="">Todos los servicios</option>
+          {/* Varios servicios juntos vienen de la búsqueda asistida: se muestran como una opción más. */}
+          {String(values.servicio).includes(',') && (
+            <option value={values.servicio}>{nombreServicios(values.servicio, servicios)}</option>
+          )}
           {servicios.map((servicio) => (
             <option key={servicio.idServicio} value={String(servicio.idServicio)}>
               {servicio.tipoServicio}

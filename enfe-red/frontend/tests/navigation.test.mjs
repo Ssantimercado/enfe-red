@@ -1884,6 +1884,46 @@ test('la búsqueda asistida convierte el pedido en filtros editables', async () 
   }
 });
 
+test('la búsqueda asistida aplica varias tareas juntas (curar y medir la insulina)', async () => {
+  session('paciente');
+  const original = globalThis.fetch;
+  const busquedas = [];
+  globalThis.fetch = async (url, options = {}) => {
+    const ruta = String(url);
+    if (ruta.endsWith('/ia/interpretar-busqueda')) {
+      return response({
+        fuente: 'reglas',
+        horarioParcial: false,
+        filtros: { servicio: 'Curaciones', servicios: ['Curaciones', 'Control de signos vitales'], especialidad: null,
+          ciudad: null, dia_semana: null, hora_desde: null, hora_hasta: null, aclaracion: null },
+      });
+    }
+    if (ruta.endsWith('/servicios')) {
+      return response([{ idServicio: 1, tipoServicio: 'Curaciones' }, { idServicio: 3, tipoServicio: 'Control de signos vitales' }]);
+    }
+    if (ruta.includes('/enfermeros/buscar')) {
+      busquedas.push(new URL(ruta).searchParams);
+      return response({ enfermeros: [], total_resultados: 0, total_paginas: 0 });
+    }
+    return original(url, options);
+  };
+  try {
+    await mount('/cartilla');
+    const campo = document.querySelector('#busqueda-asistida');
+    await typeTextArea(campo, 'quiero alguien que venga a curar y a medir la insulina a mi hijo');
+    await act(async () => campo.closest('form').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })));
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 300)));
+    // Las dos tareas van juntas: aparecen quienes hacen las dos.
+    assert.equal(busquedas.at(-1).get('servicio'), '1,3');
+    assert.ok(button('Quitar filtro Curaciones y Control de signos vitales'));
+    assert.equal(document.querySelector('#desktop-servicio').selectedOptions[0].textContent, 'Curaciones y Control de signos vitales');
+    assert.match(document.querySelector('.assisted-search-result').textContent,
+      /elegí los servicios Curaciones y Control de signos vitales/);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
 test('la búsqueda asistida avisa ante una urgencia y si falla deja los filtros manuales', async () => {
   session('paciente');
   const original = globalThis.fetch;

@@ -98,7 +98,10 @@ class ServiciosDelEnfermeroTest(BaseCatalogoTest):
         self.assertEqual(nombres(301), ['Laura'])
         self.assertEqual(sorted(nombres(302)), ['Laura', 'Pedro'])
         self.assertEqual(nombres(303), [])
-        todos = self.client.get('/api/enfermeros/buscar').json['enfermeros']
+        # Varios servicios (búsqueda asistida: "curar y poner una inyección"): quienes ofrecen todos.
+        self.assertEqual(nombres('301,302'), ['Laura'])
+        self.assertEqual(sorted(nombres('302,302')), ['Laura', 'Pedro'])
+        todos =self.client.get('/api/enfermeros/buscar').json['enfermeros']
         laura = next(e for e in todos if e['nombre'] == 'Laura')
         self.assertEqual([s['tipoServicio'] for s in laura['servicios']], ['Curaciones', 'Inyecciones'])
         for valor in ('abc', '0', '-3'):
