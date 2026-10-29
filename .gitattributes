@@ -1,0 +1,2 @@
+# El control de claves es un script de shell: con saltos de línea de Windows no corre.
+.githooks/* text eol=lf
