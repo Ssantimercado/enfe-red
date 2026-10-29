@@ -981,7 +981,8 @@
 }
 .price-range {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* minmax(0, ...): los campos de fecha tienen un ancho mínimo propio y desbordaban en el celular. */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 .filter-hint {
@@ -1615,6 +1616,8 @@
 .service-history-filters input {
   font-size: 15px;
   padding: 11px 9px;
+  min-width: 0;
+  width: 100%;
 }
 .service-history-filters-summary {
   display: grid;

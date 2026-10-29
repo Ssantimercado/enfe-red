@@ -9,11 +9,14 @@ export const direccionDe = ([lat, lng], signal) => requestApi(`/geocodificar/inv
 
 // Se espera a que la persona deje de escribir: no se busca en cada letra (y Nominatim pide pocos pedidos).
 export const ESPERA_DIRECCION_MS = 1200;
+const ESPERA_RUTA_MS = 6000;
 
 // Mientras `activo`, busca `texto` en el mapa al terminar de escribir y avisa con alEncontrar([lat, lng], lugar).
+// `pendiente` vale mientras falta la respuesta; `cancelar()` la descarta (por ejemplo, si la persona tocó el mapa).
 export function useBuscarDireccion(texto, activo, alEncontrar) {
   const [estado, setEstado] = useState({ fase: 'idle', mensaje: '' });
   const ultimo = useRef(alEncontrar);
+  const detener = useRef(null);
   useEffect(() => {
     ultimo.current = alEncontrar;
   });
@@ -24,6 +27,7 @@ export function useBuscarDireccion(texto, activo, alEncontrar) {
       return undefined;
     }
     const controller = new AbortController();
+    setEstado({ fase: 'esperando', mensaje: '' });
     const timer = window.setTimeout(async () => {
       setEstado({ fase: 'buscando', mensaje: 'Buscando la dirección en el mapa…' });
       try {
@@ -45,12 +49,17 @@ export function useBuscarDireccion(texto, activo, alEncontrar) {
         });
       }
     }, ESPERA_DIRECCION_MS);
-    return () => {
+    detener.current = () => {
       window.clearTimeout(timer);
       controller.abort();
     };
+    return () => detener.current?.();
   }, [texto, activo]);
-  return estado;
+  const cancelar = useCallback(() => {
+    detener.current?.();
+    setEstado(actual => (actual.fase === 'esperando' || actual.fase === 'buscando' ? { fase: 'idle', mensaje: '' } : actual));
+  }, []);
+  return { ...estado, pendiente: estado.fase === 'esperando' || estado.fase === 'buscando', cancelar };
 }
 
 const MENSAJES_GEOLOCALIZACION = {
@@ -64,9 +73,12 @@ export function useMiUbicacion() {
   const [posicion, setPosicion] = useState(null);
   const [estado, setEstado] = useState('idle');
   const [error, setError] = useState('');
+  // Número del último pedido: una respuesta de un pedido anterior o cancelado no pisa nada.
+  const pedido = useRef(0);
 
   // onExito([lat, lng], precisionEnMetros) es opcional: se llama solo si la ubicación llegó bien.
   const ubicar = useCallback((onExito) => {
+    const numero = ++pedido.current;
     if (!navigator.geolocation) {
       setEstado('error');
       setError('Este navegador no permite obtener tu ubicación.');
@@ -85,12 +97,14 @@ export function useMiUbicacion() {
     setError('');
     navigator.geolocation.getCurrentPosition(
       ({ coords }) => {
+        if (numero !== pedido.current) return;
         const punto = [coords.latitude, coords.longitude];
         setPosicion(punto);
         setEstado('ready');
         if (typeof onExito === 'function') onExito(punto, coords.accuracy);
       },
       (fallo) => {
+        if (numero !== pedido.current) return;
         setEstado('error');
         setError(MENSAJES_GEOLOCALIZACION[fallo.code] || 'No se pudo obtener tu ubicación.');
       },
@@ -98,7 +112,12 @@ export function useMiUbicacion() {
     );
   }, []);
 
-  return { posicion, estado, error, ubicar };
+  const cancelar = useCallback(() => {
+    pedido.current += 1;
+    setEstado(actual => (actual === 'loading' ? 'idle' : actual));
+  }, []);
+
+  return { posicion, estado, error, ubicar, cancelar };
 }
 
 // Distancia en línea recta (km): respaldo cuando no hay servicio de rutas por calles.
@@ -124,6 +143,12 @@ export function useRutaReal(origen, destino) {
     }
 
     const controller = new AbortController();
+    // Si el servicio de rutas no contesta, se corta y queda la distancia en línea recta.
+    let porTiempo = false;
+    const limite = window.setTimeout(() => {
+      porTiempo = true;
+      controller.abort();
+    }, ESPERA_RUTA_MS);
 
     async function obtenerRuta() {
       setLoadingRoute(true);
@@ -150,18 +175,25 @@ export function useRutaReal(origen, destino) {
           tiempo: rutaElegida.duration,
         });
       } catch (error) {
-        if (error.name !== 'AbortError') {
+        if (porTiempo) {
+          setRouteError('El servicio de rutas tardó demasiado.');
+          setLoadingRoute(false);
+        } else if (error.name !== 'AbortError') {
           console.error('Error al calcular la ruta:', error);
           setRouteError(error.message || 'No se pudo calcular la ruta. Intentá nuevamente.');
           setRuta(null);
         }
       } finally {
+        window.clearTimeout(limite);
         if (!controller.signal.aborted) setLoadingRoute(false);
       }
     }
 
     obtenerRuta();
-    return () => controller.abort();
+    return () => {
+      window.clearTimeout(limite);
+      controller.abort();
+    };
   }, [origen, destino]);
 
   return { ruta, loadingRoute, routeError };

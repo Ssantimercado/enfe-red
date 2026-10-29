@@ -17,6 +17,7 @@ const TIPOS = {
   vencida: 'Venció sin respuesta',
   matricula: 'Tu matrícula',
   ubicacion: 'Lugar de atención',
+  pago: 'Pago avisado',
 };
 
 function fechaLegible(valor) {
@@ -32,6 +33,8 @@ function fechaLegible(valor) {
 }
 
 function destinoDe(item) {
+  // El aviso de pago le llega al enfermero, que lo confirma desde su bandeja.
+  if (item.tipo === 'pago') return '/solicitudes-enfermero';
   if (item.idSolicitud) return `/solicitudes/${item.idSolicitud}`;
   if (item.tipo === 'matricula') return '/perfil-enfermero';
   return null;

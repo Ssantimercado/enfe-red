@@ -38,6 +38,9 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const { createRoot } = await import('react-dom/client');
 window.scrollTo = () => {};
 window.HTMLElement.prototype.scrollIntoView = function () {};
+// JSDOM no dibuja: el próximo cuadro llega enseguida.
+window.requestAnimationFrame ??= (alDibujar) => setTimeout(alDibujar, 0);
+window.cancelAnimationFrame ??= (id) => clearTimeout(id);
 window.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
 window.HTMLDialogElement.prototype.close = function () { this.open = false; };
 let App, root;
@@ -957,6 +960,7 @@ test('cambiar ciudad descarta el punto anterior antes de guardar', async () => {
       payload = JSON.parse(options.body);
       return response({ ...profile, ...payload });
     }
+    if (String(url).includes('/geocodificar?')) return response({ error: 'No encontramos esa dirección en el mapa.' }, 404);
     return String(url).endsWith('/horarios') ? response([]) : response({
       ...profile, ciudad: 'Mendoza', direccion: 'Vieja 123', latitud: -32.89, longitud: -68.84,
     });
@@ -967,6 +971,11 @@ test('cambiar ciudad descarta el punto anterior antes de guardar', async () => {
     assert.match(document.body.textContent, /Hay un punto seleccionado/);
     await type(document.querySelector('input[name="ciudad"]'), 'Córdoba');
     assert.match(document.body.textContent, /Sin punto seleccionado/);
+    // Mientras se busca la dirección nueva no se guarda; cuando termina (acá, sin resultado), sí.
+    await submitForm();
+    assert.equal(payload, undefined);
+    assert.match(document.body.textContent, /estamos ubicando tu dirección en el mapa/);
+    await esperar(1400);
     await submitForm();
     assert.equal(payload.ciudad, 'Córdoba');
     assert.equal(payload.latitud, null);
@@ -1684,7 +1693,15 @@ test('el enfermero confirma que le llegó el pago de un turno pasado y eso cierr
     const tarjetaAntes = botones[0].closest('.solicitud-card');
     assert.match(tarjetaAntes.textContent, /Cuando te llegue el pago, confirmalo para cerrar la atención/);
     assert.match(document.body.textContent, /Después del turno vas a confirmar acá que te llegó el pago/);
+    // Primero se pide confirmarlo: cerrar la atención no se deshace.
     await click(botones[0]);
+    assert.equal(solicitudRequests.some(r => r.url === '/solicitudes/21/finalizar'), false);
+    assert.match(tarjetaAntes.textContent, /¿Confirmás que te llegó el pago\?/);
+    assert.equal(document.activeElement?.textContent, 'Sí, me llegó');
+    await click(button('Todavía no'));
+    assert.doesNotMatch(tarjetaAntes.textContent, /¿Confirmás que te llegó el pago\?/);
+    await click([...tarjetaAntes.querySelectorAll('button')].find(b => b.textContent === 'Me llegó el pago'));
+    await click(button('Sí, me llegó'));
     assert.ok(solicitudRequests.some(r => r.url === '/solicitudes/21/finalizar' && r.method === 'put'));
     assert.match(document.body.textContent, /Pago confirmado: la atención quedó cerrada/);
     // La realizada pasa a "Anteriores"; en "Turnos aceptados" queda solo la futura.
@@ -3447,10 +3464,15 @@ test('sin marcar el lugar en el mapa el pedido de turno no se envía', async () 
   await type(document.querySelector('input[name="fecha"]'), '2099-12-10');
   await type(document.querySelector('input[name="hora"]'), '14:30');
   await type(document.querySelector('input[name="direccionAtencion"]'), 'San Martín 123');
+  // Recién escrita, todavía se está buscando en el mapa: se pide esperar.
+  await submitForm();
+  assert.equal(document.querySelector('[role="alert"]').textContent, 'Esperá un momento: estamos ubicando la dirección en el mapa.');
+  await esperar(1400);
   await submitForm();
   assert.equal(document.querySelector('[role="alert"]').textContent, 'Marcá en el mapa dónde vas a recibir la atención.');
   assert.equal(solicitudRequests.filter((r) => r.method === 'post').length, 0);
-  assert.match(document.body.textContent, /Todavía no marcaste el lugar/);
+  // La búsqueda no encontró la dirección: se pide marcar el lugar tocando el mapa.
+  assert.match(document.body.textContent, /tocando el mapa/);
 });
 
 test('si el turno se cancela con el chat abierto en Mis solicitudes, la tarjeta pasa a Anteriores sin perder el aviso', async () => {
@@ -3728,6 +3750,8 @@ test('el paciente avisa que pagó y el profesional ve el aviso para confirmar', 
     await click(button('Ya pagué'));
     assert.equal(avisado, true);
     assert.match(tarjeta.textContent, /Le avisaste a Laura Gómez que pagaste\. Cuando confirme que le llegó, la atención se cierra/);
+    // El botón desapareció: el foco queda en la confirmación.
+    assert.match(document.activeElement?.textContent || '', /Le avisaste a Laura Gómez que pagaste/);
     assert.ok(![...tarjeta.querySelectorAll('button')].some((b) => b.textContent === 'Ya pagué'));
   } finally { globalThis.fetch = original; }
 
@@ -3744,6 +3768,61 @@ test('el paciente avisa que pagó y el profesional ve el aviso para confirmar', 
     const tarjeta = document.querySelector('.solicitud-card');
     assert.match(tarjeta.textContent, /Ana avisó que ya te pagó\. Cuando te llegue, confirmalo para cerrar la atención/);
     assert.ok([...tarjeta.querySelectorAll('button')].some((b) => b.textContent === 'Me llegó el pago'));
+  } finally { globalThis.fetch = original; }
+});
+
+test('con "Donde estoy ahora" impreciso se avisa y se puede volver a intentar', async () => {
+  session();
+  solicitudesAPI();
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url, options = {}) => {
+    const ruta = String(url);
+    if (ruta.endsWith('/perfil/paciente')) return response({ idPaciente: 101, direccion: 'Belgrano 450, Godoy Cruz', latitud: -32.92, longitud: -68.84, telefono: '2615551234' });
+    if (ruta.includes('/geocodificar/inversa')) return response({ direccion: 'Avenida San Martín 1200, Ciudad de Mendoza' });
+    return original(url, options);
+  };
+  let pedidos = 0;
+  Object.defineProperty(globalThis.navigator, 'geolocation', {
+    configurable: true,
+    value: {
+      getCurrentPosition: (ok, fallo) => {
+        pedidos += 1;
+        if (pedidos === 1) fallo({ code: 1 });
+        else ok({ coords: { latitude: -32.8893, longitude: -68.8391, accuracy: 850 } });
+      },
+    },
+  });
+  try {
+    await mount('/perfil/21/solicitar');
+    const direccion = () => document.querySelector('input[name="direccionAtencion"]');
+    const estadoLugar = () => document.querySelector('.solicitud-ubicacion > p[role="status"]').textContent;
+    await click(document.querySelector('input[name="lugar"][value="actual"]'));
+    // La dirección del perfil no es la de donde está ahora.
+    assert.equal(direccion().value, '');
+    assert.match(estadoLugar(), /Permití el acceso a tu ubicación/);
+    await click(button('Intentar de nuevo'));
+    await esperar(50);
+    assert.equal(pedidos, 2);
+    assert.equal(direccion().value, 'Avenida San Martín 1200, Ciudad de Mendoza');
+    assert.match(estadoLugar(), /La ubicación es aproximada \(unos 850 metros\)/);
+    assert.ok(button('Volver a buscar mi ubicación'));
+  } finally {
+    globalThis.fetch = original;
+    delete globalThis.navigator.geolocation;
+  }
+});
+
+test('la cartilla no repite una especialidad escrita con y sin tilde', async () => {
+  session('paciente');
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url, options = {}) => (String(url).endsWith('/enfermeros')
+    ? response([{ especialidad: 'Pediatría' }, { especialidad: 'pediatria' }, { especialidad: 'Geriatría' }])
+    : original(url, options));
+  try {
+    await mount('/cartilla');
+    await esperar(20);
+    const opciones = [...document.querySelectorAll('select[id$="-especialidad"]')[0]?.querySelectorAll('option') || []].map((o) => o.textContent);
+    assert.deepEqual(opciones.filter((o) => /iatr/i.test(o)), ['Geriatría', 'Pediatría']);
   } finally { globalThis.fetch = original; }
 });
 

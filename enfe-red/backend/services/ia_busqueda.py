@@ -10,13 +10,18 @@ import http.client
 import json
 import os
 import re
+import time
 import unicodedata
 import urllib.request
 
 DIAS = ('Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo')
 MAX_TEXTO = 300
-# Si Gemini no contesta en 5 segundos se usan las reglas: más espera se siente como que la búsqueda no anda.
-TIMEOUT_SEGUNDOS = 5
+# Si Gemini no contesta en 3 segundos se usan las reglas: más espera se siente como que la búsqueda no anda.
+TIMEOUT_SEGUNDOS = 3
+# Si Gemini falla (servicio saturado o sin conexión), las búsquedas siguientes van directo a las reglas
+# durante este tiempo, en lugar de esperar otra vez.
+PAUSA_TRAS_FALLA = 120
+_pausa = {'hasta': 0.0}
 
 # Franjas para expresiones como "a la tarde". Rangos cortos para que coincidan con más horarios cargados.
 FRANJAS = {
@@ -74,7 +79,32 @@ def anonimizar(texto):
     # Calles con altura ("San Martín 1250"): se deja la ciudad, que sí sirve para buscar.
     texto = re.sub(r'\b(calle|av\.?|avenida|pasaje|ruta)\s+[\wáéíóúñ. ]+?\s\d{1,5}\b', '[dirección]', texto,
                    flags=re.IGNORECASE)
-    return texto
+    # Calles escritas sin "calle" ni "avenida", pero con una pista de lugar delante ("vivo en cayetano
+    # silva 1172"). Sin la pista no se toca nada: "geriatría durante 10 días" o "a la mañana 10 a 12" son
+    # parte del pedido.
+    return _CALLE_SIN_PREFIJO.sub(_quitar_calle, texto)
+
+
+_NO_SON_CALLE = {
+    'a', 'al', 'el', 'la', 'las', 'los', 'lo', 'de', 'del', 'en', 'y', 'o', 'u', 'e', 'hasta', 'desde', 'entre',
+    'tipo', 'por', 'para', 'con', 'sin', 'unos', 'unas', 'tengo', 'tiene', 'edad', 'mas', 'más', 'menos', 'cada',
+    'lunes', 'martes', 'miercoles', 'miércoles', 'jueves', 'viernes', 'sabado', 'sábado', 'domingo',
+    'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'setiembre',
+    'octubre', 'noviembre', 'diciembre', 'mañana', 'tarde', 'noche', 'turno', 'turnos', 'durante', 'diarias',
+    'diarios', 'semana', 'mes', 'dia', 'día', 'horario',
+}
+_CALLE_SIN_PREFIJO = re.compile(
+    r'\b(?P<pista>vivo en|viven en|vive en|queda en|domicilio:?|direcci[oó]n:?|casa en|en)\s+'
+    r'(?P<calle>(?:[^\W\d_]+\s+){0,2}[^\W\d_]{3,})\s+\d{2,5}\b'
+    r'(?!\s*(?:hs\b|h\b|:|\.\d|horas?\b|años?\b|am\b|pm\b|%|minutos?\b|d[ií]as?\b|semanas?\b|meses\b|veces\b|-|a\s+\d))',
+    flags=re.IGNORECASE,
+)
+
+
+def _quitar_calle(coincidencia):
+    if any(palabra.lower() in _NO_SON_CALLE for palabra in coincidencia.group('calle').split()):
+        return coincidencia.group(0)
+    return f"{coincidencia.group('pista')} [dirección]"
 
 
 def esquema_respuesta(permitidos):
@@ -116,6 +146,7 @@ def _post_json(url, cuerpo, headers):
         with urllib.request.urlopen(req, timeout=TIMEOUT_SEGUNDOS) as respuesta:
             return json.loads(respuesta.read().decode('utf-8'))
     except (OSError, http.client.HTTPException, ValueError) as error:
+        _pausa['hasta'] = time.monotonic() + PAUSA_TRAS_FALLA
         raise IAError(type(error).__name__) from error
 
 
@@ -225,7 +256,7 @@ def interpretar(texto, permitidos, proveedor=None):
     proveedor = (proveedor or os.getenv('IA_PROVEEDOR', 'reglas')).strip().lower()
     reglas = validar(interpretar_con_reglas(texto, permitidos), permitidos)
     consultar = PROVEEDORES.get(proveedor)
-    if consultar is None:
+    if consultar is None or time.monotonic() < _pausa['hasta']:
         return reglas, 'reglas'
     try:
         filtros = validar(consultar(anonimizar(texto), permitidos), permitidos)
@@ -233,4 +264,9 @@ def interpretar(texto, permitidos, proveedor=None):
         return reglas, 'reglas'
     # La regla de seguridad no depende del modelo: si las reglas detectan urgencia, se avisa igual.
     filtros['aclaracion'] = filtros['aclaracion'] or reglas['aclaracion']
+    # Lo que la IA no reconoció y las reglas sí, se completa con las reglas.
+    for campo in ('especialidad', 'ciudad', 'dia_semana', 'servicio'):
+        filtros[campo] = filtros[campo] or reglas[campo]
+    if not filtros['hora_desde'] and reglas['hora_desde']:
+        filtros['hora_desde'], filtros['hora_hasta'] = reglas['hora_desde'], reglas['hora_hasta']
     return filtros, proveedor

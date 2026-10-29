@@ -95,6 +95,10 @@ export default function ProfileEditor({ role }) {
       document.querySelector('input[name="telefono"]')?.focus();
       return;
     }
+    if (direccionEnMapa.pendiente) {
+      setError('Esperá un momento: estamos ubicando tu dirección en el mapa.');
+      return;
+    }
     setSaving(true);
     const payload = Object.fromEntries(
       fields.map(([key, , type]) => [
@@ -228,7 +232,8 @@ export default function ProfileEditor({ role }) {
                             setForm((current) => ({
                               ...current,
                               [key]: valor,
-                              ...(nurse && ['direccion', 'ciudad'].includes(key)
+                              // El punto anterior ya no corresponde a la dirección nueva: se vuelve a ubicar.
+                              ...(key === 'direccion' || (nurse && key === 'ciudad')
                                 ? { latitud: null, longitud: null }
                                 : {}),
                             }));
@@ -308,9 +313,11 @@ export default function ProfileEditor({ role }) {
                                   ? 'Marcá tu zona de atención tocando el mapa. En la cartilla se muestra un punto aproximado, no tu dirección.'
                                   : 'Marcá el lugar donde recibirías la atención. Solo se comparte si activás la opción de compartir ubicación.'
                               }
-                              onChange={(latitud, longitud) => setForm((current) => ({
-                                ...current, latitud, longitud,
-                              }))}
+                              onChange={(latitud, longitud) => {
+                                // Lo que toca la persona manda: una búsqueda que llegue tarde no lo pisa.
+                                direccionEnMapa.cancelar();
+                                setForm((current) => ({ ...current, latitud, longitud }));
+                              }}
                             />
                           </Suspense>
                         </div>

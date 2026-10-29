@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { requestApi as api, enlaceWhatsapp, sesionActual } from '../api';
 import { fechaLegible, turnoFuturo } from '../fechas';
@@ -38,11 +38,20 @@ export async function calificacionesDelHistorial(signal) {
 function PagoPaciente({ solicitud, onActualizada }) {
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState('');
+  // Al avisar, el botón desaparece: el foco pasa a la confirmación para no perderse.
+  const recienAvisado = useRef(false);
+  const confirmacion = useRef(null);
+  useEffect(() => {
+    if (recienAvisado.current && solicitud.pagoInformadoEn) {
+      recienAvisado.current = false;
+      confirmacion.current?.focus();
+    }
+  }, [solicitud.pagoInformadoEn]);
   if (solicitud.estado !== 'Aceptada' || turnoFuturo(solicitud)) return null;
   const profesional = [solicitud.enfermero?.nombre, solicitud.enfermero?.apellido].filter(Boolean).join(' ') || 'el profesional';
   if (solicitud.pagoInformadoEn) {
     return (
-      <p className="notice notice-success solicitud-pago" role="status">
+      <p ref={confirmacion} tabIndex={-1} className="notice notice-success solicitud-pago" role="status">
         Le avisaste a {profesional} que pagaste. Cuando confirme que le llegó, la atención se cierra y vas a poder
         calificarla.
       </p>
@@ -54,7 +63,10 @@ function PagoPaciente({ solicitud, onActualizada }) {
     setError('');
     try {
       const respuesta = await informarPago(solicitud.idSolicitud);
-      if (respuesta?.solicitud) onActualizada?.(respuesta.solicitud);
+      if (respuesta?.solicitud) {
+        recienAvisado.current = true;
+        onActualizada?.(respuesta.solicitud);
+      }
     } catch (err) {
       setError(errorSolicitud(err));
     } finally {
@@ -121,7 +133,10 @@ export function AccionesPaciente({
           <Link className="button button-secondary" to="/cartilla">Buscar otro profesional</Link>
         )}
       </div>
-      {chatActivo && <LugarAtencionPaciente solicitud={solicitud} onActualizada={onActualizada} />}
+      {/* Terminado el turno ya no hace falta marcar el lugar (el profesional deja de verlo). */}
+      {chatActivo && solicitud.lugarEditable !== false && (
+        <LugarAtencionPaciente solicitud={solicitud} onActualizada={onActualizada} />
+      )}
       <ReprogramarSolicitud solicitud={solicitud} onReprogramada={onActualizada} />
     </>
   );

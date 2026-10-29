@@ -117,7 +117,7 @@ def _cancelar_solicitudes(usuario):
     canceladas = 0
     for solicitud in consulta.filter(SolicitudServicio.estado.in_(ESTADOS_ACTIVOS)).all():
         if solicitud.estado == 'Aceptada' and datetime.combine(solicitud.fecha, solicitud.hora) <= ahora:
-            # Un turno aceptado que ya pasó queda para que el enfermero lo cierre como realizado.
+            # Un turno aceptado que ya pasó queda abierto hasta que el enfermero confirme que le llegó el pago.
             continue
         solicitud.estado = 'Cancelada'
         solicitud.canceladaPor = 'paciente' if usuario.perfil_paciente else 'enfermero'

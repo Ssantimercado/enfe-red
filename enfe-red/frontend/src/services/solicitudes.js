@@ -26,11 +26,11 @@ export const obtenerServicios = (signal) => api.get('/servicios', { signal }).th
 export const crearSolicitud = (datos) => api.post('/solicitudes', datos).then(r => r.data);
 export const obtenerSolicitud = (id, signal) => api.get(`/solicitudes/${id}`, { signal }).then(r => r.data);
 export const cancelarSolicitud = (id) => api.put(`/solicitudes/${id}/cancelar`).then(r => r.data);
-// El paciente cambia día u hora de un turno Pendiente o Aceptado (vuelve a quedar Pendiente).
 // El paciente avisa que ya pagó; la atención se cierra cuando el enfermero confirma que le llegó (finalizar).
 export const informarPago = (id) => api.put(`/solicitudes/${id}/pago-informado`).then(r => r.data);
 // HU16: el paciente marca o cambia el lugar de atención de un turno en curso.
 export const guardarUbicacionAtencion = (id, latitudAtencion, longitudAtencion) => api.put(`/solicitudes/${id}/ubicacion`, { latitudAtencion, longitudAtencion }).then(r => r.data);
+// El paciente cambia día u hora de un turno Pendiente o Aceptado (vuelve a quedar Pendiente).
 export const reprogramarSolicitud = (id, { fecha, hora }) => api.put(`/solicitudes/${id}/reprogramar`, { fecha, hora }).then(r => r.data);
 // El enfermero cancela un turno ya aceptado; el motivo le llega al paciente.
 export const cancelarTurnoEnfermero = (id, motivo) => api.put(`/solicitudes/${id}/cancelar-enfermero`, { motivo }).then(r => r.data);
@@ -38,7 +38,7 @@ export const obtenerSolicitudesEnfermero =(id, signal) => api.get(`/solicitudes/
 // Manda el día y la hora que ve el enfermero: si el paciente los cambió, el servidor responde 409 con la solicitud nueva.
 export const aceptarSolicitud = (id, { fecha, hora } = {}) => api.put(`/solicitudes/${id}/aceptar`, fecha && hora ? { fecha, hora } : undefined).then(r => r.data);
 export const rechazarSolicitud = (id) => api.put(`/solicitudes/${id}/rechazar`).then(r => r.data);
-// SCRUM-59.3: el enfermero marca como realizada una atención aceptada cuyo turno ya pasó.
+// SCRUM-59.3: el enfermero confirma que le llegó el pago y la atención aceptada (con el turno ya pasado) queda Realizada.
 export const finalizarSolicitud = (id) => api.put(`/solicitudes/${id}/finalizar`).then(r => r.data);
 // SCRUM-58.3: todas las solicitudes del paciente, en cualquier estado.
 export const obtenerSolicitudesPaciente = (id, signal) => api.get(`/solicitudes/paciente/${id}`, { params: { todas: 1 }, signal }).then(r => r.data);

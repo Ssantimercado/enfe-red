@@ -70,6 +70,14 @@ class ReglasTest(unittest.TestCase):
         texto = anonimizar('Soy ana.perez@mail.com, tel 261 555 1234, DNI 30123456, vivo en calle San Martín 1250')
         for dato in ('ana.perez', '555', '30123456', '1250'):
             self.assertNotIn(dato, texto)
+        # Sin "calle" adelante también se quita, pero no las horas, los días ni las edades.
+        self.assertEqual(anonimizar('vivo en cayetano silva 1172, Godoy Cruz'), 'vivo en [dirección], Godoy Cruz')
+        self.assertEqual(anonimizar('Dirección: Belgrano 450, a las 18 hs'), 'Dirección: [dirección], a las 18 hs')
+        for texto in ('mi abuela de 85 años, el martes 15 a las 18', 'desde las 14 hasta las 20', PEDIDO,
+                      'kinesiologo turno 14', 'necesito curaciones diarias 15 días en Godoy Cruz',
+                      'enfermera de geriatría durante 10 días', 'inyecciones por la mañana 10 a 12',
+                      'en la tarde 15 a 18'):
+            self.assertEqual(anonimizar(texto), texto)
 
     def test_validar_descarta_valores_inventados(self):
         filtros = validar({'especialidad': 'Cardiología', 'ciudad': 'Córdoba', 'dia_semana': 'Feriado',
@@ -81,6 +89,30 @@ class ReglasTest(unittest.TestCase):
 
 
 class ProveedoresTest(unittest.TestCase):
+    def setUp(self):
+        ia_busqueda._pausa['hasta'] = 0.0
+
+    @patch.dict('os.environ', {'GEMINI_API_KEY': 'clave-de-prueba'})
+    def test_lo_que_gemini_no_reconoce_lo_completan_las_reglas(self):
+        reglas = ia_busqueda.validar(ia_busqueda.interpretar_con_reglas(PEDIDO, PERMITIDOS), PERMITIDOS)
+        self.assertTrue(any(reglas[campo] for campo in ('especialidad', 'ciudad', 'dia_semana', 'hora_desde')))
+        with patch('services.ia_busqueda.urllib.request.urlopen', return_value=gemini_responde({'aclaracion': None})):
+            filtros, fuente = ia_busqueda.interpretar(PEDIDO, PERMITIDOS, 'gemini')
+        self.assertEqual(fuente, 'gemini')
+        self.assertEqual(filtros, reglas)
+
+    @patch.dict('os.environ', {'GEMINI_API_KEY': 'clave-de-prueba'})
+    def test_si_gemini_falla_las_busquedas_siguientes_no_lo_esperan(self):
+        with patch('services.ia_busqueda.urllib.request.urlopen', side_effect=TimeoutError) as abrir:
+            self.assertEqual(ia_busqueda.interpretar(PEDIDO, PERMITIDOS, 'gemini')[1], 'reglas')
+            self.assertEqual(ia_busqueda.interpretar(PEDIDO, PERMITIDOS, 'gemini')[1], 'reglas')
+        self.assertEqual(abrir.call_count, 1)
+        # Pasada la pausa se vuelve a probar con Gemini.
+        ia_busqueda._pausa['hasta'] = 0.0
+        with patch('services.ia_busqueda.urllib.request.urlopen',
+                   return_value=gemini_responde({'especialidad': 'Geriatría'})):
+            self.assertEqual(ia_busqueda.interpretar(PEDIDO, PERMITIDOS, 'gemini')[1], 'gemini')
+
     @patch.dict('os.environ', {'GEMINI_API_KEY': 'clave-de-prueba'})
     def test_gemini_envia_texto_anonimizado_y_esquema_cerrado(self):
         enviado = {}
@@ -130,6 +162,7 @@ class ProveedoresTest(unittest.TestCase):
 
 class EndpointTest(unittest.TestCase):
     def setUp(self):
+        ia_busqueda._pausa['hasta'] = 0.0
         self.app = Flask(__name__)
         self.app.config.update(TESTING=True, SQLALCHEMY_DATABASE_URI='sqlite:///:memory:',
                                JWT_SECRET_KEY='testing-key-with-at-least-32-characters')

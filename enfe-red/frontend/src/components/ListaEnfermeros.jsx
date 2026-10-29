@@ -110,13 +110,15 @@ export default function ListaEnfermeros() {
     const controller = new AbortController();
     api('/enfermeros', { signal: controller.signal })
       .then((list) => {
-        setSpecialties(
-          [
-            ...new Set(
-              list.map((person) => person.especialidad).filter(Boolean),
-            ),
-          ].sort((a, b) => a.localeCompare(b, 'es')),
-        );
+        // "Pediatria" y "Pediatría" son la misma especialidad: queda la primera forma escrita
+        // (la búsqueda del servidor no distingue tildes ni mayúsculas).
+        const unicas = new Map();
+        list.forEach((person) => {
+          const nombre = String(person.especialidad || '').trim();
+          const clave = nombre.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+          if (nombre && !unicas.has(clave)) unicas.set(clave, nombre);
+        });
+        setSpecialties([...unicas.values()].sort((a, b) => a.localeCompare(b, 'es')));
       })
       .catch(() => {});
     api('/enfermeros/ciudades', { signal: controller.signal })

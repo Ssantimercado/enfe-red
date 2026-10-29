@@ -613,18 +613,20 @@ def buscar_pacientes_con_solicitudes():
         )
     query = query.distinct().order_by(Paciente.nombre, Paciente.apellido, Paciente.id)
     paginacion = query.paginate(page=pagina, per_page=por_pagina, error_out=False)
+    # Todas las solicitudes de los pacientes de esta página en una sola consulta (con el servicio, que hace
+    # falta para saber cuándo termina cada turno), en vez de dos consultas por paciente.
+    por_paciente = {paciente.id: [] for paciente in paginacion.items}
+    if por_paciente:
+        for solicitud in SolicitudServicio.query.options(joinedload(SolicitudServicio.servicio)).filter(
+            SolicitudServicio.idEnfermero == enfermero.id,
+            SolicitudServicio.idPaciente.in_(por_paciente),
+        ).order_by(SolicitudServicio.fecha, SolicitudServicio.hora):
+            por_paciente[solicitud.idPaciente].append(solicitud)
     pacientes = []
     for paciente in paginacion.items:
-        activas = SolicitudServicio.query.filter(
-            SolicitudServicio.idPaciente == paciente.id,
-            SolicitudServicio.idEnfermero == enfermero.id,
-            SolicitudServicio.estado.in_(ESTADOS_ACTIVOS),
-        ).order_by(SolicitudServicio.fecha, SolicitudServicio.hora).all()
+        activas = [s for s in por_paciente[paciente.id] if s.estado in ESTADOS_ACTIVOS]
         solicitudes_activas = len(activas)
-        solicitudes = SolicitudServicio.query.filter_by(
-            idPaciente=paciente.id,
-            idEnfermero=enfermero.id,
-        ).count()
+        solicitudes = len(por_paciente[paciente.id])
         # HU16: el mapa del enfermero usa el lugar de atención del próximo turno en curso (el mismo punto que ya
         # ve en ese pedido). Si ningún turno lo tiene, queda la ubicación que el paciente eligió compartir.
         turno = next((s for s in activas if s.ubicacion_atencion()), None)

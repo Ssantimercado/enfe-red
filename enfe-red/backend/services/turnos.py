@@ -207,7 +207,7 @@ def cancelar_por_suspension(usuario, ahora):
     activas = SolicitudServicio.query.filter(filtro, SolicitudServicio.estado.in_(ESTADOS_ACTIVOS)).all()
     for solicitud in activas:
         if solicitud.estado == 'Aceptada' and datetime.combine(solicitud.fecha, solicitud.hora) <= ahora:
-            # El turno aceptado que ya pasó queda para cerrarlo como realizado.
+            # El turno aceptado que ya pasó queda abierto hasta que el enfermero confirme el pago.
             continue
         solicitud.estado = 'Cancelada'
         solicitud.canceladaPor = 'administrador'

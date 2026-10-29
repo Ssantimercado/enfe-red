@@ -67,6 +67,18 @@ export default function SolicitudesEnfermero() {
   const [chatAbierto, setChatAbierto] = useState(null);
   // Mapa con el lugar de atención y el recorrido, dentro de la tarjeta del pedido.
   const [ubicacionAbierta, setUbicacionAbierta] = useState(null);
+  // Tarjeta en la que el enfermero está confirmando que le llegó el pago (paso previo a cerrar la atención).
+  const [confirmandoPago, setConfirmandoPago] = useState(null);
+  const botonConfirmarPago = useRef(null);
+  const botonPago = useRef(null);
+  const volverAlPago = useRef(false);
+  useEffect(() => {
+    if (confirmandoPago) botonConfirmarPago.current?.focus();
+    else if (volverAlPago.current) {
+      volverAlPago.current = false;
+      botonPago.current?.focus();
+    }
+  }, [confirmandoPago]);
   const dialog = useRef(null);
   const dialogCancelar = useRef(null);
   const ocupado = useRef(false);
@@ -147,6 +159,7 @@ export default function SolicitudesEnfermero() {
       });
       setSeleccionada(null);
       setCancelando(null);
+      setConfirmandoPago(null);
       dialog.current?.close();
       dialogCancelar.current?.close();
     } catch (err) {
@@ -231,16 +244,48 @@ export default function SolicitudesEnfermero() {
                 desde la app que ya pagó.
               </p>
             )}
-            <div className="solicitud-card-actions">
-              <button
-                className="button button-primary"
-                type="button"
-                disabled={guardando}
-                onClick={() => cambiarEstado(solicitud, 'finalizar')}
-              >
-                {guardando ? 'Actualizando…' : 'Me llegó el pago'}
-              </button>
-            </div>
+            {/* Cerrar la atención no se deshace: se pide confirmarlo una vez. */}
+            {confirmandoPago === solicitud.idSolicitud ? (
+              <div className="solicitud-confirmar-pago" role="group" aria-labelledby={`confirmar-pago-${solicitud.idSolicitud}`}>
+                <p id={`confirmar-pago-${solicitud.idSolicitud}`} className="solicitud-finalizar-hint">
+                  ¿Confirmás que te llegó el pago? La atención se cierra y el paciente va a poder calificarla.
+                </p>
+                <div className="solicitud-card-actions">
+                  <button
+                    ref={botonConfirmarPago}
+                    className="button button-primary"
+                    type="button"
+                    disabled={guardando}
+                    onClick={() => cambiarEstado(solicitud, 'finalizar')}
+                  >
+                    {guardando ? 'Actualizando…' : 'Sí, me llegó'}
+                  </button>
+                  <button
+                    className="button button-secondary"
+                    type="button"
+                    disabled={guardando}
+                    onClick={() => {
+                      volverAlPago.current = true;
+                      setConfirmandoPago(null);
+                    }}
+                  >
+                    Todavía no
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="solicitud-card-actions">
+                <button
+                  ref={botonPago}
+                  className="button button-primary"
+                  type="button"
+                  disabled={guardando}
+                  onClick={() => setConfirmandoPago(solicitud.idSolicitud)}
+                >
+                  Me llegó el pago
+                </button>
+              </div>
+            )}
           </>
         ) : (
           <>
@@ -313,7 +358,10 @@ export default function SolicitudesEnfermero() {
           )))}
           contraparte={nombrePaciente(solicitud)}
           nivelTitulo={4}
-          whatsapp={enlaceWhatsapp(solicitud.paciente?.telefono, mensajeWhatsappEnfermero(solicitud))}
+          /* Igual que para el paciente: WhatsApp recién con el turno aceptado; antes se habla por el chat. */
+          whatsapp={solicitud.estado === 'Aceptada'
+            ? enlaceWhatsapp(solicitud.paciente?.telefono, mensajeWhatsappEnfermero(solicitud))
+            : null}
         />
       )}
       {solicitud.estado === 'Pendiente' && (
@@ -441,7 +489,8 @@ export default function SolicitudesEnfermero() {
           else setCancelando(null);
         }}
       >
-        <form className="form-stack" onSubmit={confirmarCancelacion} aria-busy={guardando}>
+        {/* noValidate: el largo del motivo lo controla confirmarCancelacion con un mensaje propio. */}
+        <form className="form-stack" onSubmit={confirmarCancelacion} aria-busy={guardando} noValidate>
           <div>
             <h2 id="cancelar-turno-titulo">¿Cancelar este turno?</h2>
             <p>

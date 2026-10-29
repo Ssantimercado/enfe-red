@@ -1,4 +1,4 @@
-import { Suspense, lazy, useState } from 'react';
+import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { errorSolicitud, guardarUbicacionAtencion } from '../services/solicitudes';
 
 const LocationPicker = lazy(() => import('./LocationPicker'));
@@ -13,12 +13,29 @@ export default function LugarAtencionPaciente({ solicitud, onActualizada }) {
   const [error, setError] = useState('');
   const [listo, setListo] = useState('');
   const id = `lugar-${solicitud.idSolicitud}`;
+  // Al abrir, el botón se reemplaza por el mapa (y al cerrar, al revés): el foco acompaña el cambio.
+  const moverFoco = useRef(false);
+  const editor = useRef(null);
+  const boton = useRef(null);
+  const avisoListo = useRef(null);
+  useEffect(() => {
+    if (!moverFoco.current) return;
+    moverFoco.current = false;
+    if (abierto) editor.current?.focus();
+    else (avisoListo.current || boton.current)?.focus();
+  }, [abierto]);
 
   function abrir() {
     setPunto(actual ? { lat: actual.latitud, lng: actual.longitud } : null);
     setError('');
     setListo('');
+    moverFoco.current = true;
     setAbierto(true);
+  }
+
+  function cerrar() {
+    moverFoco.current = true;
+    setAbierto(false);
   }
 
   async function guardar() {
@@ -31,7 +48,7 @@ export default function LugarAtencionPaciente({ solicitud, onActualizada }) {
     setError('');
     try {
       const respuesta = await guardarUbicacionAtencion(solicitud.idSolicitud, punto.lat, punto.lng);
-      setAbierto(false);
+      cerrar();
       setListo('Listo, el profesional ya puede ver el lugar en el mapa.');
       if (respuesta?.solicitud) onActualizada?.(respuesta.solicitud);
     } catch (err) {
@@ -48,10 +65,11 @@ export default function LugarAtencionPaciente({ solicitud, onActualizada }) {
           Este pedido no tiene el lugar marcado en el mapa. Marcalo para que el profesional sepa cómo llegar.
         </p>
       )}
-      {listo && <p className="notice notice-success" role="status">{listo}</p>}
+      {listo && <p ref={avisoListo} tabIndex={-1} className="notice notice-success" role="status">{listo}</p>}
       {!abierto ? (
         <div className="solicitud-card-actions">
           <button
+            ref={boton}
             className={`button ${actual ? 'button-secondary' : 'button-primary'}`}
             type="button"
             aria-expanded="false"
@@ -62,7 +80,7 @@ export default function LugarAtencionPaciente({ solicitud, onActualizada }) {
           </button>
         </div>
       ) : (
-        <div id={id} className="lugar-atencion-editor">
+        <div id={id} ref={editor} tabIndex={-1} className="lugar-atencion-editor" aria-label="Marcar el lugar de atención">
           <Suspense fallback={<p role="status">Cargando mapa…</p>}>
             <LocationPicker
               latitude={punto?.lat}
@@ -77,7 +95,7 @@ export default function LugarAtencionPaciente({ solicitud, onActualizada }) {
             <button className="button button-primary" type="button" aria-disabled={guardando} onClick={guardar}>
               {guardando ? 'Guardando…' : 'Guardar lugar'}
             </button>
-            <button className="button button-secondary" type="button" disabled={guardando} onClick={() => setAbierto(false)}>
+            <button className="button button-secondary" type="button" disabled={guardando} onClick={cerrar}>
               Cancelar
             </button>
           </div>

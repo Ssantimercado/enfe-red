@@ -64,12 +64,19 @@ export default function ConfirmacionSolicitud() {
       .catch(() => {});
     return () => controller.abort();
   }, [realizada, idSolicitud]);
+  function irAlChat() {
+    const chat = document.getElementById(`chat-${idSolicitud}`);
+    chat?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    chat?.querySelector('textarea')?.focus({ preventScroll: true });
+  }
   // AppShell ya tiene el <main>: acá va un contenedor común para no anidarlo.
   return <div className="page-container solicitud-page">
     <header className="page-heading"><h1>Comprobante de solicitud</h1></header>
     {mostrarEnviada && <p ref={avisoEnviada} tabIndex={-1} className="notice notice-success solicitud-enviada">
       <strong>¡Listo! Tu pedido le llegó a {enviada.profesional || 'el profesional'}.</strong> Te avisamos en la campana y en
-      Mis solicitudes cuando lo acepte.
+      Mis solicitudes cuando lo acepte.{' '}
+      {/* El chat queda más abajo: en el celular no se ve sin bajar. */}
+      <button type="button" className="text-link" onClick={irAlChat}>Escribile por el chat mientras tanto</button>
     </p>}
     <section className="content-panel">
     {error ? <><p role="alert" className="notice notice-error">{error}</p><button className="button button-secondary" onClick={() => setIntento(i => i + 1)}>Reintentar consulta</button></> : !solicitud ? <p role="status">Cargando comprobante…</p> : <>
@@ -114,7 +121,9 @@ export default function ConfirmacionSolicitud() {
         solicitud={solicitud}
         contraparte={nombreOtraParte(solicitud)}
         whatsapp={enfermero
-          ? enlaceWhatsapp(solicitud.paciente?.telefono, mensajeWhatsappEnfermero(solicitud))
+          ? (solicitud.estado === 'Aceptada'
+            ? enlaceWhatsapp(solicitud.paciente?.telefono, mensajeWhatsappEnfermero(solicitud))
+            : null)
           : whatsappParaPaciente(solicitud)}
         notaWhatsapp={enfermero ? '' : NOTA_WHATSAPP_PACIENTE}
         onEstadoCambiado={(actual) => setSolicitud(previa => ({ ...previa, ...actual }))}

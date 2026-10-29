@@ -112,24 +112,29 @@ function coordinatesOf(enfermero) {
     : null;
 }
 
-// Con la ubicación redondeada, dos profesionales de la misma zona caen en el mismo punto y el de abajo
-// no se puede tocar. Se reparten en un círculo chico alrededor de ese punto (solo para mostrarlos).
+// Con la ubicación redondeada, dos profesionales de la misma zona caen en el mismo punto (o a pocas
+// cuadras) y el de abajo no se puede tocar. Se reparten en un círculo chico alrededor del primero
+// (solo para mostrarlos).
 const SEPARACION_GRADOS = 0.0025; // unos 250 m
-function separarRepetidos(items) {
-  const grupos = new Map();
+const CERCANIA_GRADOS = 0.003; // unos 300 m
+export function separarRepetidos(items) {
+  const grupos = [];
   items.forEach((item) => {
-    const clave = item.position.map((valor) => valor.toFixed(5)).join(',');
-    grupos.set(clave, [...(grupos.get(clave) || []), item]);
+    const [lat, lng] = item.position;
+    const grupo = grupos.find(({ centro }) => (
+      Math.abs(centro[0] - lat) < CERCANIA_GRADOS && Math.abs(centro[1] - lng) < CERCANIA_GRADOS
+    ));
+    if (grupo) grupo.items.push(item);
+    else grupos.push({ centro: item.position, items: [item] });
   });
-  return [...grupos.values()].flatMap((grupo) => grupo.map((item, indice) => {
+  return grupos.flatMap(({ centro, items: grupo }) => grupo.map((item, indice) => {
     if (grupo.length === 1) return item;
     const angulo = (2 * Math.PI * indice) / grupo.length;
-    const [lat, lng] = item.position;
     // original: el círculo de la zona sigue en el punto publicado; solo el marcador se corre.
     return {
       ...item,
       original: item.position,
-      position: [lat + SEPARACION_GRADOS * Math.sin(angulo), lng + SEPARACION_GRADOS * Math.cos(angulo)],
+      position: [centro[0] + SEPARACION_GRADOS * Math.sin(angulo), centro[1] + SEPARACION_GRADOS * Math.cos(angulo)],
     };
   }));
 }
@@ -175,9 +180,12 @@ export default function MapaEnfermeros({
     ),
     [personas]
   );
+  // Se vuelve a encuadrar solo si cambian los puntos (no cada vez que se recarga la misma lista),
+  // así no se pierde lo que la persona movió o acercó.
+  const clavePuntos = markers.map((item) => item.position.join(',')).join(';');
   const markerPositions = useMemo(
-    () => markers.map((item) => item.position),
-    [markers]
+    () => (clavePuntos ? clavePuntos.split(';').map((punto) => punto.split(',').map(Number)) : []),
+    [clavePuntos]
   );
 
   // Recorrido desde la ubicación de quien mira hasta el elegido: el enfermero va al lugar de atención del
@@ -300,9 +308,8 @@ export default function MapaEnfermeros({
           position={selectedPosition || userPosition}
         />
 
-        {mostrandoPacientes && (
-          <FitLocations positions={markerPositions} />
-        )}
+        {/* Al cargar (o al filtrar) se encuadra a todos, para que no queden marcadores apilados ni afuera. */}
+        {!selectedPosition && !ruta && <FitLocations positions={markerPositions} />}
 
         {/* Ajustar la vista al recorrido completo */}
         {ruta && <FitRoute positions={ruta.positions} />}

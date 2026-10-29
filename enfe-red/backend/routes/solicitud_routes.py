@@ -620,6 +620,10 @@ def informarPago(idSolicitud):
         ).update({'pagoInformadoEn': _ahora_local()}, synchronize_session=False)
         if actualizadas != 1:
             db.session.rollback()
+            db.session.expire(solicitud)
+            if solicitud.estado == 'Aceptada' and solicitud.pagoInformadoEn:
+                # Lo avisó al mismo tiempo desde otra pestaña: el resultado es el mismo.
+                return jsonify({'mensaje': 'El pago ya estaba informado', 'solicitud': solicitud.to_dict()}), 200
             return jsonify({'error': 'La solicitud cambió de estado. Volvé a consultarla.'}), 409
         notificar(
             solicitud.enfermero.usuario_id, 'pago',
@@ -653,7 +657,7 @@ def actualizarUbicacionAtencion(idSolicitud):
         return jsonify({'error': 'Solicitud no encontrada'}), 404
     if solicitud.paciente.usuario_id != usuario.id:
         return jsonify({'error': 'Solo podés marcar el lugar de tus propias solicitudes'}), 403
-    if solicitud.estado not in ESTADOS_ACTIVOS:
+    if not solicitud.lugar_vigente(_ahora_local()):
         return jsonify({'error': 'Este turno ya se cerró, así que no hace falta marcar el lugar.'}), 409
     datos = request.get_json(silent=True)
     if not isinstance(datos, dict) or set(datos) != {'latitudAtencion', 'longitudAtencion'}:
@@ -663,7 +667,10 @@ def actualizarUbicacionAtencion(idSolicitud):
     if latitud is None or longitud is None:
         return jsonify({'error': 'Marcá en el mapa dónde vas a recibir la atención'}), 400
 
-    tenia_lugar = solicitud.ubicacion_atencion() is not None
+    anterior = solicitud.ubicacion_atencion()
+    if anterior == {'latitud': latitud, 'longitud': longitud}:
+        # Mismo punto: no se le avisa de nuevo al enfermero.
+        return jsonify({'mensaje': 'Lugar de atención guardado', 'solicitud': solicitud.to_dict()}), 200
     try:
         # Condicional: si el turno se cerró entre la consulta y el guardado, no se guarda el punto.
         actualizadas = SolicitudServicio.query.filter(
@@ -675,7 +682,7 @@ def actualizarUbicacionAtencion(idSolicitud):
             return jsonify({'error': 'Este turno ya se cerró, así que no hace falta marcar el lugar.'}), 409
         notificar(
             solicitud.enfermero.usuario_id, 'ubicacion',
-            f'{nombre_completo(solicitud.paciente, "Tu paciente")} {"cambió" if tenia_lugar else "marcó"} en el mapa '
+            f'{nombre_completo(solicitud.paciente, "Tu paciente")} {"cambió" if anterior else "marcó"} en el mapa '
             f'el lugar de atención del turno de {_texto_turno(solicitud)}. Tocá para ver cómo llegar.',
             idSolicitud,
         )

@@ -48,7 +48,8 @@ if os.getenv('PROXY_CONFIABLE') == '1':
 # Solo el frontend del proyecto puede llamar a la API desde el navegador.
 # Fuera de debug FRONTEND_ORIGINS es obligatorio; en debug se usa localhost:5173.
 ORIGENES_FRONTEND = origenes_frontend()
-CORS(app, origins=ORIGENES_FRONTEND)
+# max_age: el navegador recuerda el permiso dos horas y no repite la consulta previa en cada pedido.
+CORS(app, origins=ORIGENES_FRONTEND, max_age=7200)
 configurar_encabezados(app)
 
 # Configuración de base de datos y JWT

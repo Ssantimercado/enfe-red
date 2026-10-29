@@ -100,6 +100,44 @@ class GeocodificacionTest(unittest.TestCase):
         self.assertIn('tocando el mapa', caido.json['error'])
         self.assertEqual(self.client.get('/api/geocodificar?direccion=Mitre 800').status_code, 401)
 
+    def test_con_tres_partes_mendoza_es_la_provincia(self):
+        casa = {'lat': '-32.87', 'lon': '-68.85', 'address': {'road': 'Lavalle', 'house_number': '300', 'city': 'Las Heras'}}
+        with self.nominatim([casa]):
+            r = self.client.get('/api/geocodificar?direccion=Lavalle 300, Las Heras, Mendoza', headers=self.headers)
+        self.assertEqual(r.status_code, 200)
+        consulta = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(self.pedidos[0].full_url).query))
+        self.assertEqual((consulta['street'], consulta['city']), ('Lavalle 300', 'Las Heras'))
+
+    def test_no_traba_el_servidor_si_hay_muchas_busquedas_o_el_servicio_tarda(self):
+        # Sin lugar libre: responde enseguida "probá de nuevo" en vez de quedarse esperando.
+        with patch.object(geocodificacion, 'ESPERA_LUGAR', 0.01):
+            for _ in range(geocodificacion.BUSQUEDAS_A_LA_VEZ):
+                geocodificacion._lugares.acquire()
+            try:
+                with self.nominatim():
+                    r = self.client.get('/api/geocodificar?direccion=Mitre 800', headers=self.headers)
+            finally:
+                for _ in range(geocodificacion.BUSQUEDAS_A_LA_VEZ):
+                    geocodificacion._lugares.release()
+        self.assertEqual(r.status_code, 503)
+        self.assertEqual(self.pedidos, [])
+        # Plazo vencido antes de terminar las zonas: se usa la calle encontrada en vez de seguir esperando.
+        calle = {'lat': '-32.9', 'lon': '-68.8', 'address': {'road': 'Mitre', 'city': 'Mendoza'}}
+        with patch.object(geocodificacion, 'PLAZO_TOTAL', 0), self.nominatim():
+            self.assertEqual(self.client.get('/api/geocodificar?direccion=Mitre 801', headers=self.headers).status_code, 503)
+        with self.nominatim([calle], urllib.error.URLError('lento')):
+            r = self.client.get('/api/geocodificar?direccion=Mitre 802', headers=self.headers)
+        self.assertEqual((r.status_code, r.json['descripcion']), (200, 'Mitre, Mendoza'))
+
+    def test_lo_no_encontrado_se_vuelve_a_buscar_con_el_tiempo(self):
+        with self.nominatim([], [], []):
+            self.assertEqual(self.client.get('/api/geocodificar?direccion=zzzz', headers=self.headers).status_code, 404)
+        with self.nominatim():
+            self.assertEqual(self.client.get('/api/geocodificar?direccion=zzzz', headers=self.headers).status_code, 404)
+        lugar = {'lat': '-32.9', 'lon': '-68.8', 'address': {'road': 'Zzzz', 'city': 'Mendoza'}}
+        with patch.object(geocodificacion, 'VIGENCIA_SIN_RESULTADO', -1), self.nominatim([lugar]):
+            self.assertEqual(self.client.get('/api/geocodificar?direccion=zzzz', headers=self.headers).status_code, 200)
+
     def test_escribe_la_direccion_de_la_ubicacion_actual(self):
         lugar = {'address': {'road': 'Avenida San Martín', 'house_number': '1200', 'city': 'Mendoza'}}
         with self.nominatim(lugar):

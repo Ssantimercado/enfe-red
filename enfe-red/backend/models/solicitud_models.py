@@ -8,6 +8,9 @@ from models.usuario_models import Enfermero, Paciente
 ESTADOS_ACTIVOS = ('Pendiente', 'Aceptada')
 # 'Vencida': quedó Pendiente y llegó la hora del turno sin respuesta del enfermero.
 ESTADOS_SOLICITUD = (*ESTADOS_ACTIVOS, 'Rechazada', 'Cancelada', 'Realizada', 'Vencida')
+# Tiempo después del fin del turno en que el enfermero todavía ve el lugar de atención.
+MARGEN_UBICACION = timedelta(hours=2)
+
 # schema_mejoras.py recrea la restricción en bases existentes con este mismo texto.
 CHECK_ESTADO_SOLICITUD = 'estado IN (' + ', '.join(f"'{estado}'" for estado in ESTADOS_SOLICITUD) + ')'
 MAX_MOTIVO_CANCELACION = 200
@@ -60,9 +63,22 @@ class SolicitudServicio(db.Model):
             return None
         return {'telefono': self.enfermero.telefono, 'email': usuario.email}
 
+    def lugar_vigente(self, ahora=None):
+        """Si el lugar de atención todavía hace falta: turno activo y no pasaron dos horas desde que terminó.
+
+        Un turno Aceptado sigue abierto hasta que el enfermero confirma el pago, pero para entonces ya no
+        necesita saber cómo llegar.
+        """
+        if self.estado not in ESTADOS_ACTIVOS:
+            return False
+        if ahora is None:
+            from services.turnos import ahora_local
+            ahora = ahora_local()
+        return ahora <= self.hora_fin() + MARGEN_UBICACION
+
     def ubicacion_atencion(self):
         """El punto solo viaja mientras el turno está en curso: después nadie necesita saber dónde vive el paciente."""
-        if self.estado not in ESTADOS_ACTIVOS or self.latitudAtencion is None or self.longitudAtencion is None:
+        if self.latitudAtencion is None or self.longitudAtencion is None or not self.lugar_vigente():
             return None
         return {'latitud': self.latitudAtencion, 'longitud': self.longitudAtencion}
 
@@ -92,6 +108,8 @@ class SolicitudServicio(db.Model):
             'motivoCancelacion': self.motivoCancelacion,
             'direccionAtencion': self.direccionAtencion,
             'ubicacionAtencion': self.ubicacion_atencion(),
+            # Si el paciente todavía puede marcar o cambiar el lugar (turno activo y no terminado hace rato).
+            'lugarEditable': self.lugar_vigente(),
             'pagoInformadoEn': self.pagoInformadoEn.isoformat(timespec='minutes') if self.pagoInformadoEn else None,
             'pagoConfirmadoEn': self.pagoConfirmadoEn.isoformat(timespec='minutes') if self.pagoConfirmadoEn else None,
             'paciente': {

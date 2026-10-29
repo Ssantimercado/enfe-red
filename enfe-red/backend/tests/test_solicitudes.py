@@ -456,6 +456,23 @@ class SolicitudesTest(unittest.TestCase):
         self.assertIn('cambió en el mapa', Notificacion.query.filter_by(tipo='ubicacion').order_by(
             Notificacion.idNotificacion.desc()).first().mensaje)
 
+    def test_terminado_el_turno_el_lugar_deja_de_verse_y_no_se_cambia(self):
+        from models.notificacion_models import Notificacion
+        id_solicitud = self.crear().json['solicitud']['idSolicitud']
+        ruta = f'/api/solicitudes/{id_solicitud}'
+        self.assertEqual(self.client.put(ruta + '/aceptar', headers=self.headers(21)).status_code, 200)
+        punto = {'latitudAtencion': -32.89, 'longitudAtencion': -68.84}
+        # El mismo punto no le vuelve a avisar al enfermero.
+        self.assertEqual(self.client.put(ruta + '/ubicacion', headers=self.headers(11), json=punto).status_code, 200)
+        self.assertEqual(Notificacion.query.filter_by(tipo='ubicacion').count(), 0)
+        # Al día siguiente el turno sigue Aceptado (falta confirmar el pago), pero el lugar ya no se muestra.
+        self.pasar_turno()
+        with patch('services.turnos.ahora_local', return_value=datetime(2030, 1, 12, 9, 0)):
+            detalle = self.client.get(ruta, headers=self.headers(21)).json
+            self.assertEqual((detalle['estado'], detalle['ubicacionAtencion'], detalle['lugarEditable']),
+                             ('Aceptada', None, False))
+            self.assertEqual(self.client.put(ruta + '/ubicacion', headers=self.headers(11), json=punto).status_code, 409)
+
     def test_solo_el_paciente_del_turno_en_curso_marca_el_lugar(self):
         punto = {'latitudAtencion': -32.91, 'longitudAtencion': -68.83}
         id_solicitud = self.guardar_solicitud()
@@ -517,7 +534,7 @@ class SolicitudesTest(unittest.TestCase):
         # Cerrado el servicio, el punto de atención deja de enviarse.
         self.assertEqual(creada.json['solicitud']['ubicacionAtencion'], {'latitud': -32.89, 'longitud': -68.84})
         # Al cerrar queda registrada la confirmación del pago (la hora simulada del turno pasado).
-        esperado = {**creada.json['solicitud'], 'estado': 'Realizada', 'ubicacionAtencion': None,
+        esperado = {**creada.json['solicitud'], 'estado': 'Realizada', 'ubicacionAtencion': None, 'lugarEditable': False,
                     'pagoConfirmadoEn': '2030-01-12T09:00'}
         self.assertEqual(response.json['solicitud'], esperado)
         self.assertEqual(db.session.get(SolicitudServicio, id_solicitud).estado, 'Realizada')
@@ -620,7 +637,7 @@ class SolicitudesTest(unittest.TestCase):
                 # Al cerrarse deja de mostrar el contacto del enfermero y guarda quién canceló.
                 cancelacion = {'canceladaPor': 'paciente'} if destino == 'Cancelada' else {}
                 self.assertEqual(response.json['solicitud'],
-                                 {**antes, 'estado': destino, 'contacto': None, **cancelacion})
+                                 {**antes, 'estado': destino, 'contacto': None, 'lugarEditable': False, **cancelacion})
                 self.assertEqual(self.client.put(ruta, headers=self.headers(usuario)).status_code, 400)
                 self.assertEqual(self.client.get('/api/solicitudes/paciente/101', headers=self.headers()).json, [])
                 recibidas = self.client.get('/api/solicitudes/enfermero/201', headers=self.headers(21)).json

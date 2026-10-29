@@ -89,8 +89,12 @@ export default function SolicitarServicio() {
   // La dirección escrita se busca en el mapa solo cuando la persona la cambió.
   const [direccionEditada, setDireccionEditada] = useState(false);
   const [avisoActual, setAvisoActual] = useState('');
+  // Con "Donde estoy ahora", si la persona ya escribió la dirección no se la pisamos con la del punto.
+  const textoEscrito = useRef(false);
+  // Número del último pedido de "Donde estoy ahora": tocar el mapa, cambiar de opción o volver a pedir lo invalida.
+  const pedidoActual = useRef(0);
   const direccionInput = useRef(null);
-  const { estado: estadoUbicacion, error: errorUbicacion, ubicar } = useMiUbicacion();
+  const { estado: estadoUbicacion, error: errorUbicacion, ubicar, cancelar: cancelarUbicacion } = useMiUbicacion();
   useEffect(() => {
     const controller = new AbortController();
     setCargando(true);
@@ -155,30 +159,54 @@ export default function SolicitarServicio() {
     !bloqueado && ((modo === 'perfil' && !perfilPunto && Boolean(perfilDireccion)) || (modo === 'otra' && direccionEditada)),
     ([lat, lng]) => setPunto({ lat, lng, porDireccion: true }),
   );
+  const { fase: faseDireccion, cancelar: cancelarBusqueda } = direccionEnMapa;
+  useEffect(() => {
+    // Si la dirección nueva no se encontró, el punto anterior (del perfil o de otra búsqueda) ya no corresponde.
+    if (faseDireccion === 'no' || faseDireccion === 'error') {
+      setPunto(actual => (actual?.delPerfil || actual?.porDireccion ? null : actual));
+    }
+  }, [faseDireccion]);
+  function usarUbicacionActual() {
+    const numero = ++pedidoActual.current;
+    const vigente = () => modoActual.current === 'actual' && pedidoActual.current === numero;
+    setPunto(null);
+    setAvisoActual('');
+    ubicar(async ([lat, lng], precision) => {
+      if (!vigente()) return;
+      setPunto({ lat, lng, actual: true });
+      // El GPS de una computadora o de un celular adentro de una casa puede errarle por varias cuadras.
+      const aproximada = precision > 100
+        ? ` La ubicación es aproximada (unos ${Math.round(precision)} metros): revisá el punto y, si no es el lugar, tocá el correcto.`
+        : '';
+      // Se completa la dirección escrita con la del punto; la persona la revisa y agrega piso o departamento.
+      try {
+        const { direccion } = await direccionDe([lat, lng]);
+        if (!vigente() || !direccion) return;
+        if (!textoEscrito.current) setDatos(actual => ({ ...actual, direccionAtencion: direccion.slice(0, 200) }));
+        setAvisoActual(textoEscrito.current
+          ? `Marcamos tu ubicación actual.${aproximada}`
+          : `Marcamos tu ubicación actual y completamos la dirección. Revisala y agregá piso o departamento si hace falta.${aproximada}`);
+      } catch {
+        if (vigente()) setAvisoActual(`Marcamos tu ubicación actual. Escribí la dirección del lugar (calle y número).${aproximada}`);
+      }
+    });
+  }
   function elegirModo(nuevo) {
     // Al instante (no en el efecto): la ubicación puede llegar antes del próximo render.
     modoActual.current = nuevo;
     setModo(nuevo);
     setAvisoActual('');
     setDireccionEditada(false);
+    cancelarUbicacion();
+    pedidoActual.current += 1;
+    textoEscrito.current = false;
     if (nuevo === 'perfil') {
       setDatos(actual => ({ ...actual, direccionAtencion: perfilDireccion }));
       setPunto(perfilPunto ? { lat: paciente.latitud, lng: paciente.longitud, delPerfil: true } : null);
     } else if (nuevo === 'actual') {
-      setPunto(null);
-      ubicar(async ([lat, lng]) => {
-        if (modoActual.current !== 'actual') return;
-        setPunto({ lat, lng, actual: true });
-        // Se completa la dirección escrita con la del punto; la persona la revisa y agrega piso o departamento.
-        try {
-          const { direccion } = await direccionDe([lat, lng]);
-          if (modoActual.current !== 'actual' || !direccion) return;
-          setDatos(actual => ({ ...actual, direccionAtencion: direccion.slice(0, 200) }));
-          setAvisoActual('Marcamos tu ubicación actual y completamos la dirección. Revisala y agregá piso o departamento si hace falta.');
-        } catch {
-          if (modoActual.current === 'actual') setAvisoActual('Marcamos tu ubicación actual. Escribí la dirección del lugar (calle y número).');
-        }
-      });
+      // La dirección del perfil no es la del lugar donde está ahora: se completa con la del punto.
+      setDatos(actual => ({ ...actual, direccionAtencion: '' }));
+      usarUbicacionActual();
     } else {
       setDatos(actual => ({ ...actual, direccionAtencion: '' }));
       setPunto(null);
@@ -209,6 +237,7 @@ export default function SolicitarServicio() {
     if (!Number.isFinite(fechaHora.getTime()) || fechaHora <= new Date()) { setError('Elegí una fecha y hora futuras.'); return; }
     if (!datos.direccionAtencion.trim()) { setError('Ingresá la dirección de atención.'); return; }
     if (datos.direccionAtencion.trim().length > 200) { setError('La dirección admite hasta 200 caracteres.'); return; }
+    if (direccionEnMapa.pendiente) { setError('Esperá un momento: estamos ubicando la dirección en el mapa.'); return; }
     if (!punto) { setError('Marcá en el mapa dónde vas a recibir la atención.'); return; }
     if (pideTelefono && !telefonoValido(telefono)) { setError(MENSAJE_TELEFONO); return; }
     ocupado.current = true;
@@ -309,17 +338,35 @@ export default function SolicitarServicio() {
           <label className="field">Dirección de atención<input ref={direccionInput} name="direccionAtencion" autoComplete="street-address" maxLength={200} required value={datos.direccionAtencion} disabled={bloqueado}
             onChange={(event) => {
               cambiar(event);
-              // Escribir otra dirección sobre la del perfil es elegir "otra"; con la ubicación actual solo se corrige el texto.
-              if (modo === 'perfil') setModo('otra');
-              if (modo !== 'actual') setDireccionEditada(true);
+              // Con la ubicación actual solo se corrige el texto; escribir sobre la del perfil es elegir "otra".
+              if (modo === 'actual') {
+                textoEscrito.current = true;
+                return;
+              }
+              if (modo === 'perfil') {
+                modoActual.current = 'otra';
+                setModo('otra');
+              }
+              setDireccionEditada(true);
             }} />
           </label>
+          {modo === 'actual' && estadoUbicacion !== 'loading' && <button type="button" className="button button-secondary" onClick={usarUbicacionActual}>
+            {errorUbicacion && !punto ? 'Intentar de nuevo' : 'Volver a buscar mi ubicación'}
+          </button>}
           <Suspense fallback={<p role="status">Cargando mapa…</p>}>
             <LocationPicker
               latitude={punto?.lat}
               longitude={punto?.lng}
-              helpText={`Revisá el punto en el mapa: si no es el lugar exacto, tocá el lugar correcto. ${nombre} lo ve solo mientras el turno esté pendiente o aceptado, para saber cómo llegar.`}
-              onChange={(lat, lng) => { if (!bloqueado) setPunto({ lat, lng }); }}
+              helpText={`Revisá el punto en el mapa: si no es el lugar exacto, tocá el lugar correcto. ${nombre} lo ve solo mientras el turno esté en curso, para saber cómo llegar.`}
+              onChange={(lat, lng) => {
+                if (bloqueado) return;
+                // Lo que toca la persona manda: una búsqueda o una ubicación que llegue tarde no lo pisa.
+                cancelarBusqueda();
+                cancelarUbicacion();
+                pedidoActual.current += 1;
+                setAvisoActual('');
+                setPunto({ lat, lng });
+              }}
             />
           </Suspense>
           <p className="field-hint" role="status">{textoLugar}</p>
