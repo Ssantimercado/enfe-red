@@ -870,7 +870,14 @@ def buscar_enfermeros():
             filtros_horario.append(
                 Disponibilidad.dia_semana.ilike(f"%{dia_semana}%")
             )
-        if hora_inicio:
+        if hora_inicio and request.args.get('horario') == 'parcial':
+            # Búsqueda asistida ("los martes a la tarde"): alcanza con que atienda en algún momento de la franja.
+            filtros_horario.extend((
+                Disponibilidad.hora_inicio < hora_fin,
+                Disponibilidad.hora_fin > hora_inicio,
+            ))
+        elif hora_inicio:
+            # Horario elegido a mano: la franja del profesional tiene que cubrirlo entero.
             filtros_horario.extend((
                 Disponibilidad.hora_inicio <= hora_inicio,
                 Disponibilidad.hora_fin >= hora_fin,

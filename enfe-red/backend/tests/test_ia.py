@@ -45,10 +45,34 @@ def gemini_responde(contenido):
 class ReglasTest(unittest.TestCase):
     def test_interpreta_la_frase_tipica(self):
         filtros = validar(interpretar_con_reglas(PEDIDO, PERMITIDOS), PERMITIDOS)
+        # "mi abuela" no pide un geriatra: insulina la pone cualquiera que haga inyecciones.
         self.assertEqual(filtros, {
-            'especialidad': 'Geriatría', 'ciudad': 'Godoy Cruz', 'dia_semana': 'Martes',
+            'especialidad': None, 'ciudad': 'Godoy Cruz', 'dia_semana': 'Martes',
             'hora_desde': '14:00', 'hora_hasta': '18:00', 'servicio': 'Inyecciones', 'aclaracion': None,
         })
+
+    def test_quien_es_el_paciente_no_elige_la_especialidad(self):
+        for texto in ('insulina para mi abuela', 'curación para mi bebé', 'cuidar a mi abuelo, adulto mayor',
+                      'mi nene tiene fiebre', 'mi papá está en terapia de rehabilitación'):
+            with self.subTest(texto=texto):
+                self.assertIsNone(interpretar_con_reglas(texto, PERMITIDOS)['especialidad'])
+        # Pedida con esa palabra, sí.
+        for texto, especialidad in (('busco un geriatra para mi abuela', 'Geriatría'),
+                                    ('enfermera pediátrica para mi bebé', 'Pediatría'),
+                                    ('alguien con experiencia en terapia intensiva', 'Cuidados Intensivos')):
+            with self.subTest(texto=texto):
+                self.assertEqual(interpretar_con_reglas(texto, PERMITIDOS)['especialidad'], especialidad)
+
+    @patch.dict('os.environ', {'GEMINI_API_KEY': 'clave-de-prueba'})
+    def test_si_gemini_deduce_la_especialidad_se_descarta(self):
+        ia_busqueda._pausa['hasta'] = 0.0
+        respuesta = gemini_responde({'especialidad': 'Geriatría', 'servicio': 'Inyecciones'})
+        with patch('services.ia_busqueda.urllib.request.urlopen', return_value=respuesta):
+            filtros, fuente = ia_busqueda.interpretar('insulina para mi abuela', PERMITIDOS, 'gemini')
+        self.assertEqual((fuente, filtros['servicio'], filtros['especialidad']), ('gemini', 'Inyecciones', None))
+        with patch('services.ia_busqueda.urllib.request.urlopen', return_value=gemini_responde({'especialidad': 'Geriatría'})):
+            filtros, _ = ia_busqueda.interpretar('busco una enfermera geriátrica', PERMITIDOS, 'gemini')
+        self.assertEqual(filtros['especialidad'], 'Geriatría')
 
     def test_mama_o_papa_no_implican_geriatria(self):
         filtros = interpretar_con_reglas('mi papá tiene fiebre', PERMITIDOS)
@@ -58,7 +82,7 @@ class ReglasTest(unittest.TestCase):
     def test_hora_puntual_ciudad_sin_capital_y_niños(self):
         filtros = interpretar_con_reglas('curación para mi nene el sábado a las 10 en Mendoza', PERMITIDOS)
         self.assertEqual((filtros['servicio'], filtros['especialidad'], filtros['dia_semana']),
-                         ('Curaciones', 'Pediatría', 'Sábado'))
+                         ('Curaciones', None, 'Sábado'))
         self.assertEqual((filtros['hora_desde'], filtros['hora_hasta']), ('10:00', '11:00'))
         self.assertEqual(filtros['ciudad'], 'Mendoza Capital')
 
@@ -202,13 +226,19 @@ class EndpointTest(unittest.TestCase):
         return self.client.post('/api/ia/interpretar-busqueda', headers=headers, json={'texto': texto})
 
     @patch.dict('os.environ', {'IA_PROVEEDOR': 'reglas'})
+    def test_avisa_si_el_horario_es_una_parte_del_dia(self):
+        self.assertIs(self.pedir('insulina los martes a la tarde').json['horarioParcial'], True)
+        self.assertIs(self.pedir('insulina los martes a las 10').json['horarioParcial'], False)
+        self.assertIs(self.pedir('insulina en Godoy Cruz').json['horarioParcial'], False)
+
+    @patch.dict('os.environ', {'IA_PROVEEDOR': 'reglas'})
     def test_devuelve_filtros_solo_con_valores_del_sistema(self):
         respuesta = self.pedir('insulina para mi abuela el martes en San Rafael o Godoy Cruz')
         self.assertEqual(respuesta.status_code, 200)
         self.assertEqual(respuesta.json['fuente'], 'reglas')
         filtros = respuesta.json['filtros']
         self.assertEqual((filtros['servicio'], filtros['especialidad'], filtros['ciudad'], filtros['dia_semana']),
-                         ('Inyecciones', 'Geriatría', 'Godoy Cruz', 'Martes'))
+                         ('Inyecciones', None, 'Godoy Cruz', 'Martes'))
 
     def test_valida_rol_y_texto(self):
         self.assertEqual(self.pedir('hola', usuario=21).status_code, 403)

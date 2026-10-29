@@ -9,7 +9,7 @@ from database import db
 from models.servicio_models import Servicio
 from models.usuario_models import Enfermero, Usuario
 from routes.usuario_routes import consulta_enfermeros_visibles, zonas_con_enfermeros
-from services.ia_busqueda import MAX_TEXTO, interpretar
+from services.ia_busqueda import MAX_TEXTO, es_franja, interpretar, normalizar
 
 ia_bp = Blueprint('ia_bp', __name__)
 LIMITE_POR_MINUTO = 10
@@ -32,7 +32,15 @@ def _limite_superado(usuario_id):
 def _valores_permitidos():
     """Solo valores que existen en el sistema: la IA no puede inventar filtros."""
     visibles = consulta_enfermeros_visibles()
-    especialidades = sorted({e for (e,) in visibles.with_entities(Enfermero.especialidad) if e})
+    # "Pediatria" y "Pediatría" son la misma: queda una sola, preferentemente la escrita con tilde.
+    por_clave = {}
+    for (especialidad,) in visibles.with_entities(Enfermero.especialidad):
+        especialidad = ' '.join((especialidad or '').split())
+        if especialidad:
+            clave = normalizar(especialidad)
+            if clave not in por_clave or not especialidad.isascii():
+                por_clave[clave] = especialidad
+    especialidades = sorted(por_clave.values())
     # Departamentos, los mismos del filtro de la cartilla.
     ciudades = zonas_con_enfermeros()
     servicios = [s for (s,) in db.session.query(Servicio.tipoServicio).order_by(Servicio.tipoServicio)]
@@ -65,4 +73,6 @@ def interpretarBusqueda():
     filtros, fuente = interpretar(texto, _valores_permitidos())
     # Nunca se registra el texto: solo el proveedor usado y el tiempo de respuesta.
     current_app.logger.info('IA búsqueda: fuente=%s ms=%d', fuente, (time.perf_counter() - inicio) * 1000)
-    return jsonify(filtros=filtros, fuente=fuente), 200
+    # "A la tarde" es una parte del día: la cartilla busca a quien atienda en algún momento de esa franja.
+    horario_parcial = bool(filtros.get('hora_desde')) and es_franja(texto)
+    return jsonify(filtros=filtros, fuente=fuente, horarioParcial=horario_parcial), 200

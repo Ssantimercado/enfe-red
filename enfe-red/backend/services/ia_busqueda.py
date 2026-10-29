@@ -45,11 +45,27 @@ CLAVES_SERVICIO = {
 }
 # Palabras clave → especialidad del profesional.
 CLAVES_ESPECIALIDAD = {
-    # Solo palabras inequívocas: un filtro de especialidad equivocado esconde resultados.
-    'Pediatría': ('bebe', 'niño', 'nino', 'nene', 'nena', 'pediatr', 'recien nacido'),
-    'Geriatría': ('abuel', 'adulto mayor', 'anciano', 'tercera edad', 'geriatr'),
-    'Cuidados Intensivos': ('intensiv', 'terapia', 'respirador', 'traqueo'),
+    # Solo cuando se pide la especialidad con esa palabra. Quién es el paciente ("mi abuela", "mi bebé") no la
+    # define: ponerle insulina a una abuela lo puede hacer cualquiera que ponga inyecciones, y un filtro de
+    # especialidad escondería a todos los demás.
+    'Pediatría': ('pediatr', 'neonat'),
+    'Geriatría': ('geriatr', 'gerontolog'),
+    'Cuidados Intensivos': ('cuidados intensivos', 'terapia intensiva', 'intensivista'),
 }
+
+
+def _claves_de(especialidad):
+    """Palabras que piden esa especialidad: las de la tabla o, si no está, la raíz de su nombre ("cardiolog")."""
+    if especialidad in CLAVES_ESPECIALIDAD:
+        return CLAVES_ESPECIALIDAD[especialidad]
+    palabras = [p for p in normalizar(especialidad).split() if len(p) >= 6 and p != 'general']
+    return (max(palabras, key=len)[:7],) if palabras else ()
+
+
+def pide_especialidad(texto, especialidad):
+    """Si el texto pide esa especialidad con todas las letras (no por deducción)."""
+    t = normalizar(texto)
+    return any(normalizar(clave) in t for clave in _claves_de(especialidad))
 URGENCIAS = ('urgente', 'urgencia', 'emergencia', 'no respira', 'inconsciente', 'desmay',
              'dolor de pecho', 'sangra mucho', 'convuls', 'ahora mismo')
 AVISO_URGENCIA = 'Si es una urgencia, llamá al 107 o al servicio de emergencias de tu zona.'
@@ -61,7 +77,11 @@ INSTRUCCIONES = (
     'No diagnostiques, no recomiendes medicamentos ni dosis y no des consejos de salud. '
     'Si el pedido describe una urgencia, en "aclaracion" escribí exactamente: "' + AVISO_URGENCIA + '". '
     'Horas en formato HH:MM de 24 horas; "a la tarde" = 14:00 a 18:00, "a la mañana" = 08:00 a 12:00, '
-    '"a la noche" = 20:00 a 23:00.'
+    '"a la noche" = 20:00 a 23:00. '
+    'Completá "especialidad" SOLO si la persona pide una especialidad con esa palabra (por ejemplo "geriatra", '
+    '"enfermera pediátrica", "terapia intensiva"). No la deduzcas por quién es el paciente: "mi abuela", '
+    '"mi bebé" o "mi mamá" no piden una especialidad, y elegirla escondería a otros profesionales que pueden '
+    'atenderlo. Si pide una tarea concreta (poner insulina, una inyección, una curación), completá "servicio".'
 )
 
 
@@ -192,8 +212,8 @@ def interpretar_con_reglas(texto, permitidos):
         if servicio in permitidos['servicios'] and any(normalizar(c) in t for c in claves):
             resultado['servicio'] = servicio
             break
-    for especialidad, claves in CLAVES_ESPECIALIDAD.items():
-        if especialidad in permitidos['especialidades'] and any(normalizar(c) in t for c in claves):
+    for especialidad in permitidos['especialidades']:
+        if pide_especialidad(texto, especialidad):
             resultado['especialidad'] = especialidad
             break
     # Cada departamento con sus otras formas ("Capital", "Chacras de Coria"...), de la más larga a la más corta:
@@ -256,6 +276,14 @@ def validar(crudo, permitidos):
 PROVEEDORES = {'gemini': consultar_gemini}
 
 
+def es_franja(texto):
+    """Si el horario se pidió como una parte del día ("a la tarde") y no como una hora puntual ("a las 10")."""
+    t = normalizar(texto)
+    if re.search(r'\ba las \d', t):
+        return False
+    return any(re.search(rf'\b(la|de|por la|a la)\s+{palabra}\b', t) for palabra in FRANJAS)
+
+
 def interpretar(texto, permitidos, proveedor=None):
     """Devuelve (filtros, fuente). Si la IA falla o no está configurada, usa las reglas."""
     proveedor = (proveedor or os.getenv('IA_PROVEEDOR', 'reglas')).strip().lower()
@@ -267,6 +295,10 @@ def interpretar(texto, permitidos, proveedor=None):
         filtros = validar(consultar(anonimizar(texto), permitidos), permitidos)
     except IAError:
         return reglas, 'reglas'
+    # Aunque se le pide que no lo haga, el modelo puede deducir la especialidad ("abuela" -> Geriatría):
+    # si la persona no la pidió, se descarta para no esconder profesionales.
+    if filtros['especialidad'] and not pide_especialidad(texto, filtros['especialidad']):
+        filtros['especialidad'] = None
     # La regla de seguridad no depende del modelo: si las reglas detectan urgencia, se avisa igual.
     filtros['aclaracion'] = filtros['aclaracion'] or reglas['aclaracion']
     # Lo que la IA no reconoció y las reglas sí, se completa con las reglas.

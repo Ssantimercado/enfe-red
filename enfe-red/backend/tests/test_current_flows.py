@@ -290,6 +290,18 @@ class CurrentFlowsTest(unittest.TestCase):
             [enfermeros[0].usuario_id],
         )
 
+        # "Los martes a la tarde" (búsqueda asistida): quien atiende de 8 a 16 atiende parte de la tarde.
+        tarde = '/api/enfermeros/buscar?dia_semana=Martes&hora_desde=14:00&hora_hasta=18:00'
+        self.assertEqual(self.client.get(tarde).json['total_resultados'], 0)
+        self.assertEqual(
+            [person['usuario_id'] for person in self.client.get(tarde + '&horario=parcial').json['enfermeros']],
+            [enfermeros[3].usuario_id],
+        )
+        # Una franja que termina justo cuando empieza la tarde no cuenta.
+        self.assertEqual(self.client.get(
+            '/api/enfermeros/buscar?dia_semana=Martes&hora_desde=16:00&hora_hasta=18:00&horario=parcial'
+        ).json['total_resultados'], 0)
+
     def test_bad_search_parameters(self):
         for query in ('precio_min=500&precio_max=100', 'precio_min=no', 'precio_min=-1',
                       'precio_max=nan', 'page=0', 'per_page=0', 'per_page=1000',

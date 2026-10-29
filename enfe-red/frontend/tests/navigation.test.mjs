@@ -1845,10 +1845,12 @@ test('la búsqueda asistida convierte el pedido en filtros editables', async () 
       pedido = JSON.parse(options.body);
       return response({
         fuente: 'gemini',
-        filtros: { especialidad: 'Geriatría', ciudad: 'Godoy Cruz', dia_semana: 'Martes',
+        horarioParcial: true,
+        filtros: { especialidad: null, ciudad: 'Godoy Cruz', dia_semana: 'Martes',
           hora_desde: '14:00', hora_hasta: '18:00', servicio: 'Inyecciones', aclaracion: null },
       });
     }
+    if (ruta.endsWith('/servicios')) return response([{ idServicio: 2, tipoServicio: 'Inyecciones' }]);
     if (ruta.includes('/enfermeros/buscar')) {
       busquedas.push(new URL(ruta).searchParams);
       return response({ enfermeros: [], total_resultados: 0, total_paginas: 0 });
@@ -1863,13 +1865,20 @@ test('la búsqueda asistida convierte el pedido en filtros editables', async () 
     await act(async () => new Promise((resolve) => setTimeout(resolve, 300)));
     assert.equal(pedido.texto, 'insulina para mi mamá los martes a la tarde en Godoy Cruz');
     const ultima = busquedas.at(-1);
+    // "Insulina" filtra por el servicio Inyecciones; "mi mamá" no agrega especialidad; "a la tarde" alcanza con
+    // atender en parte de la franja.
     assert.deepEqual(
-      ['especialidad', 'ciudad', 'dia_semana', 'hora_desde', 'hora_hasta'].map((k) => ultima.get(k)),
-      ['Geriatría', 'Godoy Cruz', 'Martes', '14:00', '18:00'],
+      ['servicio', 'especialidad', 'ciudad', 'dia_semana', 'hora_desde', 'hora_hasta', 'horario'].map((k) => ultima.get(k)),
+      ['2', null, 'Godoy Cruz', 'Martes', '14:00', '18:00', 'parcial'],
     );
     assert.match(document.body.textContent, /elegí el servicio Inyecciones/);
     assert.match(document.body.textContent, /Interpretado con inteligencia artificial/);
     assert.ok(button('Quitar filtro Godoy Cruz'));
+    // Quitar el horario saca el desde y el hasta juntos.
+    await click(button('Quitar filtro Atiende entre 14:00 y 18:00'));
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 300)));
+    assert.deepEqual(['hora_desde', 'hora_hasta', 'horario'].map((k) => busquedas.at(-1).get(k)), [null, null, null]);
+    assert.equal(busquedas.at(-1).get('servicio'), '2');
   } finally {
     globalThis.fetch = original;
   }

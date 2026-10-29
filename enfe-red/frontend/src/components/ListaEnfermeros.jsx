@@ -21,6 +21,9 @@ const FILTERS = [
 ];
 // HU3 "enfermeros cercanos": la ubicación del paciente ordena los resultados por distancia.
 const UBICACION = ['lat', 'lng', 'radio_km'];
+// horario=parcial: el horario vino de la búsqueda asistida ("a la tarde") y alcanza con atender en parte de él.
+const HORARIO_PARCIAL = 'horario';
+const HORAS = ['hora_desde', 'hora_hasta'];
 const RADIOS_KM = ['5', '10', '25', '50'];
 // El mapa junta todas las páginas del filtro (100 por pedido, el máximo del backend).
 const POR_PAGINA_MAPA = 100;
@@ -42,7 +45,7 @@ export default function ListaEnfermeros() {
     [...params].filter(([key]) =>
       nurse
         ? key === 'q' || key === 'page'
-        : FILTERS.includes(key) || UBICACION.includes(key) || key === 'q' || key === 'page',
+        : FILTERS.includes(key) || UBICACION.includes(key) || key === HORARIO_PARCIAL || key === 'q' || key === 'page',
     ),
   ).toString();
   const mapKey = new URLSearchParams(
@@ -266,15 +269,37 @@ export default function ListaEnfermeros() {
     );
   }
   // HU12: reemplaza los filtros por los que interpretó la búsqueda asistida.
-  function aplicarBusquedaAsistida(filtros) {
+  function aplicarBusquedaAsistida(filtros, { horarioParcial = false } = {}) {
+    // El servicio llega por su nombre ("Inyecciones"); la cartilla filtra por su número.
+    const servicio = servicios.find((item) => item.tipoServicio === filtros.servicio);
     setParams(
       (current) => {
         const next = new URLSearchParams(current);
         FILTERS.forEach((key) => next.delete(key));
+        next.delete(HORARIO_PARCIAL);
         ['especialidad', 'ciudad', 'dia_semana', 'hora_desde', 'hora_hasta'].forEach((key) => {
           if (filtros[key]) next.set(key, filtros[key]);
         });
+        if (servicio) next.set('servicio', String(servicio.idServicio));
+        if (horarioParcial && filtros.hora_desde) next.set(HORARIO_PARCIAL, 'parcial');
         next.delete('q');
+        next.delete('page');
+        return next;
+      },
+      { replace: true },
+    );
+  }
+  // Desde y hasta van juntos: con uno solo la búsqueda no es válida.
+  function quitarFiltro(key) {
+    if (!HORAS.includes(key)) {
+      update(key, '');
+      return;
+    }
+    setParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        HORAS.forEach((hora) => next.delete(hora));
+        next.delete(HORARIO_PARCIAL);
         next.delete('page');
         return next;
       },
@@ -299,6 +324,7 @@ export default function ListaEnfermeros() {
         const next = new URLSearchParams(current);
         FILTERS.forEach((key) => next.delete(key));
         UBICACION.forEach((key) => next.delete(key));
+        next.delete(HORARIO_PARCIAL);
         next.delete('disponible');
         next.delete('page');
         if (!keepQuery) next.delete('q');
@@ -314,6 +340,8 @@ export default function ListaEnfermeros() {
       (current) => {
         const next = new URLSearchParams(current);
         next.delete('disponible');
+        // Si cambió el horario a mano, vuelve el filtro de siempre (que la franja lo cubra entero).
+        if (HORAS.some((key) => (draftFilters[key] || '') !== (current.get(key) || ''))) next.delete(HORARIO_PARCIAL);
         FILTERS.forEach((key) => {
           if (draftFilters[key]) next.set(key, draftFilters[key]);
           else next.delete(key);
@@ -326,6 +354,7 @@ export default function ListaEnfermeros() {
     setFiltersOpen(false);
   }
   const active = nurse ? [] : FILTERS.filter((key) => filterValues[key]);
+  const horarioParcial = params.get(HORARIO_PARCIAL) === 'parcial';
   const hasFilters = Boolean(query || active.length || cercania);
   const labels = {
     servicio:
@@ -336,7 +365,9 @@ export default function ListaEnfermeros() {
     precio_min: `Desde $${Number(filterValues.precio_min).toLocaleString('es-AR')}`,
     precio_max: `Hasta $${Number(filterValues.precio_max).toLocaleString('es-AR')}`,
     dia_semana: filterValues.dia_semana,
-    hora_desde: `Desde ${filterValues.hora_desde}`,
+    hora_desde: horarioParcial
+      ? `Atiende entre ${filterValues.hora_desde} y ${filterValues.hora_hasta}`
+      : `Desde ${filterValues.hora_desde}`,
     hora_hasta: `Hasta ${filterValues.hora_hasta}`,
   };
   const profileState = {
@@ -538,11 +569,11 @@ export default function ListaEnfermeros() {
                   <Icon name="close" size={13} />
                 </button>
               )}
-              {active.map((key) => (
+              {active.filter((key) => !(horarioParcial && key === 'hora_hasta')).map((key) => (
                 <button
                   className="filter-chip"
                   key={key}
-                  onClick={() => update(key, '')}
+                  onClick={() => quitarFiltro(key)}
                   aria-label={`Quitar filtro ${labels[key]}`}
                 >
                   {labels[key]}

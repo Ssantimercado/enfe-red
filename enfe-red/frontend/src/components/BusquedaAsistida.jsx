@@ -24,11 +24,11 @@ export default function BusquedaAsistida({ onAplicar }) {
     setError('');
     try {
       const respuesta = await api('/ia/interpretar-busqueda', { method: 'POST', body: { texto: pedido } });
-      const { filtros = {}, fuente } = respuesta;
-      const encontrados = ['especialidad', 'ciudad', 'dia_semana', 'hora_desde', 'hora_hasta']
+      const { filtros = {}, fuente, horarioParcial = false } = respuesta;
+      const encontrados = ['servicio', 'especialidad', 'ciudad', 'dia_semana', 'hora_desde', 'hora_hasta']
         .some((clave) => filtros[clave]);
       setResultado({ ...filtros, fuente, encontrados });
-      if (encontrados) onAplicar(filtros);
+      if (encontrados) onAplicar(filtros, { horarioParcial });
     } catch (err) {
       // Si falla, la búsqueda manual sigue disponible.
       setError(`${err.message} Podés buscar con los filtros de la cartilla.`);
