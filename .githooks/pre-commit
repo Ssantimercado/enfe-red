@@ -1,0 +1,35 @@
+#!/bin/sh
+# Frena el commit si trae claves o archivos .env (la clave de Gemini, contraseñas, claves privadas).
+# Se activa una vez por clon con:   git config core.hooksPath .githooks
+# Nunca muestra la clave encontrada: solo el archivo.
+
+archivos=$(git diff --cached --name-only --diff-filter=ACMR)
+[ -z "$archivos" ] && exit 0
+problema=0
+
+for archivo in $archivos; do
+  case "$archivo" in
+    *.env.example) ;;
+    .env|*/.env|.env.*|*/.env.*)
+      echo "✋ $archivo es un archivo de variables de entorno: no se sube al repositorio."
+      problema=1 ;;
+  esac
+done
+
+# Claves de Google (AIza...), claves privadas y variables de secretos con un valor real
+# (las de .env.example llevan REEMPLAZAR o quedan vacías).
+patron='AIza[0-9A-Za-z_-]{35}|-----BEGIN [A-Z ]*PRIVATE KEY-----|^\+[[:space:]]*(export[[:space:]]+)?(GEMINI_API_KEY|SMTP_CLAVE|JWT_SECRET_KEY|CLAVE_CIFRADO_DATOS|CLAVE_CIFRADO_ANTERIOR|DATABASE_URL)=[^[:space:]#]{8,}'
+for archivo in $archivos; do
+  if git diff --cached -U0 -- "$archivo" | grep -v '^+++' | grep '^+' | grep -v 'REEMPLAZAR\|USUARIO:CLAVE' | grep -Eq "$patron"; then
+    echo "✋ $archivo parece tener una clave o contraseña real."
+    problema=1
+  fi
+done
+
+if [ "$problema" -ne 0 ]; then
+  echo ""
+  echo "Las claves van solo en backend/.env (que no se sube) o en las variables del hosting."
+  echo "Si una clave real llegó a un commit, cambiala en su servicio: borrarla del archivo no alcanza."
+  exit 1
+fi
+exit 0

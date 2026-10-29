@@ -14,6 +14,8 @@ import time
 import unicodedata
 import urllib.request
 
+from services.departamentos import departamento_de, nombres_de
+
 DIAS = ('Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo')
 MAX_TEXTO = 300
 # Si Gemini no contesta en 3 segundos se usan las reglas: más espera se siente como que la búsqueda no anda.
@@ -194,9 +196,12 @@ def interpretar_con_reglas(texto, permitidos):
         if especialidad in permitidos['especialidades'] and any(normalizar(c) in t for c in claves):
             resultado['especialidad'] = especialidad
             break
-    for ciudad in sorted(permitidos['ciudades'], key=len, reverse=True):
-        nombre = normalizar(ciudad).replace(' capital', '')
-        if nombre and nombre in t:
+    # Cada departamento con sus otras formas ("Capital", "Chacras de Coria"...), de la más larga a la más corta:
+    # en "Godoy Cruz, Mendoza" gana Godoy Cruz.
+    nombres = [(normalizar(nombre), ciudad) for ciudad in permitidos['ciudades']
+               for nombre in {ciudad, *nombres_de(departamento_de(ciudad))}]
+    for nombre, ciudad in sorted(nombres, key=lambda par: len(par[0]), reverse=True):
+        if nombre and re.search(rf'\b{re.escape(nombre)}\b', t):
             resultado['ciudad'] = ciudad
             break
     for dia in DIAS:

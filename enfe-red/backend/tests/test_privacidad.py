@@ -158,6 +158,26 @@ class CartillaPublicaTest(BasePrivacidadTest):
         # Maipú es de un enfermero sin verificar: no aparece.
         self.assertEqual(respuesta.json, ['Godoy Cruz', 'Luján de Cuyo'])
 
+    def test_filtro_por_departamento_agrupa_las_formas_de_escribirlo(self):
+        for numero, ciudad in ((25, 'Mendoza Capital'), (26, 'Capital'), (27, 'Chacras de Coria'), (28, 'Córdoba')):
+            db.session.add(Usuario(id=numero, email=f'zona{numero}@test.local', password_hash='x', rol='enfermero'))
+            db.session.flush()
+            db.session.add(Enfermero(id=180 + numero, usuario_id=numero, nombre=ciudad, matricula=f'MP-{numero}',
+                                     ciudad=ciudad, verificado=True, disponible=True))
+        db.session.commit()
+        # En el filtro, cada departamento una sola vez; lo que no es de Mendoza queda como se escribió.
+        self.assertEqual(self.client.get('/api/enfermeros/ciudades').json,
+                         ['Ciudad de Mendoza', 'Córdoba', 'Godoy Cruz', 'Luján de Cuyo'])
+
+        def nombres(departamento):
+            respuesta = self.client.get('/api/enfermeros/buscar', query_string={'ciudad': departamento})
+            return sorted(e['nombre'] or '' for e in respuesta.json['enfermeros'])
+        self.assertEqual(nombres('Ciudad de Mendoza'), ['Capital', 'Mendoza Capital'])
+        self.assertEqual(nombres('Luján de Cuyo'), ['Chacras de Coria'])
+        self.assertEqual(nombres('Lavalle'), [])
+        # Una zona que no es un departamento conocido se sigue buscando por texto.
+        self.assertEqual(nombres('Córd'), ['Córdoba'])
+
 
 class PerfilPorIdTest(BasePrivacidadTest):
     def test_perfil_publico_sin_email_ni_telefono_hasta_tener_turno_aceptado(self):

@@ -13,6 +13,13 @@ env/
 .env.local
 .env.*
 !.env.example
+# Claves y credenciales sueltas
+*.pem
+*.key
+*.p12
+credenciales*.json
+credentials*.json
+service-account*.json
 
 # Python
 __pycache__/

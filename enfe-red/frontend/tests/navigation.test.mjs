@@ -2582,13 +2582,13 @@ async function elegir(select, valor) {
   });
 }
 
-test('la cartilla filtra por zona con las ciudades del backend', async () => {
+test('la cartilla filtra por departamento con los del backend', async () => {
   session('paciente');
   const original = globalThis.fetch;
   const busquedas = [];
   globalThis.fetch = async (url, options = {}) => {
     const ruta = String(url);
-    if (ruta.endsWith('/enfermeros/ciudades')) return response(['Godoy Cruz', 'Luján de Cuyo']);
+    if (ruta.endsWith('/enfermeros/ciudades')) return response(['Ciudad de Mendoza', 'Godoy Cruz', 'Luján de Cuyo']);
     if (ruta.includes('/enfermeros/buscar')) {
       busquedas.push(new URL(ruta).searchParams);
       return response({ enfermeros: [], total_resultados: 0, total_paginas: 0 });
@@ -2599,9 +2599,11 @@ test('la cartilla filtra por zona con las ciudades del backend', async () => {
     await mount('/cartilla');
     await esperar(300);
     const zona = document.querySelector('#desktop-ciudad');
-    assert.ok(zona, 'Falta el filtro de zona');
-    assert.equal(document.querySelector('label[for="desktop-ciudad"]').textContent, 'Zona');
-    assert.deepEqual([...zona.options].map((opcion) => opcion.textContent), ['Todas las zonas', 'Godoy Cruz', 'Luján de Cuyo']);
+    assert.ok(zona, 'Falta el filtro de departamento');
+    assert.equal(document.querySelector('label[for="desktop-ciudad"]').textContent, 'Departamento');
+    assert.deepEqual([...zona.options].map((opcion) => opcion.textContent),
+      ['Todos los departamentos', 'Ciudad de Mendoza (Capital)', 'Godoy Cruz', 'Luján de Cuyo']);
+    assert.equal(zona.options[1].value, 'Ciudad de Mendoza');
     await elegir(zona, 'Luján de Cuyo');
     await esperar(300);
     assert.equal(busquedas.at(-1).get('ciudad'), 'Luján de Cuyo');
@@ -2610,7 +2612,7 @@ test('la cartilla filtra por zona con las ciudades del backend', async () => {
     window.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
     await click(button('Mostrar filtros'));
     assert.equal(document.querySelector('#mobile-ciudad').value, 'Luján de Cuyo');
-    assert.equal(document.querySelector('#mobile-ciudad').options.length, 3);
+    assert.equal(document.querySelector('#mobile-ciudad').options.length, 4);
   } finally {
     globalThis.fetch = original;
     delete window.matchMedia;
@@ -3810,6 +3812,47 @@ test('con "Donde estoy ahora" impreciso se avisa y se puede volver a intentar', 
     globalThis.fetch = original;
     delete globalThis.navigator.geolocation;
   }
+});
+
+test('HU3: la cartilla ordena por cercanía a una dirección escrita a mano', async () => {
+  session('paciente');
+  const original = globalThis.fetch;
+  const busquedas = [];
+  globalThis.fetch = async (url, options = {}) => {
+    const ruta = String(url);
+    if (ruta.includes('/geocodificar?')) {
+      const direccion = new URL(ruta).searchParams.get('direccion');
+      return direccion.startsWith('zzz')
+        ? response({ error: 'No encontramos esa dirección en el mapa.' }, 404)
+        : response({ latitud: -32.927312, longitud: -68.845631, descripcion: 'Belgrano 450, Godoy Cruz' });
+    }
+    if (ruta.includes('/enfermeros/buscar')) {
+      busquedas.push(new URL(ruta).searchParams);
+      return response({ enfermeros: [], total_resultados: 0, total_paginas: 0 });
+    }
+    return original(url, options);
+  };
+  try {
+    await mount('/cartilla');
+    const campo = document.querySelector('#cerca-direccion');
+    assert.ok(campo, 'Falta el campo para escribir la dirección');
+    await type(campo, 'zzzz 1');
+    await act(async () => campo.form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })));
+    await esperar(20);
+    assert.match(document.querySelector('.nearby-search [role="alert"]').textContent, /No encontramos esa dirección/);
+    await type(campo, 'Belgrano 450, Godoy Cruz');
+    await act(async () => campo.form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })));
+    await esperar(300);
+    // Se ordena desde ese punto, redondeado (~100 m), y se muestra desde dónde.
+    assert.equal(busquedas.at(-1).get('lat'), '-32.927');
+    assert.equal(busquedas.at(-1).get('lng'), '-68.846');
+    assert.match(document.querySelector('.nearby-status').textContent, /más cercanos a Belgrano 450, Godoy Cruz/);
+    assert.ok(button('Quitar orden por cercanía'));
+    await click(button('Cambiar ubicación'));
+    await esperar(300);
+    assert.ok(document.querySelector('#cerca-direccion'));
+    assert.equal(busquedas.at(-1).get('lat'), null);
+  } finally { globalThis.fetch = original; }
 });
 
 test('la cartilla no repite una especialidad escrita con y sin tilde', async () => {

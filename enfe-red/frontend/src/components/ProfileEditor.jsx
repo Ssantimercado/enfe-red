@@ -10,6 +10,7 @@ import MiCuenta from './MiCuenta';
 import AvisoMatricula from './AvisoMatricula';
 import { estadoMatricula, MENSAJE_TELEFONO, TEXTO_MATRICULA, telefonoValido } from './perfilPendiente';
 import { useBuscarDireccion } from './useUbicacion';
+import { DEPARTAMENTOS } from '../departamentos';
 
 // El servidor no pudo abrir el dato guardado (clave de cifrado distinta): se conserva hasta recuperarlo.
 const HISTORIAL_ILEGIBLE = 'No pudimos mostrar tu información de salud guardada. Si querés, escribila de nuevo.';
@@ -28,7 +29,8 @@ const MAX_LENGTH = { telefono: 40, obraSocial: 100 };
 const PROFESSIONAL = [
   ['especialidad', 'Especialidad'],
   ['matricula', 'Matrícula'],
-  ['ciudad', 'Ciudad'],
+  // Se guarda en "ciudad"; la cartilla filtra por departamento.
+  ['ciudad', 'Departamento'],
   ['experiencia_anios', 'Años de experiencia', 'number'],
   ['tarifa_hora', 'Precio por hora (ARS)', 'number'],
 ];
@@ -248,11 +250,20 @@ export default function ProfileEditor({ role }) {
                           min={type === 'number' ? '0' : undefined}
                           step={key === 'tarifa_hora' ? '0.01' : undefined}
                           maxLength={MAX_LENGTH[key]}
+                          list={key === 'ciudad' ? 'departamentos-mendoza' : undefined}
                           inputMode={key === 'telefono' ? 'tel' : undefined}
                           aria-describedby={key === 'telefono' ? 'telefono-pista' : undefined}
                           aria-invalid={key === 'telefono' && error === MENSAJE_TELEFONO ? true : undefined}
                           disabled={saving}
                         />
+                        {key === 'ciudad' && (
+                          <>
+                            <datalist id="departamentos-mendoza">
+                              {DEPARTAMENTOS.map((departamento) => <option key={departamento} value={departamento} />)}
+                            </datalist>
+                            <span className="filter-hint">Elegilo de la lista: los pacientes filtran la cartilla por departamento.</span>
+                          </>
+                        )}
                         {key === 'telefono' && (
                           <span id="telefono-pista" className="filter-hint">
                             Código de área + número, sin 0 ni 15. Ej.: 261 555 1234

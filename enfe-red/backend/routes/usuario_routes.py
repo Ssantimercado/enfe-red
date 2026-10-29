@@ -1,9 +1,11 @@
 from datetime import datetime, timedelta, timezone
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, false, or_
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import joinedload, selectinload
+
+from services.departamentos import departamento_de, zona_de
 import math
 import re
 import unicodedata
@@ -742,14 +744,32 @@ def obtener_horarios_por_id(id):
 
 @usuario_bp.route('/enfermeros/ciudades', methods=['GET'])
 def ciudades_enfermeros():
-    """Zonas con profesionales en la cartilla, para el filtro por ciudad."""
-    ciudades = {}
+    """Departamentos con profesionales en la cartilla, para el filtro por departamento."""
+    return jsonify(zonas_con_enfermeros()), 200
+
+
+def zonas_con_enfermeros():
+    """Departamentos de Mendoza donde hay profesionales visibles ("Mendoza Capital" y "Capital" son uno solo).
+
+    Una zona que no es un departamento conocido queda como la escribió el profesional.
+    """
+    zonas = {}
     for (ciudad,) in consulta_enfermeros_visibles().with_entities(Enfermero.ciudad).order_by(Enfermero.id):
-        ciudad = ' '.join((ciudad or '').split())
-        if ciudad:
+        zona = zona_de(ciudad)
+        if zona:
             # "Godoy Cruz" y "godoy cruz" son la misma zona: queda la primera forma escrita.
-            ciudades.setdefault(_clave_orden(ciudad), ciudad)
-    return jsonify([ciudades[clave] for clave in sorted(ciudades)]), 200
+            zonas.setdefault(_clave_orden(zona), zona)
+    return [zonas[clave] for clave in sorted(zonas)]
+
+
+def _filtro_zona(texto):
+    """Profesionales de un departamento: todos los que escribieron una forma de él en su ciudad."""
+    departamento = departamento_de(texto)
+    if not departamento:
+        return Enfermero.ciudad.ilike(f"%{texto}%")
+    escritas = {c for (c,) in consulta_enfermeros_visibles().with_entities(Enfermero.ciudad).distinct()
+                if departamento_de(c) == departamento}
+    return Enfermero.ciudad.in_(escritas) if escritas else false()
 
 
 def _clave_orden(texto):
@@ -832,7 +852,7 @@ def buscar_enfermeros():
         query = query.filter(Enfermero.especialidad.ilike(f"%{especialidad}%"))
 
     if ciudad:
-        query = query.filter(Enfermero.ciudad.ilike(f"%{ciudad}%"))
+        query = query.filter(_filtro_zona(ciudad))
 
     if servicio_id is not None:
         query = query.filter(Enfermero.servicios.any(and_(

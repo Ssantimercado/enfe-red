@@ -75,6 +75,26 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
   `CLAVE_CIFRADO_ANTERIOR`, corré `flask --app app recifrar-historiales` y, cuando diga que no quedan
   historiales sin abrir, borrá `CLAVE_CIFRADO_ANTERIOR`. Hacé un backup antes.
 
+### Dónde van las claves (Gemini y las demás)
+
+- **Solo en el servidor.** La clave de Gemini (`GEMINI_API_KEY`) la usa únicamente el backend: el navegador
+  nunca la ve. No la pongas en `frontend/.env` ni en una variable `VITE_...`, porque todo lo del frontend
+  queda dentro del sitio publicado y cualquiera lo puede leer.
+- **En desarrollo, en `backend/.env`.** Ese archivo está en `.gitignore` y no se sube. En el repositorio solo
+  está `backend/.env.example`, con los nombres de las variables y los valores vacíos.
+- **En producción, en el panel del hosting** (variables de entorno o "secrets"), no en un archivo subido.
+- **Control antes de cada commit.** Activalo una vez en cada clon:
+  `git config core.hooksPath .githooks`. Frena el commit si trae un `.env` o algo con forma de clave
+  (claves de Google `AIza…`, claves privadas, contraseñas en variables). En GitHub, la revisión
+  `Buscar claves filtradas` (gitleaks) revisa además cada push con toda la historia.
+- **En Google AI Studio / Google Cloud:** restringí la clave a la API "Generative Language API" y poné un
+  límite de uso. Así, aunque alguien la consiguiera, no podría usarla para otra cosa ni generar gastos grandes.
+- **Si una clave se filtra** (se subió, se mandó por chat o apareció en una captura): creá una nueva en
+  Google AI Studio, cargala en `backend/.env` o en el hosting y **borrá la vieja**. Sacarla del archivo no
+  alcanza, porque queda en la historia de git y en las copias.
+- En GitHub conviene activar *Settings → Code security → Secret scanning* y *Push protection*: GitHub
+  rechaza el push si detecta una clave conocida.
+
 ## 4. Pasos de despliegue
 
 ### Sin Docker (Linux o Windows)

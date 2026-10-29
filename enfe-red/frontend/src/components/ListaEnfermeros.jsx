@@ -6,6 +6,7 @@ import DirectoryFilters from './DirectoryFilters';
 import BusquedaAsistida from './BusquedaAsistida';
 import { formatoPuntuacion } from './SelectorEstrellas';
 import { requestApi as api, formatPrice, sesionActual } from '../api';
+import { buscarDireccion } from './useUbicacion';
 const MapaEnfermeros = lazy(() => import('./MapaEnfermeros'));
 
 const FILTERS = [
@@ -50,6 +51,10 @@ export default function ListaEnfermeros() {
   const cercania = !nurse && params.get('lat') && params.get('lng');
   const [ubicando, setUbicando] = useState(false);
   const [errorUbicacion, setErrorUbicacion] = useState('');
+  // HU3 "el usuario pueda ingresar su ubicación": además del GPS, una dirección escrita a mano.
+  const [direccionCerca, setDireccionCerca] = useState('');
+  const [lugarCerca, setLugarCerca] = useState('');
+  const [buscandoLugar, setBuscandoLugar] = useState(false);
   const [data, setData] = useState({
     enfermeros: [],
     total_resultados: 0,
@@ -205,31 +210,57 @@ export default function ListaEnfermeros() {
       { replace: key !== 'page' },
     );
   }
+  function ordenarDesde(lat, lng, lugar = '') {
+    setLugarCerca(lugar);
+    setParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        // Tres decimales (~100 m): alcanza para ordenar sin enviar la ubicación exacta.
+        next.set('lat', lat.toFixed(3));
+        next.set('lng', lng.toFixed(3));
+        next.delete('page');
+        return next;
+      },
+      { replace: true },
+    );
+  }
+  async function buscarCercaDeDireccion(event) {
+    event.preventDefault();
+    if (buscandoLugar) return;
+    const texto = direccionCerca.trim();
+    setErrorUbicacion('');
+    if (texto.length < 4) {
+      setErrorUbicacion('Escribí la dirección con calle, número y departamento. Por ejemplo: Belgrano 450, Godoy Cruz.');
+      return;
+    }
+    setBuscandoLugar(true);
+    try {
+      const lugar = await buscarDireccion(texto);
+      if (!Number.isFinite(lugar?.latitud) || !Number.isFinite(lugar?.longitud)) throw new Error('Respuesta inválida');
+      ordenarDesde(lugar.latitud, lugar.longitud, lugar.descripcion || texto);
+    } catch (err) {
+      setErrorUbicacion(err.status === 404
+        ? 'No encontramos esa dirección. Revisala (calle, número y departamento) o elegí el departamento en los filtros.'
+        : 'No pudimos buscar la dirección en este momento. Probá de nuevo o elegí el departamento en los filtros.');
+    } finally {
+      setBuscandoLugar(false);
+    }
+  }
   function ordenarPorCercania() {
     setErrorUbicacion('');
     if (!navigator.geolocation) {
-      setErrorUbicacion('Tu navegador no permite obtener la ubicación. Podés buscar por zona.');
+      setErrorUbicacion('Tu navegador no permite obtener la ubicación. Escribí una dirección o elegí el departamento en los filtros.');
       return;
     }
     setUbicando(true);
     navigator.geolocation.getCurrentPosition(
       ({ coords }) => {
         setUbicando(false);
-        setParams(
-          (current) => {
-            const next = new URLSearchParams(current);
-            // Tres decimales (~100 m): alcanza para ordenar sin enviar la ubicación exacta.
-            next.set('lat', coords.latitude.toFixed(3));
-            next.set('lng', coords.longitude.toFixed(3));
-            next.delete('page');
-            return next;
-          },
-          { replace: true },
-        );
+        ordenarDesde(coords.latitude, coords.longitude);
       },
       () => {
         setUbicando(false);
-        setErrorUbicacion('No pudimos obtener tu ubicación. Revisá el permiso del navegador o buscá por zona.');
+        setErrorUbicacion('No pudimos obtener tu ubicación. Revisá el permiso del navegador, escribí una dirección o elegí el departamento.');
       },
       { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 },
     );
@@ -251,6 +282,7 @@ export default function ListaEnfermeros() {
     );
   }
   function quitarCercania() {
+    setLugarCerca('');
     setParams(
       (current) => {
         const next = new URLSearchParams(current);
@@ -361,7 +393,7 @@ export default function ListaEnfermeros() {
             <>
               <p className="nearby-status">
                 <Icon name="pin" size={18} />
-                Mostrando primero a los profesionales más cercanos a tu ubicación.
+                Mostrando primero a los profesionales más cercanos a {lugarCerca || 'tu ubicación'}.
               </p>
               <label className="nearby-radius">
                 Distancia máxima
@@ -375,17 +407,36 @@ export default function ListaEnfermeros() {
                   ))}
                 </select>
               </label>
+              <button type="button" className="text-link" onClick={quitarCercania}>Cambiar ubicación</button>
             </>
           ) : (
-            <button
-              type="button"
-              className="button button-secondary"
-              onClick={ordenarPorCercania}
-              disabled={ubicando}
-            >
-              <Icon name="pin" size={18} />
-              {ubicando ? 'Buscando tu ubicación…' : 'Ordenar por cercanía'}
-            </button>
+            <>
+              <button
+                type="button"
+                className="button button-secondary"
+                onClick={ordenarPorCercania}
+                disabled={ubicando || buscandoLugar}
+              >
+                <Icon name="pin" size={18} />
+                {ubicando ? 'Buscando tu ubicación…' : 'Ordenar por cercanía'}
+              </button>
+              <form className="nearby-address" onSubmit={buscarCercaDeDireccion} noValidate>
+                <label htmlFor="cerca-direccion">o escribí una dirección</label>
+                <input
+                  id="cerca-direccion"
+                  type="text"
+                  autoComplete="street-address"
+                  maxLength={200}
+                  placeholder="Ej.: Belgrano 450, Godoy Cruz"
+                  value={direccionCerca}
+                  onChange={(e) => setDireccionCerca(e.target.value)}
+                  disabled={buscandoLugar}
+                />
+                <button type="submit" className="button button-secondary" aria-disabled={buscandoLugar}>
+                  {buscandoLugar ? 'Buscando…' : 'Buscar cerca de ahí'}
+                </button>
+              </form>
+            </>
           )}
           {errorUbicacion && <p className="notice notice-error" role="alert">{errorUbicacion}</p>}
         </div>
@@ -482,7 +533,7 @@ export default function ListaEnfermeros() {
                   onClick={quitarCercania}
                   aria-label="Quitar orden por cercanía"
                 >
-                  Cerca de tu ubicación
+                  Cerca de {lugarCerca || 'tu ubicación'}
                   {params.get('radio_km') ? ` · hasta ${params.get('radio_km')} km` : ''}
                   <Icon name="close" size={13} />
                 </button>

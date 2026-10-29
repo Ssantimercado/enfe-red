@@ -2843,6 +2843,25 @@ button.notification-item:hover {
   font: inherit;
 }
 .nearby-search .notice { flex-basis: 100%; margin: 0; }
+/* HU3: dirección escrita a mano, al lado del botón de la ubicación actual. */
+.nearby-address {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  flex: 1 1 360px;
+  font-size: 15px;
+  color: var(--ink);
+}
+.nearby-address input {
+  flex: 1 1 220px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--field-border);
+  border-radius: 10px;
+  font: inherit;
+}
 
 /* HU12: búsqueda asistida por IA */
 .assisted-search { margin: 0 0 18px; padding: 22px 24px; }

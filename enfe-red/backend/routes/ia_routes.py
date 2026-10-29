@@ -8,7 +8,7 @@ from flask_jwt_extended import get_jwt_identity, jwt_required
 from database import db
 from models.servicio_models import Servicio
 from models.usuario_models import Enfermero, Usuario
-from routes.usuario_routes import consulta_enfermeros_visibles
+from routes.usuario_routes import consulta_enfermeros_visibles, zonas_con_enfermeros
 from services.ia_busqueda import MAX_TEXTO, interpretar
 
 ia_bp = Blueprint('ia_bp', __name__)
@@ -33,7 +33,8 @@ def _valores_permitidos():
     """Solo valores que existen en el sistema: la IA no puede inventar filtros."""
     visibles = consulta_enfermeros_visibles()
     especialidades = sorted({e for (e,) in visibles.with_entities(Enfermero.especialidad) if e})
-    ciudades = sorted({c for (c,) in visibles.with_entities(Enfermero.ciudad) if c})
+    # Departamentos, los mismos del filtro de la cartilla.
+    ciudades = zonas_con_enfermeros()
     servicios = [s for (s,) in db.session.query(Servicio.tipoServicio).order_by(Servicio.tipoServicio)]
     return {'especialidades': especialidades, 'ciudades': ciudades, 'servicios': servicios}
 

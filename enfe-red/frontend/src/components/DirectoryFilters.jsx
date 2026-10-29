@@ -53,16 +53,16 @@ export default function DirectoryFilters({
         </select>
       </div>
       <div className="field">
-        <label htmlFor={`${prefix}-ciudad`}>Zona</label>
+        <label htmlFor={`${prefix}-ciudad`}>Departamento</label>
         <select
           id={`${prefix}-ciudad`}
           value={values.ciudad}
           onChange={(e) => onChange('ciudad', e.target.value)}
         >
-          <option value="">Todas las zonas</option>
+          <option value="">Todos los departamentos</option>
           {/* La zona de la búsqueda asistida puede no estar en la lista: se agrega para no perderla. */}
           {[...new Set([...zonas, values.ciudad].filter(Boolean))].map((item) => (
-            <option key={item}>{item}</option>
+            <option key={item} value={item}>{item === 'Ciudad de Mendoza' ? 'Ciudad de Mendoza (Capital)' : item}</option>
           ))}
         </select>
       </div>

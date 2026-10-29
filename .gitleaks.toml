@@ -1,0 +1,12 @@
+# Configuración de gitleaks (la usan la revisión de GitHub y quien lo corra a mano).
+# Reglas de siempre, más una excepción para las claves inventadas de las pruebas y los ejemplos.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Claves falsas de las pruebas y de los archivos de ejemplo"
+paths = [
+  '''enfe-red/backend/tests/''',
+  '''enfe-red/frontend/tests/''',
+  '''\.env\.example$''',
+]
