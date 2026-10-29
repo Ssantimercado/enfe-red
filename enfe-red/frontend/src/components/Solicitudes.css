@@ -195,3 +195,5 @@
 .solicitud-lugar-opcion small { display: block; margin-top: 2px; color: var(--muted); font-size: 14px; font-weight: 400; }
 .solicitud-lugar-opcion:has(input:checked) { border-color: var(--blue); background: var(--blue-soft); }
 .solicitud-ubicacion > .field { margin-bottom: 14px; }
+/* Pago: el paciente avisa "Ya pagué" y el profesional confirma "Me llegó el pago". */
+.solicitud-pago { margin: 12px 0 4px; }

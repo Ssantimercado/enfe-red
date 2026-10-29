@@ -1662,14 +1662,14 @@ function seccionDe(card) {
   return el?.textContent;
 }
 
-test('el enfermero marca como realizado un turno pasado y no uno futuro', async () => {
+test('el enfermero confirma que le llegó el pago de un turno pasado y eso cierra la atención', async () => {
   session('enfermero');
   const pasada = { ...comprobante, idSolicitud: 21, estado: 'Aceptada', fecha: '2020-05-04', paciente: { nombre: 'Ana' } };
   const futura = { ...comprobante, idSolicitud: 22, estado: 'Aceptada', fecha: '2099-05-04', paciente: { nombre: 'Mario' } };
   solicitudHandler = async config => {
     if (config.url === '/solicitudes/enfermero/201') return { data: [pasada, futura] };
     if (config.url === '/solicitudes/21/finalizar' && config.method === 'put') {
-      return { data: { mensaje: 'Servicio marcado como realizado', solicitud: { ...pasada, estado: 'Realizada' } } };
+      return { data: { mensaje: 'Pago confirmado: la atención quedó cerrada', solicitud: { ...pasada, estado: 'Realizada' } } };
     }
     throw new Error(`Petición inesperada: ${config.method} ${config.url}`);
   };
@@ -1679,13 +1679,14 @@ test('el enfermero marca como realizado un turno pasado y no uno futuro', async 
     : original(url, options));
   try {
     await mount('/solicitudes-enfermero');
-    const botones = [...document.querySelectorAll('button')].filter(b => b.textContent === 'Marcar como realizado');
+    const botones = [...document.querySelectorAll('button')].filter(b => b.textContent === 'Me llegó el pago');
     assert.equal(botones.length, 1);
     const tarjetaAntes = botones[0].closest('.solicitud-card');
-    assert.match(document.body.textContent, /después del turno/);
+    assert.match(tarjetaAntes.textContent, /Cuando te llegue el pago, confirmalo para cerrar la atención/);
+    assert.match(document.body.textContent, /Después del turno vas a confirmar acá que te llegó el pago/);
     await click(botones[0]);
     assert.ok(solicitudRequests.some(r => r.url === '/solicitudes/21/finalizar' && r.method === 'put'));
-    assert.match(document.body.textContent, /Servicio marcado como realizado/);
+    assert.match(document.body.textContent, /Pago confirmado: la atención quedó cerrada/);
     // La realizada pasa a "Anteriores"; en "Turnos aceptados" queda solo la futura.
     const realizada = [...document.querySelectorAll('.solicitud-card')].find((card) => /SOLICITUD #21/.test(card.textContent));
     assert.match(realizada.textContent, /Realizada/);
@@ -3703,4 +3704,60 @@ test('el paciente ve en el mapa la ruta estimada hasta la zona del profesional (
     globalThis.fetch = original;
     delete globalThis.navigator.geolocation;
   }
+});
+
+test('el paciente avisa que pagó y el profesional ve el aviso para confirmar', async () => {
+  session('paciente');
+  let avisado = false;
+  const pasada = { ...comprobante, idSolicitud: 61, estado: 'Aceptada', fecha: '2020-05-04', pagoInformadoEn: null };
+  solicitudHandler = async (config) => {
+    if (config.url === '/solicitudes/paciente/101') return { data: [pasada] };
+    if (config.url === '/solicitudes/61/pago-informado' && config.method === 'put') {
+      avisado = true;
+      return { data: { mensaje: 'Pago informado', solicitud: { ...pasada, pagoInformadoEn: '2020-05-04T12:00' } } };
+    }
+    throw new Error(`Petición inesperada: ${config.method} ${config.url}`);
+  };
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url, options = {}) => (String(url).endsWith('/perfil/paciente')
+    ? response({ idPaciente: 101, nombre: 'Ana' }) : original(url, options));
+  try {
+    await mount('/mis-solicitudes');
+    const tarjeta = document.querySelector('.solicitud-card');
+    assert.match(tarjeta.textContent, /Cuando le pagues a Laura Gómez \(en mano o por transferencia\), avisale acá/);
+    await click(button('Ya pagué'));
+    assert.equal(avisado, true);
+    assert.match(tarjeta.textContent, /Le avisaste a Laura Gómez que pagaste\. Cuando confirme que le llegó, la atención se cierra/);
+    assert.ok(![...tarjeta.querySelectorAll('button')].some((b) => b.textContent === 'Ya pagué'));
+  } finally { globalThis.fetch = original; }
+
+  // Del lado del profesional: el aviso de que el paciente pagó, con el botón para confirmar.
+  session('enfermero');
+  solicitudHandler = async (config) => {
+    if (config.url === '/solicitudes/enfermero/201') return { data: [{ ...pasada, pagoInformadoEn: '2020-05-04T12:00', paciente: { nombre: 'Ana' } }] };
+    throw new Error(`Petición inesperada: ${config.method} ${config.url}`);
+  };
+  globalThis.fetch = async (url, options = {}) => (String(url).endsWith('/perfil/enfermero')
+    ? response({ ...profile, idEnfermero: 201 }) : original(url, options));
+  try {
+    await mount('/solicitudes-enfermero');
+    const tarjeta = document.querySelector('.solicitud-card');
+    assert.match(tarjeta.textContent, /Ana avisó que ya te pagó\. Cuando te llegue, confirmalo para cerrar la atención/);
+    assert.ok([...tarjeta.querySelectorAll('button')].some((b) => b.textContent === 'Me llegó el pago'));
+  } finally { globalThis.fetch = original; }
+});
+
+test('antes del turno el paciente todavía no ve "Ya pagué"', async () => {
+  session('paciente');
+  solicitudHandler = async (config) => {
+    if (config.url === '/solicitudes/paciente/101') return { data: [{ ...comprobante, idSolicitud: 62, estado: 'Aceptada', fecha: '2099-05-04' }] };
+    throw new Error(`Petición inesperada: ${config.method} ${config.url}`);
+  };
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url, options = {}) => (String(url).endsWith('/perfil/paciente')
+    ? response({ idPaciente: 101, nombre: 'Ana' }) : original(url, options));
+  try {
+    await mount('/mis-solicitudes');
+    assert.ok(![...document.querySelectorAll('button')].some((b) => b.textContent === 'Ya pagué'));
+  } finally { globalThis.fetch = original; }
 });

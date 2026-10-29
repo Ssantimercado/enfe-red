@@ -226,7 +226,7 @@ def _notificar_cambio_estado(solicitud, destino, rol, motivo):
     if destino == 'Realizada':
         notificar(
             solicitud.paciente.usuario_id, 'realizada',
-            f'{enfermero} marcó como realizado el servicio de {_texto_turno(solicitud)}. '
+            f'{enfermero} confirmó que le llegó el pago y cerró la atención de {_texto_turno(solicitud)}. '
             'Contanos cómo te fue: tocá para calificar la atención.',
             solicitud.idSolicitud,
         )
@@ -293,7 +293,7 @@ def _cambiar_estado_solicitud(id_solicitud, *, rol, origen, destino, accion, men
         return jsonify({'error': f'Solo se pueden {accion} solicitudes en estado {" o ".join(origen)}'}), 400
     inicio = datetime.combine(solicitud.fecha, solicitud.hora)
     if requiere_turno_pasado and inicio > _ahora_local():
-        return jsonify({'error': 'Vas a poder marcar el servicio como realizado cuando llegue la fecha y hora de atención'}), 409
+        return jsonify({'error': 'Vas a poder confirmar el pago y cerrar la atención cuando llegue la fecha y hora del turno'}), 409
     if requiere_turno_futuro and inicio <= _ahora_local():
         return jsonify({'error': requiere_turno_futuro}), 409
     if destino == 'Aceptada':
@@ -321,6 +321,8 @@ def _cambiar_estado_solicitud(id_solicitud, *, rol, origen, destino, accion, men
     if destino not in ESTADOS_ACTIVOS:
         # Cerrado el turno, el lugar de atención ya no hace falta: se borra.
         cambios.update(SIN_UBICACION)
+    if destino == 'Realizada':
+        cambios['pagoConfirmadoEn'] = _ahora_local()
     try:
         if not _bloquear_agenda(solicitud.idEnfermero):
             db.session.rollback()
@@ -545,7 +547,8 @@ def aceptarSolicitud(idSolicitud):
 def marcarComoRealizado(idSolicitud):
     return _cambiar_estado_solicitud(
         idSolicitud, rol='enfermero', origen=('Aceptada',), destino='Realizada',
-        accion='finalizar', mensaje='Servicio marcado como realizado',
+        # marcarComoRealizado() del diagrama: el enfermero lo hace al confirmar que le llegó el pago.
+        accion='finalizar', mensaje='Pago confirmado: la atención quedó cerrada',
         # Una atención futura no puede estar realizada (y no se podría reseñar).
         requiere_turno_pasado=True,
     )
@@ -583,6 +586,54 @@ def cancelarSolicitudEnfermero(idSolicitud):
         requiere_turno_futuro='El turno ya empezó o ya pasó, así que no se puede cancelar.',
         motivo_obligatorio=True,
     )
+
+
+@solicitud_bp.route('/solicitudes/<int:idSolicitud>/pago-informado', methods=['PUT'])
+@jwt_required()
+def informarPago(idSolicitud):
+    """El paciente avisa que ya pagó la atención (en mano o por transferencia: Enfered no cobra).
+
+    No cierra la atención: la cierra el enfermero cuando confirma que le llegó el pago.
+    """
+    usuario = _usuario_actual()
+    if not usuario:
+        return jsonify({'error': 'La sesión no corresponde a un usuario existente'}), 401
+    if usuario.rol != 'paciente':
+        return jsonify({'error': 'Solo el paciente puede avisar que pagó'}), 403
+    solicitud = _consulta_con_resumen().filter_by(idSolicitud=idSolicitud).first()
+    if not solicitud:
+        return jsonify({'error': 'Solicitud no encontrada'}), 404
+    if solicitud.paciente.usuario_id != usuario.id:
+        return jsonify({'error': 'Solo podés avisar el pago de tus propias solicitudes'}), 403
+    if solicitud.estado != 'Aceptada':
+        return jsonify({'error': 'Solo se puede avisar el pago de un turno aceptado que todavía no se cerró'}), 409
+    if datetime.combine(solicitud.fecha, solicitud.hora) > _ahora_local():
+        return jsonify({'error': 'Vas a poder avisar que pagaste cuando llegue la fecha y hora del turno'}), 409
+    if solicitud.pagoInformadoEn:
+        # Ya estaba avisado: no se repite el aviso al enfermero.
+        return jsonify({'mensaje': 'El pago ya estaba informado', 'solicitud': solicitud.to_dict()}), 200
+    try:
+        actualizadas = SolicitudServicio.query.filter(
+            SolicitudServicio.idSolicitud == idSolicitud,
+            SolicitudServicio.estado == 'Aceptada',
+            SolicitudServicio.pagoInformadoEn.is_(None),
+        ).update({'pagoInformadoEn': _ahora_local()}, synchronize_session=False)
+        if actualizadas != 1:
+            db.session.rollback()
+            return jsonify({'error': 'La solicitud cambió de estado. Volvé a consultarla.'}), 409
+        notificar(
+            solicitud.enfermero.usuario_id, 'pago',
+            f'{nombre_completo(solicitud.paciente, "Tu paciente")} avisó que ya te pagó el turno de '
+            f'{_texto_turno(solicitud)}. Cuando te llegue, confirmalo para cerrar la atención.',
+            idSolicitud,
+        )
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.exception('No se pudo informar el pago')
+        return jsonify({'error': 'No se pudo avisar el pago. Intentá nuevamente.'}), 500
+    db.session.expire(solicitud)
+    return jsonify({'mensaje': 'Pago informado', 'solicitud': solicitud.to_dict()}), 200
 
 
 @solicitud_bp.route('/solicitudes/<int:idSolicitud>/ubicacion', methods=['PUT'])

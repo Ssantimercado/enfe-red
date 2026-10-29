@@ -66,6 +66,10 @@ def _agregar_columnas_turnos():
             for columna in ('latitudAtencion', 'longitudAtencion'):
                 if columna not in columnas:
                     connection.execute(text(f'ALTER TABLE solicitudes_servicio ADD COLUMN {columna} FLOAT NULL'))
+            # Pago informado por el paciente y confirmado por el enfermero.
+            for columna in ('pagoInformadoEn', 'pagoConfirmadoEn'):
+                if columna not in columnas:
+                    connection.execute(text(f'ALTER TABLE solicitudes_servicio ADD COLUMN {columna} DATETIME NULL'))
 
 
 def _agregar_columnas_moderacion():

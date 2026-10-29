@@ -409,6 +409,34 @@ class SolicitudesTest(unittest.TestCase):
         self.assertEqual(respuesta.status_code, 400)
         self.assertEqual(SolicitudServicio.query.count(), 0)
 
+    def test_el_paciente_avisa_que_pago_y_el_enfermero_confirma_y_cierra(self):
+        from models.notificacion_models import Notificacion
+        id_solicitud = self.guardar_solicitud(estado='Aceptada')
+        ruta = f'/api/solicitudes/{id_solicitud}'
+        # Antes del turno todavía no se puede avisar el pago.
+        self.assertEqual(self.client.put(ruta + '/pago-informado', headers=self.headers(11)).status_code, 409)
+        self.pasar_turno()
+        self.assertEqual(self.client.put(ruta + '/pago-informado', headers=self.headers(21)).status_code, 403)
+        self.assertEqual(self.client.put(ruta + '/pago-informado', headers=self.headers(12)).status_code, 403)
+        respuesta = self.client.put(ruta + '/pago-informado', headers=self.headers(11))
+        self.assertEqual(respuesta.status_code, 200, respuesta.json)
+        self.assertIsNotNone(respuesta.json['solicitud']['pagoInformadoEn'])
+        self.assertEqual(respuesta.json['solicitud']['estado'], 'Aceptada')
+        aviso = Notificacion.query.filter_by(tipo='pago').one()
+        self.assertIn('avisó que ya te pagó', aviso.mensaje)
+        # Repetirlo no vuelve a avisar.
+        self.assertEqual(self.client.put(ruta + '/pago-informado', headers=self.headers(11)).status_code, 200)
+        self.assertEqual(Notificacion.query.filter_by(tipo='pago').count(), 1)
+        # El enfermero confirma que le llegó: la atención se cierra.
+        cierre = self.client.put(ruta + '/finalizar', headers=self.headers(21))
+        self.assertEqual(cierre.status_code, 200, cierre.json)
+        self.assertEqual(cierre.json['mensaje'], 'Pago confirmado: la atención quedó cerrada')
+        self.assertEqual(cierre.json['solicitud']['estado'], 'Realizada')
+        self.assertIsNotNone(cierre.json['solicitud']['pagoConfirmadoEn'])
+        self.assertIn('confirmó que le llegó el pago', Notificacion.query.filter_by(tipo='realizada').one().mensaje)
+        # Ya cerrada, no se puede volver a avisar.
+        self.assertEqual(self.client.put(ruta + '/pago-informado', headers=self.headers(11)).status_code, 409)
+
     def test_el_paciente_marca_el_lugar_de_un_pedido_viejo_y_el_enfermero_lo_ve(self):
         from models.notificacion_models import Notificacion
         # Pedido anterior a la ubicación obligatoria: sin punto.
@@ -488,7 +516,9 @@ class SolicitudesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.json)
         # Cerrado el servicio, el punto de atención deja de enviarse.
         self.assertEqual(creada.json['solicitud']['ubicacionAtencion'], {'latitud': -32.89, 'longitud': -68.84})
-        esperado = {**creada.json['solicitud'], 'estado': 'Realizada', 'ubicacionAtencion': None}
+        # Al cerrar queda registrada la confirmación del pago (la hora simulada del turno pasado).
+        esperado = {**creada.json['solicitud'], 'estado': 'Realizada', 'ubicacionAtencion': None,
+                    'pagoConfirmadoEn': '2030-01-12T09:00'}
         self.assertEqual(response.json['solicitud'], esperado)
         self.assertEqual(db.session.get(SolicitudServicio, id_solicitud).estado, 'Realizada')
         self.assertEqual(self.client.get(ruta, headers=self.headers()).json, esperado)
@@ -520,7 +550,7 @@ class SolicitudesTest(unittest.TestCase):
         id_solicitud = self.guardar_solicitud(estado='Aceptada')
         response = self.client.put(f'/api/solicitudes/{id_solicitud}/finalizar', headers=self.headers(21))
         self.assertEqual(response.status_code, 409)
-        self.assertIn('fecha y hora de atención', response.json['error'])
+        self.assertIn('fecha y hora del turno', response.json['error'])
         self.assertEqual(db.session.get(SolicitudServicio, id_solicitud).estado, 'Aceptada')
 
     def test_finalizar_dos_veces_devuelve_400_la_segunda_vez(self):
@@ -708,6 +738,7 @@ class MigracionSprint4Test(unittest.TestCase):
         self.assertEqual({c['name'] for c in inspector.get_columns('solicitudes_servicio')}, {
             'idSolicitud', 'idPaciente', 'idEnfermero', 'idServicio', 'fecha', 'hora', 'estado', 'direccionAtencion',
             'canceladaPor', 'motivoCancelacion', 'latitudAtencion', 'longitudAtencion',
+            'pagoInformadoEn', 'pagoConfirmadoEn',
         })
         self.assertEqual({fk['referred_table'] for fk in inspector.get_foreign_keys('solicitudes_servicio')},
                          {'pacientes', 'enfermeros', 'servicios'})

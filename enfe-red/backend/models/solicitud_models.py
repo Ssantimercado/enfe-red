@@ -42,6 +42,10 @@ class SolicitudServicio(db.Model):
     # Las solicitudes anteriores a esta mejora no lo tienen.
     latitudAtencion = db.Column(db.Float, nullable=True)
     longitudAtencion = db.Column(db.Float, nullable=True)
+    # Pago de la atención, sin pasarela: el paciente avisa que pagó y el enfermero confirma que le llegó.
+    # La confirmación del enfermero es la que cierra la atención (pasa a Realizada).
+    pagoInformadoEn = db.Column(db.DateTime, nullable=True)
+    pagoConfirmadoEn = db.Column(db.DateTime, nullable=True)
 
     paciente = db.relationship(Paciente)
     enfermero = db.relationship(Enfermero)
@@ -88,6 +92,8 @@ class SolicitudServicio(db.Model):
             'motivoCancelacion': self.motivoCancelacion,
             'direccionAtencion': self.direccionAtencion,
             'ubicacionAtencion': self.ubicacion_atencion(),
+            'pagoInformadoEn': self.pagoInformadoEn.isoformat(timespec='minutes') if self.pagoInformadoEn else None,
+            'pagoConfirmadoEn': self.pagoConfirmadoEn.isoformat(timespec='minutes') if self.pagoConfirmadoEn else None,
             'paciente': {
                 'idPaciente': self.paciente.id,
                 'nombre': self.paciente.nombre,

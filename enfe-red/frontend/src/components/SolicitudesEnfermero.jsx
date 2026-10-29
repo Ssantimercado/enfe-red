@@ -20,7 +20,8 @@ const ACCIONES = {
   aceptar: { enviar: aceptarSolicitud, exito: 'Solicitud aceptada.' },
   rechazar: { enviar: rechazarSolicitud, exito: 'Solicitud rechazada.' },
   // SCRUM-59.3: marcar como realizada habilita la reseña del paciente (HU11).
-  finalizar: { enviar: finalizarSolicitud, exito: 'Servicio marcado como realizado.' },
+  // Confirmar que llegó el pago es lo que cierra la atención (marcarComoRealizado del diagrama).
+  finalizar: { enviar: finalizarSolicitud, exito: 'Pago confirmado: la atención quedó cerrada.' },
   cancelar: {
     enviar: (id, motivo) => cancelarTurnoEnfermero(id, motivo),
     exito: 'Turno cancelado. Le avisamos al paciente con el motivo que escribiste.',
@@ -218,20 +219,33 @@ export default function SolicitudesEnfermero() {
       </dl>
       {solicitud.estado === 'Aceptada' && (
         !turnoFuturo(solicitud) ? (
-          <div className="solicitud-card-actions">
-            <button
-              className="button button-primary"
-              type="button"
-              disabled={guardando}
-              onClick={() => cambiarEstado(solicitud, 'finalizar')}
-            >
-              {guardando ? 'Actualizando…' : 'Marcar como realizado'}
-            </button>
-          </div>
+          <>
+            {solicitud.pagoInformadoEn ? (
+              <p className="notice notice-info solicitud-pago">
+                {nombrePaciente(solicitud) || 'El paciente'} avisó que ya te pagó. Cuando te llegue, confirmalo para
+                cerrar la atención.
+              </p>
+            ) : (
+              <p className="solicitud-finalizar-hint">
+                Cuando te llegue el pago, confirmalo para cerrar la atención. El paciente también puede avisarte
+                desde la app que ya pagó.
+              </p>
+            )}
+            <div className="solicitud-card-actions">
+              <button
+                className="button button-primary"
+                type="button"
+                disabled={guardando}
+                onClick={() => cambiarEstado(solicitud, 'finalizar')}
+              >
+                {guardando ? 'Actualizando…' : 'Me llegó el pago'}
+              </button>
+            </div>
+          </>
         ) : (
           <>
             <p className="solicitud-finalizar-hint">
-              Vas a poder marcarlo como realizado después del turno.
+              Después del turno vas a confirmar acá que te llegó el pago, y con eso se cierra la atención.
             </p>
             <div className="solicitud-card-actions">
               <button

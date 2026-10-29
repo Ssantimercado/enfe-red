@@ -11,6 +11,8 @@ TIPOS_NOTIFICACION = (
     'nueva', 'reprogramada', 'realizada', 'vencida', 'matricula',
     # El paciente marcó o cambió en el mapa el lugar de atención (HU16).
     'ubicacion',
+    # El paciente avisó que pagó la atención.
+    'pago',
 )
 # schema_mejoras.py recrea la restricción en bases existentes con este mismo texto.
 CHECK_TIPO_NOTIFICACION = 'tipo IN (' + ', '.join(f"'{tipo}'" for tipo in TIPOS_NOTIFICACION) + ')'
