@@ -122,7 +122,7 @@ function SearchPreview() {
         </div>
         <div className="lp-preview-search">
           <Icon name="search" size={19} />
-          Enfermería cerca de vos
+          Enfermería cerca tuyo
           <Icon name="sliders" size={18} />
         </div>
         <div className="lp-preview-filters">
@@ -689,7 +689,7 @@ export default function Landing() {
           </div>
           <div className="lp-footer-bottom">
             <span>© {new Date().getFullYear()} Enfered.</span>
-            <span>Enfermería a domicilio, cerca de vos.</span>
+            <span>Enfermería a domicilio, cerca tuyo.</span>
             <Link to="/terminos">Términos y condiciones</Link>
             <Link to="/privacidad">Política de privacidad</Link>
             <a href="#landing-contenido">

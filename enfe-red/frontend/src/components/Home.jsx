@@ -103,8 +103,7 @@ export default function Home() {
               </>
             ) : (
               <>
-                El cuidado que necesitás,
-                <br /> <span>más cerca de vos.</span>
+                Cuidado <span>cerca tuyo.</span>
               </>
             )}
           </h1>

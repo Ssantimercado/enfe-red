@@ -118,7 +118,7 @@ export default function AppShell() {
       </main>
       <footer className="site-footer">
         <Brand />
-        <p>Enfermería a domicilio, cerca de vos.</p>
+        <p>Enfermería a domicilio, cerca tuyo.</p>
         <nav className="footer-legal" aria-label="Información legal">
           <Link to="/terminos">Términos y condiciones</Link>
           <Link to="/privacidad">Privacidad</Link>

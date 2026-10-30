@@ -43,7 +43,7 @@ const AdminAuditoria = lazy(() => import('./components/AdminAuditoria'));
 const Privacidad = lazy(() => import('./components/Legal').then((m) => ({ default: m.Privacidad })));
 const Terminos = lazy(() => import('./components/Legal').then((m) => ({ default: m.Terminos })));
 
-const TITULO_INICIAL = 'Enfered · Cuidado cerca de vos';
+const TITULO_INICIAL = 'Enfered · Cuidado cerca tuyo';
 const TITULOS = [
   [/^\/login$/, 'Iniciar sesión'],
   [/^\/registro$/, 'Crear cuenta'],
