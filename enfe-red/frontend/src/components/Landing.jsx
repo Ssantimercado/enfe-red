@@ -311,7 +311,7 @@ export default function Landing() {
                 Personas que cuidan de personas
               </span>
               <h1>
-                El cuidado que necesitás, <span>cerca de vos.</span>
+                Cuidado <span>cerca tuyo.</span>
               </h1>
               <p>
                 Conectamos a pacientes y familias con profesionales de

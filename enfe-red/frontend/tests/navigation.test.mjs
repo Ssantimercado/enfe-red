@@ -198,7 +198,7 @@ test('la entrada es pública y permite ir al login sin consultar datos privados'
   assert.equal(window.location.pathname, '/');
   assert.match(
     document.querySelector('h1').textContent,
-    /El cuidado que necesitás/,
+    /Cuidado cerca tuyo/,
   );
   assert.equal(requests.length, 0);
   await click(link('Iniciar sesión'));
